@@ -22,6 +22,10 @@ const root = process.cwd();
 loadEnvFile(path.join(root, ".env.local"));
 loadEnvFile(path.join(root, ".env"));
 
+// standalone server 启动后可能把 cwd 切到 .next/standalone，数据库必须固定在项目根目录，
+// 否则本地数据和运行中的网站会各自使用一份 blog.db。
+if (!process.env.BLOG_DB_PATH) process.env.BLOG_DB_PATH = path.join(root, "data", "blog.db");
+
 // Next standalone 不会自动把静态资源复制到 standalone 目录；本地启动前补齐，
 // 否则 HTML 能打开但 CSS、图片和 favicon 会返回 404。
 const standaloneRoot = path.join(root, ".next", "standalone");
