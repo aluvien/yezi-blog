@@ -1,0 +1,49 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { countApprovedComments, listPostsByTag } from "@/lib/db";
+import { PostEntry } from "@/components/site/PostEntry";
+
+type Props = { params: Promise<{ tag: string }> };
+
+function decodeTag(value: string): string {
+  try {
+    return decodeURIComponent(value).trim();
+  } catch {
+    return value.trim();
+  }
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const tag = decodeTag((await params).tag);
+  return { title: `标签：${tag}` };
+}
+
+export default async function TagPage({ params }: Props) {
+  const tag = decodeTag((await params).tag);
+  if (!tag) notFound();
+  const posts = listPostsByTag(tag);
+
+  return (
+    <div className="mx-auto max-w-[860px] py-8 md:py-12">
+      <Link href="/" className="text-[13px] text-wechat-blue transition-colors hover:text-accent">← 返回首页</Link>
+      <header className="mt-8 border-b border-divider pb-7">
+        <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-accent">Tag archive</p>
+        <h1 className="mt-3 text-[30px] font-semibold tracking-[-0.04em] md:text-[40px]">#{tag}</h1>
+        <p className="mt-3 text-[14px] text-muted">共 {posts.length} 篇文章</p>
+      </header>
+
+      {posts.length === 0 ? (
+        <p className="py-16 text-center text-[14px] text-muted">这个标签下暂时没有文章。</p>
+      ) : (
+        <div className="divide-y divide-divider">
+          {posts.map((post) => (
+            <div key={post.id} className="py-6 md:py-7">
+              <PostEntry post={post} commentCount={countApprovedComments("post", post.id)} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

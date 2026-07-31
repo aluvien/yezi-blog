@@ -1,0 +1,63 @@
+import Link from "next/link";
+import { listAllPosts } from "@/lib/db";
+import { parsePostTags } from "@/lib/post-tags";
+import { deletePostAction } from "@/lib/actions/posts";
+import { formatDate } from "@/lib/format";
+import DeleteButton from "@/components/admin/DeleteButton";
+
+export const dynamic = "force-dynamic";
+
+export default function AdminPostsPage() {
+  const posts = listAllPosts();
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">文章（{posts.length}）</h1>
+        <Link
+          href="/admin/posts/new"
+          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white active:bg-neutral-700"
+        >
+          + 写文章
+        </Link>
+      </div>
+      {posts.length === 0 && <p className="py-10 text-center text-sm text-neutral-400">还没有文章</p>}
+      <ul className="flex flex-col gap-2">
+        {posts.map((post) => (
+          <li key={post.id} className="rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-base font-medium">{post.title}</p>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${post.status === "published" ? "bg-green-100 text-green-700" : "bg-neutral-100 text-neutral-600"}`}>
+                    {post.status === "published" ? "已发布" : "草稿"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-neutral-400">
+                  /{post.slug} · {formatDate(post.created_at)}
+                  {post.updated_at !== post.created_at && ` · 更新于 ${formatDate(post.updated_at)}`}
+                </p>
+                {parsePostTags(post.tags).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {parsePostTags(post.tags).map((tag) => (
+                      <span key={tag} className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent">#{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-x-4 gap-y-2 sm:pt-0.5">
+                {post.status === "published" && (
+                  <Link href={`/posts/${post.slug}`} target="_blank" className="text-sm text-blue-700 underline">查看</Link>
+                )}
+                <Link href={`/admin/posts/${post.id}/edit`} className="text-sm text-neutral-700 underline">
+                  编辑
+                </Link>
+                <DeleteButton action={deletePostAction.bind(null, post.id)} />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
