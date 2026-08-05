@@ -194,7 +194,13 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
         <MusicInitializer metingApi={siteSettings.meting_api?.trim() || DEFAULT_METING_API} />
       </ErrorBoundary>
       <ErrorBoundary label="GlobalMusicPlayer">
-        <GlobalMusicPlayer metingApi={siteSettings.meting_api?.trim() || DEFAULT_METING_API} defaultMusic={siteSettings.default_music?.trim()} />
+        <GlobalMusicPlayer
+          metingApi={siteSettings.meting_api?.trim() || DEFAULT_METING_API}
+          defaultMusic={siteSettings.default_music?.trim()}
+          defaultMusicShuffle={siteSettings.default_music_shuffle === "1"}
+          musicFloatEnabled={siteSettings.music_float_enabled !== "0"}
+          musicPosition={siteSettings.music_position}
+        />
       </ErrorBoundary>
     </div>
   );

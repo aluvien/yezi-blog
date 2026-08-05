@@ -7,7 +7,8 @@
  *   ```
  * 想法用正文独占行标记：`!music netease:1234567:song`
  *
- * 格式 `<server>:<id>[:<type>]`，type 缺省为 song。前端 MusicInitializer
+ * 格式 `<server>:<id>[:<type>[:random]]`，type 缺省为 song；末尾加 random 可打乱歌单。
+ * 前端 MusicInitializer
  * 读取渲染出的 `.blog-music` 容器上的 data-* 属性，调 Meting API 取音频并初始化 APlayer。
  */
 
@@ -23,22 +24,24 @@ export interface MusicSpec {
   server: MusicServer;
   id: string;
   type: MusicType;
+  shuffle?: boolean;
 }
 
 const SERVER_SET = new Set<string>(MUSIC_SERVERS);
 const TYPE_SET = new Set<string>(MUSIC_TYPES);
 
-/** 解析 `server:id:type` 规格，无效返回 null。type 缺省为 song。 */
+/** 解析 `server:id:type[:random]` 规格，无效返回 null。type 缺省为 song。 */
 export function parseMusicSpec(input: string): MusicSpec | null {
   const raw = input.trim();
   if (!raw) return null;
   const parts = raw.split(":").map((part) => part.trim()).filter(Boolean);
-  if (parts.length < 2 || parts.length > 3) return null;
-  const [server, id, type = "song"] = parts;
+  if (parts.length < 2 || parts.length > 4) return null;
+  const [server, id, type = "song", mode] = parts;
   if (!SERVER_SET.has(server)) return null;
   if (!/^\d+$/.test(id)) return null;
   if (!TYPE_SET.has(type)) return null;
-  return { server: server as MusicServer, id, type: type as MusicType };
+  if (mode && mode !== "random" && mode !== "shuffle") return null;
+  return { server: server as MusicServer, id, type: type as MusicType, shuffle: Boolean(mode) };
 }
 
 /** 文章 music 代码块内文本：每行一个规格，空行/无效行忽略。 */
@@ -94,7 +97,7 @@ export function buildMetingUrl(base: string, spec: MusicSpec): string {
 
 /** 服务端渲染：输出带 data-* 的播放器容器，供前端 MusicInitializer 初始化。 */
 export function musicContainerHtml(spec: MusicSpec): string {
-  return `<div class="blog-music" data-server="${spec.server}" data-id="${spec.id}" data-type="${spec.type}"></div>`;
+  return `<div class="blog-music" data-server="${spec.server}" data-id="${spec.id}" data-type="${spec.type}" data-shuffle="${spec.shuffle ? "1" : "0"}"></div>`;
 }
 
 /** 归一化后的可播放曲目（与 APlayer 的 APlayerAudio 字段一致）。 */
@@ -150,7 +153,7 @@ export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Prom
     : raw && typeof raw === "object"
       ? [raw as MetingTrack]
       : [];
-  return data
+  const tracks = data
     .filter((track) => typeof track.url === "string" && track.url.trim().length > 0)
     .map((track) => {
       const name = firstScalar(track.name) || "未知曲目";
@@ -165,4 +168,10 @@ export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Prom
         key: trackId ? `${spec.server}:${trackId}` : `${spec.server}:${name}\u0000${artist}`,
       };
     });
+  if (!spec.shuffle || tracks.length < 2) return tracks;
+  for (let index = tracks.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [tracks[index], tracks[swapIndex]] = [tracks[swapIndex], tracks[index]];
+  }
+  return tracks;
 }

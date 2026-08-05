@@ -99,6 +99,7 @@ export function MomentEntry({
               data-server={seg.value.server}
               data-id={seg.value.id}
               data-type={seg.value.type}
+              data-shuffle={seg.value.shuffle ? "1" : "0"}
             />
           ),
         )}

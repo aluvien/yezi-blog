@@ -11,13 +11,25 @@ type APlayerInstance = import("aplayer").default;
  *
  * 全站唯一的 APlayer 实例常驻在此组件，挂在 SiteLayoutInner 的布局持久层
  * （`{children}` 之外），站内客户端导航时组件不卸载，音乐因此跨页面连续播放。
- * - 默认列表：后台设置 `default_music`（形如 `netease:xxx:playlist`），加载后作为基础列表。
+ * - 默认列表：后台设置 `default_music`（形如 `netease:xxx:playlist`），加载后作为基础列表；可单独开启随机顺序。
  * - 页面音乐：MusicInitializer 的触发卡片经 player-store 请求"追加并播放"，
  *   新曲目追加到列表末尾并立即播放，默认列表不受影响。
  * - 底部面板始终渲染（闭合时 transform 移出屏幕而非 display:none），
  *   避免 display:none 导致 APlayer 布局/音频异常。
  */
-export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi: string; defaultMusic?: string }) {
+export function GlobalMusicPlayer({
+  metingApi,
+  defaultMusic = "",
+  defaultMusicShuffle = false,
+  musicFloatEnabled = true,
+  musicPosition = "left",
+}: {
+  metingApi: string;
+  defaultMusic?: string;
+  defaultMusicShuffle?: boolean;
+  musicFloatEnabled?: boolean;
+  musicPosition?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [hasTracks, setHasTracks] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -31,6 +43,10 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
   const currentCardIdRef = useRef<string | null>(null);
   const ownerMapRef = useRef(new Map<number, string | null>());
   const trackIndexRef = useRef(new Map<string, number>());
+  const hasDefaultPlaylist = Boolean(parseMusicSpec(defaultMusic));
+  const playerPosition = musicPosition === "right" || musicPosition === "bottom" ? musicPosition : "left";
+  const shouldShowPlayer = hasTracks || hasDefaultPlaylist;
+  const panelOpen = shouldShowPlayer && (open || playerPosition === "bottom");
 
   useEffect(() => {
     apiRef.current = metingApi;
@@ -43,8 +59,18 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
     const ownerMap = ownerMapRef.current;
     const trackIndex = trackIndexRef.current;
 
-    function trackKey(track: MusicTrack): string {
-      return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist}`;
+    function trackKey(track: { key?: string; url: string; name: string; artist?: string }): string {
+      return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist ?? ""}`;
+    }
+
+    function emitPlayerState(player: APlayerInstance, playing: boolean, cardId: string | null, index = player.list.index): void {
+      const track = player.list.audios[index];
+      emitGlobalPlaybackState({
+        playing,
+        cardId,
+        trackKey: track ? trackKey(track) : null,
+        currentTime: Number.isFinite(player.audio.currentTime) ? player.audio.currentTime : 0,
+      });
     }
 
     function addUniqueTracks(tracks: MusicTrack[], owner: string | null): void {
@@ -102,7 +128,25 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
       player.play();
       setHasTracks(true);
       setPlaying(true);
-      emitGlobalPlaybackState({ playing: true, cardId });
+      emitPlayerState(player, true, cardId, targetIndex);
+    }
+
+    function toggleOrAppendAndPlay(tracks: MusicTrack[], cardId: string | null) {
+      const player = playerRef.current;
+      if (!player || tracks.length === 0) return;
+      // 同一张文章音乐卡片再次点击时只切换暂停/继续，不重新切回第一首。
+      if (cardId !== null && currentCardIdRef.current === cardId) {
+        if (player.paused) {
+          player.play();
+          setHasTracks(true);
+          setPlaying(true);
+          emitPlayerState(player, true, cardId);
+        } else {
+          player.pause();
+        }
+        return;
+      }
+      appendAndPlay(tracks, cardId);
     }
 
     async function boot() {
@@ -115,6 +159,8 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
           container: hostRef.current,
           audio: [],
           listFolded: false,
+          // Meting 的 lrc 字段是歌词地址，APlayer 的异步歌词模式会读取并滚动显示它。
+          lrcType: 3,
           autoplay: false,
           order: "list",
           loop: "all",
@@ -123,26 +169,30 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
         playerRef.current = player;
         player.on("play", () => {
           setPlaying(true);
-          emitGlobalPlaybackState({ playing: true, cardId: currentCardIdRef.current });
+          emitPlayerState(player, true, currentCardIdRef.current);
         });
         player.on("pause", () => {
           setPlaying(false);
-          emitGlobalPlaybackState({ playing: false, cardId: currentCardIdRef.current });
+          emitPlayerState(player, false, currentCardIdRef.current);
         });
         player.on("ended", () => {
           setPlaying(false);
-          emitGlobalPlaybackState({ playing: false, cardId: null });
+          emitGlobalPlaybackState({ playing: false, cardId: null, trackKey: null, currentTime: 0 });
+        });
+        player.on("timeupdate", () => {
+          emitPlayerState(player, !player.paused, currentCardIdRef.current);
         });
         // 面板内手动切歌：按当前 index 找到归属卡片，回显"正在播放"
         player.on("listswitch", (event) => {
           const index = typeof event?.index === "number" ? event.index : null;
           const cardId = index === null ? null : (ownerMap.get(index) ?? null);
           currentCardIdRef.current = cardId;
-          emitGlobalPlaybackState({ playing: !player.paused, cardId });
+          emitPlayerState(player, !player.paused, cardId, index ?? player.list.index);
         });
 
         // 默认歌单：后台设置 default_music，加载失败静默（不影响页面点选音乐）。
-        const spec = parseMusicSpec(defaultMusic);
+        const parsedSpec = parseMusicSpec(defaultMusic);
+        const spec = parsedSpec ? { ...parsedSpec, shuffle: parsedSpec.shuffle || defaultMusicShuffle } : null;
         if (spec) {
           try {
             const tracks = await fetchMusicTracks(apiRef.current, spec);
@@ -168,7 +218,7 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
         pendingRef.current.push({ tracks, cardId });
         return;
       }
-      appendAndPlay(tracks, cardId ?? null);
+      toggleOrAppendAndPlay(tracks, cardId ?? null);
     });
 
     return () => {
@@ -182,20 +232,29 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
       playerRef.current = null;
       ownerMap.clear();
       trackIndex.clear();
-      emitGlobalPlaybackState({ playing: false, cardId: null });
+      emitGlobalPlaybackState({ playing: false, cardId: null, trackKey: null, currentTime: 0 });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function closePlayer(): void {
+    setOpen(false);
+    if (!hasDefaultPlaylist) {
+      playerRef.current?.pause();
+      setPlaying(false);
+      setHasTracks(false);
+    }
+  }
+
   return (
     <>
-      {/* 悬浮球：有曲目才显示；面板展开时隐藏，避免与面板重叠 */}
-      {hasTracks && (
+      {/* 没有后台默认歌单时，收起临时播放面板后隐藏悬浮球；有默认歌单则始终保留入口。 */}
+      {musicFloatEnabled && playerPosition !== "bottom" && shouldShowPlayer && (
         <button
           type="button"
-          className={`global-player-float ${open ? "is-open" : ""} ${playing ? "is-playing" : ""}`}
+          className={`global-player-float ${open ? "is-open" : ""} ${playing ? "is-playing" : ""} ${playerPosition === "right" ? "is-right" : ""}`}
           aria-label={open ? "收起播放器" : "展开播放器"}
-          aria-expanded={open}
+          aria-expanded={panelOpen}
           onClick={() => setOpen((value) => !value)}
         >
           <svg className="global-player-float-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -206,9 +265,9 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
       )}
 
       {/* 底部面板：常驻 DOM，闭合时移出屏幕 */}
-      <div className={`global-player-panel ${open ? "is-open" : ""}`} role="region" aria-label="音乐播放器">
-        {open && (
-          <button type="button" className="global-player-collapse" aria-label="收起播放器" onClick={() => setOpen(false)}>
+      <div className={`global-player-panel ${panelOpen ? "is-open" : ""}`} role="region" aria-label="音乐播放器">
+        {open && playerPosition !== "bottom" && (
+          <button type="button" className="global-player-collapse" aria-label="收起播放器" onClick={closePlayer}>
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
             </svg>

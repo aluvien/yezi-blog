@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getUploadDir } from "@/lib/uploads";
+import { uploadAbsolutePath } from "@/lib/uploads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +25,8 @@ export function GET(request: Request) {
   const url = new URL(request.url);
   const rel = decodeURIComponent(url.pathname.replace(/^\/uploads\//, ""));
   if (!rel || rel.includes("..")) return new Response("Not Found", { status: 404 });
-  const uploadsRoot = getUploadDir();
-  const abs = path.join(uploadsRoot, rel);
-  if (!abs.startsWith(uploadsRoot + path.sep)) return new Response("Not Found", { status: 404 });
+  const abs = uploadAbsolutePath(`/uploads/${rel}`);
+  if (!abs) return new Response("Not Found", { status: 404 });
   if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return new Response("Not Found", { status: 404 });
   const ext = path.extname(abs).toLowerCase();
   const mime = MIME[ext] || "application/octet-stream";

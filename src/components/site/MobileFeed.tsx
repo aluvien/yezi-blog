@@ -43,7 +43,7 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
           seg.kind === "text" ? (
             <p key={index}>{seg.value}</p>
           ) : (
-            <div key={index} className="blog-music" data-server={seg.value.server} data-id={seg.value.id} data-type={seg.value.type} />
+            <div key={index} className="blog-music" data-server={seg.value.server} data-id={seg.value.id} data-type={seg.value.type} data-shuffle={seg.value.shuffle ? "1" : "0"} />
           ),
         )}
         {images.length > 0 && <MomentImages images={images} />}
@@ -63,11 +63,14 @@ function MobilePost({ post, commentCount, metrics, initialLiked }: { post: Post;
   return (
     <article className="mobile-feed-post">
       {post.cover ? (
-        <Link href={`/posts/${post.slug}`} className="mobile-feed-post-banner">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={post.cover} alt="" loading="lazy" />
-          <span>{post.title}</span>
-        </Link>
+        <>
+          <Link href={`/posts/${post.slug}`} className="mobile-feed-post-banner">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={post.cover} alt="" loading="lazy" />
+            <span>{post.title}</span>
+          </Link>
+          {excerpt && <p className="mobile-feed-post-excerpt">{excerpt}</p>}
+        </>
       ) : (
         <>
           {post.category && <div className="mobile-feed-post-kicker">

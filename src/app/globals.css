@@ -204,13 +204,11 @@
 }
 
 :root {
-  --font-site: "Chiron GoRound TC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-site-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK SC", monospace;
+  --font-site: "Chiron GoRound TC WS", "Chiron GoRound TC", system-ui, sans-serif;
+  --font-site-mono: "IBM Plex Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK SC", monospace;
 }
 
-/* Chiron GoRound TC 原通过 Google Fonts 运行时 @import 加载：
-   与"无外部服务依赖"矛盾，且国内网络常被墙导致渲染阻塞。
-   改用本地回退字体栈（PingFang SC / Microsoft YaHei），加载更快更稳定。 */
+/* 与参考站点保持一致：正文使用 Chiron GoRound TC，日期和元信息使用 IBM Plex Mono。 */
 
 
 * {
@@ -2011,7 +2009,10 @@ textarea.comment-field {
   display: block;
   width: 100%;
   height: 100%;
+  margin: 0;
+  border-radius: 0;
   object-fit: cover;
+  cursor: default;
 }
 .music-trigger-cover.is-fallback::after {
   position: absolute;
@@ -2040,12 +2041,53 @@ textarea.comment-field {
   line-height: 1.4;
 }
 .music-trigger-artist {
+  position: relative;
   overflow: hidden;
+  height: 1.4em;
+  min-height: 1.4em;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+}
+.music-trigger-artist-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.music-trigger-lyric {
+  position: absolute;
+  inset: 0;
+  display: none;
+  overflow: hidden;
+  font: inherit;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+.music-trigger-lyric.is-visible {
+  display: block;
+}
+.music-trigger.has-lyric .music-trigger-artist-name {
+  visibility: hidden;
+}
+.music-trigger-lyric-text {
+  display: inline-block;
+  white-space: nowrap;
+}
+.music-trigger-lyric.is-long .music-trigger-lyric-text {
+  animation: music-lyric-marquee 8s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes music-lyric-marquee {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+  85%,
+  100% {
+    transform: translateX(var(--lyric-shift, 0px));
+  }
 }
 .music-trigger-play {
   display: inline-flex;
@@ -2115,8 +2157,9 @@ textarea.comment-field {
 /* 全局音乐播放器：右下角悬浮球（有曲目才显示；面板展开时隐藏避免重叠） */
 .global-player-float {
   position: fixed;
-  right: 16px;
+  left: 16px;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  right: auto;
   z-index: 65;
   display: inline-flex;
   width: 48px;
@@ -2150,6 +2193,10 @@ textarea.comment-field {
   pointer-events: none;
   transform: translateY(8px) scale(0.9);
 }
+.global-player-float.is-right {
+  right: 16px;
+  left: auto;
+}
 
 /* 底部控制面板：常驻 DOM，闭合时移出屏幕（保留布局，播放不中断） */
 .global-player-panel {
@@ -2165,6 +2212,9 @@ textarea.comment-field {
 .global-player-panel.is-open {
   transform: translate(-50%, calc(-1 * (12px + env(safe-area-inset-bottom, 0px))));
   pointer-events: auto;
+}
+.global-player-panel:not(.is-open) .global-player-host {
+  box-shadow: none;
 }
 .global-player-collapse {
   position: absolute;
@@ -2196,6 +2246,25 @@ textarea.comment-field {
 .global-player-panel .aplayer {
   background: var(--paper);
   font-family: var(--font-site-sans);
+}
+.global-player-panel .aplayer .aplayer-lrc {
+  margin: -8px 0 10px;
+}
+.global-player-panel .aplayer .aplayer-lrc::before {
+  background: linear-gradient(180deg, var(--paper) 0, transparent);
+}
+.global-player-panel .aplayer .aplayer-lrc::after {
+  background: linear-gradient(180deg, transparent 0, var(--paper) 100%);
+}
+.global-player-panel .aplayer .aplayer-lrc p {
+  color: var(--muted);
+}
+.global-player-panel .aplayer .aplayer-lrc p.aplayer-lrc-current {
+  color: var(--foreground);
+}
+.global-player-panel .aplayer .aplayer-pic {
+  background-position: center;
+  background-size: cover;
 }
 /* 面板内歌单列表限高，超出滚动 */
 .global-player-panel .aplayer-list {

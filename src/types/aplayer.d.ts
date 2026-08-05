@@ -5,11 +5,13 @@ declare module "aplayer" {
     url: string;
     cover?: string;
     lrc?: string;
+    key?: string;
   }
   export interface APlayerOptions {
     container: HTMLElement;
     audio: APlayerAudio[];
     listFolded?: boolean;
+    lrcType?: number | boolean;
     autoplay?: boolean;
     order?: "list" | "random";
     loop?: "all" | "one" | "none";
@@ -24,6 +26,7 @@ declare module "aplayer" {
     remove(index: number): void;
     clear(): void;
     audios: APlayerAudio[];
+    index: number;
   }
   export interface APlayerEventPayload {
     index?: number;
@@ -34,6 +37,7 @@ declare module "aplayer" {
     play(): void;
     pause(): void;
     paused: boolean;
+    audio: HTMLAudioElement;
     list: APlayerList;
     on(event: string, handler: (arg?: APlayerEventPayload) => void): void;
   }

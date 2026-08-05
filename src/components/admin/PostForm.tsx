@@ -304,6 +304,10 @@ export default function PostForm({ post, initialAttachments = [], categories = [
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  function addUploadedAttachment(attachment: Attachment) {
+    setAttachments((current) => current.some((item) => item.id === attachment.id) ? current : [attachment, ...current]);
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
       <div className="flex min-w-0 flex-col gap-4">
@@ -415,7 +419,9 @@ export default function PostForm({ post, initialAttachments = [], categories = [
           {attachments.length > 0 && (
             <ul className="mt-3 flex flex-col gap-2">
               {attachments.map((attachment) => {
-                const referenced = content.includes(attachment.path);
+                const referencedInContent = content.includes(attachment.path);
+                const isCover = cover === attachment.path;
+                const referenced = referencedInContent || isCover;
                 return (
                   <li key={attachment.id} className="rounded-lg border border-neutral-200 px-2.5 py-2">
                     <div className="flex items-center gap-2">
@@ -425,11 +431,22 @@ export default function PostForm({ post, initialAttachments = [], categories = [
                         <img src={attachment.path} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
                       )}
                       <p className="min-w-0 flex-1 truncate text-xs text-neutral-700">{attachment.original_name}</p>
-                      <span className={`shrink-0 text-[10px] ${referenced ? "text-green-600" : "text-amber-600"}`}>{referenced ? "已引用" : "未引用"}</span>
+                      <span className={`shrink-0 text-[10px] ${referenced ? "text-green-600" : "text-amber-600"}`}>
+                        {isCover && referencedInContent ? "正文+封面" : isCover ? "封面" : referencedInContent ? "正文已引用" : "未引用"}
+                      </span>
                     </div>
                     <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-neutral-400">
                       <span>{formatBytes(attachment.size)}</span>
-                      <button type="button" onClick={() => insertAttachment(attachment)} className="text-blue-700 underline">插入</button>
+                      <div className="flex items-center gap-3">
+                        {attachment.mime_type.startsWith("image/") && (
+                          isCover ? (
+                            <button type="button" onClick={() => setCover(null)} className="text-amber-700 underline">取消封面</button>
+                          ) : (
+                            <button type="button" onClick={() => setCover(attachment.path)} className="text-blue-700 underline">设为封面</button>
+                          )
+                        )}
+                        <button type="button" onClick={() => insertAttachment(attachment)} className="text-blue-700 underline">插入</button>
+                      </div>
                     </div>
                   </li>
                 );
@@ -452,7 +469,8 @@ export default function PostForm({ post, initialAttachments = [], categories = [
         </section>
 
         <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
-          <ImageUpload value={cover} onChange={setCover} label="封面图（可空）" />
+          <ImageUpload value={cover} onChange={setCover} onAttachmentUploaded={addUploadedAttachment} label="封面图（可空）" />
+          <p className="mt-2 text-xs text-neutral-400">也可以在上方图片附件中点击“设为封面”。封面只用于首页和分享图，正文中不会自动重复显示。</p>
         </section>
 
         <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">

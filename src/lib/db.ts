@@ -238,6 +238,7 @@ export interface AttachmentReference {
   id: number;
   label: string;
   slug?: string;
+  usage?: "content" | "cover" | "content+cover";
 }
 
 export interface AttachmentWithUsage extends Attachment {
@@ -432,7 +433,9 @@ export function getAttachment(id: number): Attachment | undefined {
 }
 
 export function getPostAttachments(postId: number): Attachment[] {
-  return db.prepare("SELECT * FROM attachments WHERE post_id = ? ORDER BY created_at DESC").all(postId) as Attachment[];
+  return db
+    .prepare("SELECT * FROM attachments WHERE post_id = ? OR path = (SELECT cover FROM posts WHERE id = ?) ORDER BY created_at DESC")
+    .all(postId, postId) as Attachment[];
 }
 
 export function attachAttachmentsToPost(ids: number[], postId: number): void {
@@ -454,8 +457,16 @@ export function listAttachments(): AttachmentWithUsage[] {
   return rows.map((row) => {
     const references: AttachmentReference[] = [];
     for (const post of posts) {
-      if ((post.content && post.content.includes(row.path)) || (post.cover && post.cover === row.path)) {
-        references.push({ type: "post", id: post.id, label: post.title, slug: post.slug });
+      const inContent = Boolean(post.content && post.content.includes(row.path));
+      const isCover = Boolean(post.cover && post.cover === row.path);
+      if (inContent || isCover) {
+        references.push({
+          type: "post",
+          id: post.id,
+          label: post.title,
+          slug: post.slug,
+          usage: inContent && isCover ? "content+cover" : isCover ? "cover" : "content",
+        });
       }
     }
     for (const moment of moments) {

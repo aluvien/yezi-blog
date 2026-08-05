@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { Attachment } from "@/lib/db";
 
 /** 客户端 canvas 预压缩:大图 resize 到 maxDim,质量 quality(jpeg)。 */
 async function resizeImage(file: File, maxDim: number, quality: number): Promise<Blob> {
@@ -37,7 +38,7 @@ async function resizeImage(file: File, maxDim: number, quality: number): Promise
 }
 
 /** 上传图片:默认客户端 canvas 预压缩 + 服务端 sharp 精压;original=true 保留原图。返回 path。 */
-export async function uploadImage(file: File, original = false): Promise<string> {
+async function uploadImageData(file: File, original = false): Promise<{ path: string; attachment?: Attachment }> {
   let uploadFile: Blob = file;
   if (!original && file.type.startsWith("image/") && file.type !== "image/gif") {
     try {
@@ -52,18 +53,24 @@ export async function uploadImage(file: File, original = false): Promise<string>
   const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "上传失败");
-  return data.path as string;
+  return { path: data.path as string, attachment: data.attachment as Attachment | undefined };
+}
+
+export async function uploadImage(file: File, original = false): Promise<string> {
+  return (await uploadImageData(file, original)).path;
 }
 
 /** 单图上传:显示缩略图,可更换/移除,可勾选"保留原图"。 */
 export default function ImageUpload({
   value,
   onChange,
+  onAttachmentUploaded,
   label = "封面图",
   contain = false,
 }: {
   value: string | null;
   onChange: (path: string | null) => void;
+  onAttachmentUploaded?: (attachment: Attachment) => void;
   label?: string;
   contain?: boolean;
 }) {
@@ -75,7 +82,9 @@ export default function ImageUpload({
     if (!file) return;
     setUploading(true);
     try {
-      onChange(await uploadImage(file, original));
+      const uploaded = await uploadImageData(file, original);
+      onChange(uploaded.path);
+      if (uploaded.attachment) onAttachmentUploaded?.(uploaded.attachment);
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "上传失败");
     } finally {

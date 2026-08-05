@@ -11,6 +11,10 @@ export interface GlobalPlaybackState {
   playing: boolean;
   /** 当前正在播放的曲目所属触发卡片；来自默认歌单（非卡片触发）时为 null */
   cardId: string | null;
+  /** 当前曲目的稳定标识，用于文章音乐卡片同步歌词。 */
+  trackKey: string | null;
+  /** 当前播放进度（秒），用于文章音乐卡片同步歌词。 */
+  currentTime: number;
 }
 
 type PlayListener = (payload: GlobalPlayPayload) => void;
@@ -21,7 +25,7 @@ type StateListener = (state: GlobalPlaybackState) => void;
 // 播放状态经 emitGlobalPlaybackState 回传，卡片据此切换播放态图标。
 let playListener: PlayListener | null = null;
 let stateListener: StateListener | null = null;
-let state: GlobalPlaybackState = { playing: false, cardId: null };
+let state: GlobalPlaybackState = { playing: false, cardId: null, trackKey: null, currentTime: 0 };
 
 /** 全局播放器挂载时注册"追加并播放"监听；返回取消函数。 */
 export function setGlobalPlayListener(fn: PlayListener): () => void {

@@ -70,12 +70,6 @@ export default async function PostPage({ params }: Props) {
         </header>
 
         <ArticleImageWrapper>
-          {/* 封面 */}
-          {post.cover && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.cover} alt={post.title} className="mt-7 aspect-[16/8.5] w-full rounded-lg object-cover" />
-          )}
-
           {/* 目录 */}
           {headings.length > 2 && siteSettings.show_table_of_contents !== "0" && <TableOfContents headings={headings} />}
 

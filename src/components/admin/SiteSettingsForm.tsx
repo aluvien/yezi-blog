@@ -27,6 +27,9 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     about_content: initialValues.about_content ?? "",
     meting_api: initialValues.meting_api ?? "",
     default_music: initialValues.default_music ?? "",
+    default_music_shuffle: initialValues.default_music_shuffle ?? "0",
+    music_float_enabled: initialValues.music_float_enabled ?? "1",
+    music_position: initialValues.music_position ?? "left",
     theme: initialValues.theme ?? "default",
     dark_mode: initialValues.dark_mode ?? "auto",
   });
@@ -127,7 +130,37 @@ export default function SiteSettingsForm({ initialValues }: Props) {
       <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">默认音乐列表（形如 netease:数字:playlist，留空不预置）</label>
         <input value={values.default_music} onChange={(event) => update("default_music", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="netease:7785232779:playlist" />
-        <p className="mt-1 text-xs text-neutral-400">格式 <code>server:id:type</code>（server: netease/qq/kugou/kuwo/xiami/baidu；type: song/playlist/album/search）。全站加载后作为全局播放器的基础列表，页面点选的音乐追加其后。</p>
+        <p className="mt-1 text-xs text-neutral-400">格式 <code>server:id:type</code>（server: netease/qq/kugou/kuwo/xiami/baidu；type: song/playlist/album/search）。也可在末尾加 <code>:random</code>。全站加载后作为全局播放器的基础列表，页面点选的音乐追加其后。</p>
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
+          <input
+            type="checkbox"
+            checked={values.default_music_shuffle === "1"}
+            onChange={(event) => update("default_music_shuffle", event.target.checked ? "1" : "0")}
+            className="h-3.5 w-3.5 accent-neutral-700"
+          />
+          随机播放默认歌单
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={values.music_float_enabled === "1"}
+            onChange={(event) => update("music_float_enabled", event.target.checked ? "1" : "0")}
+            className="h-4 w-4 accent-neutral-700"
+          />
+          显示音乐图标按钮
+        </label>
+        <label className="text-sm text-neutral-700">
+          音乐图标/播放器位置
+          <select value={values.music_position} onChange={(event) => update("music_position", event.target.value)} className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm">
+            <option value="left">左下角</option>
+            <option value="right">右下角</option>
+            <option value="bottom">底部展开播放器</option>
+          </select>
+        </label>
+        <p className="text-xs text-neutral-400 md:col-span-2">关闭图标按钮后，播放器仍可由文章音乐触发；选择“底部展开播放器”时不显示悬浮图标，播放器面板会固定展开在页面底部。</p>
       </div>
 
       <fieldset className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">

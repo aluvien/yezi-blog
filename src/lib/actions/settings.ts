@@ -23,6 +23,9 @@ const SETTING_KEYS = [
   "about_content",
   "meting_api",
   "default_music",
+  "default_music_shuffle",
+  "music_float_enabled",
+  "music_position",
   "theme",
   "dark_mode",
 ] as const;

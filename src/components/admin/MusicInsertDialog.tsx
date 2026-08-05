@@ -3,15 +3,16 @@
 import { useState } from "react";
 import { MUSIC_SERVERS, MUSIC_TYPES, parseMusicSpec } from "@/lib/music";
 
-/** 音乐插入对话框：选择平台/ID/类型，返回 spec 字符串（如 netease:123:playlist），取消返回 null。 */
+/** 音乐插入对话框：选择平台/ID/类型/播放顺序，返回 spec 字符串。 */
 export function MusicInsertDialog({ onClose }: { onClose: (spec: string | null) => void }) {
   const [server, setServer] = useState<string>(MUSIC_SERVERS[0]);
   const [id, setId] = useState("");
   const [type, setType] = useState<string>(MUSIC_TYPES[0]);
+  const [shuffle, setShuffle] = useState(false);
   const [error, setError] = useState("");
 
   function confirm() {
-    const spec = `${server}:${id.trim()}:${type}`;
+    const spec = `${server}:${id.trim()}:${type}${shuffle ? ":random" : ""}`;
     if (!parseMusicSpec(spec)) {
       setError("ID 需为数字");
       return;
@@ -58,6 +59,10 @@ export function MusicInsertDialog({ onClose }: { onClose: (spec: string | null) 
                 <option key={item} value={item}>{item}</option>
               ))}
             </select>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
+            <input type="checkbox" checked={shuffle} onChange={(event) => setShuffle(event.target.checked)} className="h-4 w-4 accent-neutral-700" />
+            随机播放歌单
           </label>
           <p className="text-xs text-neutral-400">单曲选 song，整个歌单选 playlist。ID 可在网易云/QQ 分享链接中找到。</p>
         </div>

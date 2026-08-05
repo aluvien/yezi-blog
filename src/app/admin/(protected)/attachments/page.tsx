@@ -54,7 +54,9 @@ export default function AdminAttachmentsPage() {
                       href={ref.type === "post" ? `/admin/posts/${ref.id}/edit` : `/admin/moments/${ref.id}/edit`}
                       className="max-w-full truncate text-blue-700 underline hover:text-blue-900"
                     >
-                      {ref.type === "post" ? ref.label : `想法：${ref.label}`}
+                      {ref.type === "post"
+                        ? `${ref.usage === "cover" ? "封面：" : ref.usage === "content+cover" ? "正文+封面：" : "文章："}${ref.label}`
+                        : `想法：${ref.label}`}
                     </Link>
                   ))}
                 </div>

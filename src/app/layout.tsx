@@ -1,20 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { site } from "@/lib/site";
 import { getSiteSettings } from "@/lib/db";
 import { normalizeDarkMode, normalizePalette } from "@/lib/theme";
 import "./globals.css";
 import "aplayer/dist/APlayer.min.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
@@ -23,6 +12,10 @@ export const metadata: Metadata = {
     template: `%s · ${site.name}`,
   },
   description: site.description,
+  icons: {
+    icon: "/pwa-icon/192",
+    apple: "/pwa-icon/192",
+  },
   openGraph: {
     type: "website",
     siteName: site.name,
@@ -64,8 +57,10 @@ export default function RootLayout({
       // data-theme 由内联脚本在 React 接管前设置（避免闪烁），
       // 用 suppressHydrationWarning 让 React 跳过对该元素的属性比对，防止水合报错 #418
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
+      {/* eslint-disable-next-line @next/next/no-css-tags */}
+      <link rel="stylesheet" href="/fonts/chiron/css/vf.css" />
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {children}
