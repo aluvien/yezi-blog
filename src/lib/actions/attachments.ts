@@ -1,22 +1,14 @@
 "use server";
 
 import fs from "fs";
-import path from "path";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { deleteAttachment, listAttachments } from "@/lib/db";
+import { uploadAbsolutePath } from "@/lib/uploads";
 import type { ActionResult } from "@/lib/actions/posts";
 
-function attachmentAbsolutePath(relativePath: string): string | null {
-  if (!relativePath.startsWith("/uploads/")) return null;
-  const publicRoot = path.resolve(process.cwd(), "public");
-  const target = path.resolve(publicRoot, relativePath.slice(1));
-  if (!target.startsWith(`${publicRoot}${path.sep}`)) return null;
-  return target;
-}
-
 function removeAttachmentFile(relativePath: string): void {
-  const target = attachmentAbsolutePath(relativePath);
+  const target = uploadAbsolutePath(relativePath);
   if (target && fs.existsSync(target)) fs.unlinkSync(target);
 }
 

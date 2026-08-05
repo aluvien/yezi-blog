@@ -1,5 +1,5 @@
-# Nginx 反向代理示例：将域名流量转发到本机 3000 端口的 Next.js
-# 复制到 /etc/nginx/sites-available/aluvien-blog 并按需修改 server_name，
+# Nginx 反向代理示例：将域名流量转发到本机 3030 端口的 Next.js（见 ecosystem.config.js）
+# 复制到 /etc/nginx/sites-available/yezi-blog 并按需修改 server_name，
 # 然后 ln -s 到 sites-enabled 并 nginx -t && systemctl reload nginx
 
 server {
@@ -10,12 +10,15 @@ server {
     client_max_body_size 20m;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3030;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # 必须转发真实域名：若被 Next 当作 host 且与浏览器 Origin 不一致，
+        # 后台 Server Actions（保存/删除等）会被同源校验拦截报错。
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 60s;

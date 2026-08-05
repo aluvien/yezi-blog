@@ -9,6 +9,7 @@ export interface PostInput {
   slug: string;
   content: string;
   cover: string | null;
+  category: string;
   tags: string;
   attachmentIds: number[];
   status: "draft" | "published";
@@ -25,6 +26,7 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
     slug: data.slug,
     content: data.content,
     cover: data.cover,
+    category: data.category,
     tags: normalizePostTags(data.tags),
     status: data.status,
   });
@@ -32,6 +34,8 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
   revalidatePath("/admin/posts");
   revalidatePath("/admin/attachments");
   revalidatePath("/");
+  revalidatePath("/archives");
+  revalidatePath(`/categories/${encodeURIComponent(data.category)}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");
   return { ok: true };
@@ -48,6 +52,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
     slug: data.slug,
     content: data.content,
     cover: data.cover,
+    category: data.category,
     tags: normalizePostTags(data.tags),
     status: data.status,
   });
@@ -55,6 +60,8 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
   revalidatePath("/admin/posts");
   revalidatePath("/admin/attachments");
   revalidatePath("/");
+  revalidatePath("/archives");
+  revalidatePath(`/categories/${encodeURIComponent(data.category)}`);
   revalidatePath(`/posts/${existing.slug}`);
   revalidatePath(`/posts/${data.slug || existing.slug}`);
   revalidatePath("/rss.xml");
@@ -70,6 +77,7 @@ export async function deletePostAction(id: number): Promise<ActionResult> {
   revalidatePath("/admin/posts");
   revalidatePath("/admin/attachments");
   revalidatePath("/");
+  revalidatePath("/archives");
   revalidatePath(`/posts/${post.slug}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");

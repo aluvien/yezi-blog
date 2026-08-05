@@ -1,0 +1,184 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { updateSiteSettingsAction } from "@/lib/actions/settings";
+import { DARK_MODE_OPTIONS, THEME_PALETTES } from "@/lib/theme";
+import ImageUpload from "./ImageUpload";
+
+type Props = { initialValues: Record<string, string> };
+
+export default function SiteSettingsForm({ initialValues }: Props) {
+  const router = useRouter();
+  const [values, setValues] = useState({
+    site_name: initialValues.site_name ?? "",
+    site_subtitle: initialValues.site_subtitle ?? "",
+    site_logo: initialValues.site_logo ?? "",
+    footer_text: initialValues.footer_text ?? "",
+    social_links: initialValues.social_links ?? "",
+    show_related_posts: initialValues.show_related_posts ?? "1",
+    show_more_posts: initialValues.show_more_posts ?? "1",
+    show_table_of_contents: initialValues.show_table_of_contents ?? "1",
+    author_email: initialValues.author_email ?? "",
+    gravatar_mirror: initialValues.gravatar_mirror ?? "",
+    author_avatar: initialValues.author_avatar ?? "",
+    about_content: initialValues.about_content ?? "",
+    meting_api: initialValues.meting_api ?? "",
+    theme: initialValues.theme ?? "default",
+    dark_mode: initialValues.dark_mode ?? "auto",
+  });
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function update(key: keyof typeof values, value: string) {
+    setValues((current) => ({ ...current, [key]: value }));
+  }
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    startTransition(async () => {
+      const result = await updateSiteSettingsAction(values);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setMessage("设置已保存");
+      router.refresh();
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+      <div className="grid gap-4 md:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-neutral-700">站点名称</label>
+          <input value={values.site_name} onChange={(event) => update("site_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="Yezi's Blog" />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-neutral-700">站点副标题</label>
+          <input value={values.site_subtitle} onChange={(event) => update("site_subtitle", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="文章 · 想法 · 作品" />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-neutral-700">页脚文案</label>
+          <input value={values.footer_text} onChange={(event) => update("footer_text", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="认真写字，也认真生活。" />
+        </div>
+      </div>
+
+      <div>
+        <ImageUpload value={values.site_logo || null} onChange={(path) => update("site_logo", path ?? "")} label="站点 Logo（可选）" />
+      </div>
+
+      <div className="space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+        <p className="text-sm font-medium text-neutral-700">作者头像</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs text-neutral-600">作者邮箱（用于 Gravatar 默认头像）</label>
+            <input value={values.author_email} onChange={(event) => update("author_email", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="you@example.com" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-neutral-600">Gravatar 镜像地址（留空用官方）</label>
+            <input value={values.gravatar_mirror} onChange={(event) => update("gravatar_mirror", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="https://secure.gravatar.com" />
+          </div>
+        </div>
+        <ImageUpload value={values.author_avatar || null} onChange={(path) => update("author_avatar", path ?? "")} label="自定义头像（上传后优先于 Gravatar）" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-neutral-700">社交链接（每行：名称 | URL）</label>
+          <textarea value={values.social_links} onChange={(event) => update("social_links", event.target.value)} rows={5} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="GitHub | https://github.com/..." />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-neutral-700">关于页内容（Markdown，留空用默认）</label>
+          <textarea value={values.about_content} onChange={(event) => update("about_content", event.target.value)} rows={5} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm leading-6" placeholder="支持 Markdown 语法，留空显示默认关于页。" />
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-neutral-700">音乐 API 地址（留空用默认）</label>
+        <input value={values.meting_api} onChange={(event) => update("meting_api", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="https://api.injahow.cn/meting/" />
+        <p className="mt-1 text-xs text-neutral-400">用于文章/想法内嵌音乐。默认公共接口可能不稳定，建议自建 Meting API 或换镜像。</p>
+      </div>
+
+      <fieldset className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+        <legend className="px-1 text-sm font-medium text-neutral-700">外观主题</legend>
+        <div>
+          <p className="text-sm text-neutral-600">配色方案（保存后前台立即生效，当前为默认方案）</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {THEME_PALETTES.map((palette) => {
+              const selected = values.theme === palette.id;
+              return (
+                <button
+                  key={palette.id}
+                  type="button"
+                  onClick={() => update("theme", palette.id)}
+                  aria-pressed={selected}
+                  className={`flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-colors ${
+                    selected ? "border-neutral-900 ring-2 ring-neutral-900/10" : "border-neutral-200 hover:border-neutral-400"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className="flex h-7 w-12 items-center justify-center rounded-md border border-neutral-200" style={{ background: palette.lightBackground }}>
+                      <span className="h-3 w-3 rounded-full" style={{ background: palette.lightAccent }} />
+                    </span>
+                    <span className="flex h-7 w-12 items-center justify-center rounded-md border border-neutral-700" style={{ background: palette.darkBackground }}>
+                      <span className="h-3 w-3 rounded-full" style={{ background: palette.darkAccent }} />
+                    </span>
+                  </span>
+                  <span className="text-sm font-medium text-neutral-800">{palette.name}</span>
+                  <span className="text-xs leading-5 text-neutral-500">{palette.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <p className="text-sm text-neutral-600">深色模式（访客可在前台页头手动切换）</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {DARK_MODE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => update("dark_mode", option.value)}
+                aria-pressed={values.dark_mode === option.value}
+                title={option.description}
+                className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
+                  values.dark_mode === option.value ? "bg-neutral-900 text-white" : "border border-neutral-300 text-neutral-600 hover:bg-neutral-100"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+        <legend className="px-1 text-sm font-medium text-neutral-700">文章与列表显示</legend>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700">
+            <input type="checkbox" checked={values.show_related_posts !== "0"} onChange={(event) => update("show_related_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />
+            显示文章页“继续阅读”
+          </label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700">
+            <input type="checkbox" checked={values.show_more_posts !== "0"} onChange={(event) => update("show_more_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />
+            显示文章列表页“查看更多文章”
+          </label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700">
+            <input type="checkbox" checked={values.show_table_of_contents !== "0"} onChange={(event) => update("show_table_of_contents", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />
+            显示文章右侧目录
+          </label>
+        </div>
+      </fieldset>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <button type="submit" disabled={pending} className="rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        {message && <p className="text-sm text-green-600">{message}</p>}
+      </div>
+    </form>
+  );
+}

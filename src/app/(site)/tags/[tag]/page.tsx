@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { countApprovedComments, listPostsByTag } from "@/lib/db";
+import { countApprovedCommentsBulk, listPostsByTag } from "@/lib/db";
 import { PostEntry } from "@/components/site/PostEntry";
+
+export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ tag: string }> };
 
@@ -23,6 +25,7 @@ export default async function TagPage({ params }: Props) {
   const tag = decodeTag((await params).tag);
   if (!tag) notFound();
   const posts = listPostsByTag(tag);
+  const commentCounts = countApprovedCommentsBulk("post", posts.map((post) => post.id));
 
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
@@ -39,7 +42,7 @@ export default async function TagPage({ params }: Props) {
         <div className="divide-y divide-divider">
           {posts.map((post) => (
             <div key={post.id} className="py-6 md:py-7">
-              <PostEntry post={post} commentCount={countApprovedComments("post", post.id)} />
+              <PostEntry post={post} commentCount={commentCounts.get(post.id) ?? 0} />
             </div>
           ))}
         </div>

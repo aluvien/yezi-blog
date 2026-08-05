@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getSiteSettings } from "@/lib/db";
+import { renderMarkdown } from "@/lib/markdown";
 import { site } from "@/lib/site";
 import { PageHeader } from "@/components/site/PageHeader";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "关于",
@@ -9,16 +13,22 @@ export const metadata: Metadata = {
 };
 
 export default function AboutPage() {
+  const aboutContent = getSiteSettings().about_content?.trim();
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
       <PageHeader
-        eyebrow="About the author"
+        eyebrow="关于作者"
         title={`你好，我是 ${site.author}。`}
         description="写代码，也写字。相信清晰的表达，和好产品一样，能让复杂的事变得简单。"
       />
 
-      <section className="paper-card rounded-2xl px-5 py-7 md:px-9 md:py-9">
-        <div className="grid gap-9 md:grid-cols-[1fr_230px] md:gap-12">
+      {aboutContent ? (
+        <section className="paper-card rounded-2xl px-5 py-7 md:px-9 md:py-9">
+          <div className="article-body max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdown(aboutContent) }} />
+        </section>
+      ) : (
+        <section className="paper-card rounded-2xl px-5 py-7 md:px-9 md:py-9">
+          <div className="grid gap-9 md:grid-cols-[1fr_230px] md:gap-12">
           <div className="space-y-6 text-[16px] leading-8 text-foreground/80">
             <p>这里是我的个人数字花园。长文章记录完整的思考，想法页保存尚未长大的念头，作品页则收纳那些真正动手做出来的东西。</p>
             <p>我不追求每天更新，只希望每一篇内容都经得起重读。比起快速给出答案，我更在意问题为什么值得被问，以及一件事能不能讲得足够清楚。</p>
@@ -32,6 +42,7 @@ export default function AboutPage() {
           </aside>
         </div>
       </section>
+      )}
     </div>
   );
 }

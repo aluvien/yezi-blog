@@ -5,12 +5,21 @@ import {
   createSession,
   deleteExpiredSessions,
   deleteSession,
+  clearLoginAttempt,
+  getLoginAttempt,
   getSessionByToken,
+  recordLoginFailure,
   type Session,
 } from "@/lib/db";
 
 export const SESSION_COOKIE = "admin_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_BLOCK_MS = 15 * 60 * 1000;
+// IP 限流之外再加一层账户级限流，防止攻击者从多个地址轮换尝试。
+const GLOBAL_LOGIN_KEY = "__admin_account__";
+const GLOBAL_LOGIN_MAX_ATTEMPTS = 25;
 
 function verifyPassword(password: string): boolean {
   const admin = process.env.ADMIN_PASSWORD;
@@ -21,8 +30,46 @@ function verifyPassword(password: string): boolean {
 }
 
 /** 校验密码，成功则创建会话并写入 httpOnly cookie */
-export async function login(password: string, options: { secure?: boolean } = {}): Promise<boolean> {
-  if (!verifyPassword(password)) return false;
+export type LoginResult = { ok: true } | { ok: false; blocked: boolean; retryAfter?: number };
+
+export async function login(password: string, options: { secure?: boolean; ip?: string } = {}): Promise<LoginResult> {
+  // 生产环境若未显式开启 SESSION_COOKIE_SECURE，首次登录时提醒一次（HTTPS 反代尤其需要）。
+  const warnedFlag = globalThis as unknown as { __warnedCookieSecure?: boolean };
+  if (process.env.NODE_ENV === "production" && process.env.SESSION_COOKIE_SECURE !== "true" && !warnedFlag.__warnedCookieSecure) {
+    warnedFlag.__warnedCookieSecure = true;
+    console.warn("[auth] 生产环境未设置 SESSION_COOKIE_SECURE=true；使用 HTTPS 反代时请显式开启，以保证会话 cookie 携带 Secure 标记。");
+  }
+  // 直连或未配置可信代理时 IP 可能是 unknown，也必须纳入限流，不能绕过保护。
+  const ip = options.ip?.trim() || "unknown";
+  const now = Date.now();
+  const existing = getLoginAttempt(ip);
+  const globalExisting = getLoginAttempt(GLOBAL_LOGIN_KEY);
+  const blockedUntil = Math.max(existing?.blocked_until ?? 0, globalExisting?.blocked_until ?? 0);
+  if (blockedUntil > now) {
+    return { ok: false, blocked: true, retryAfter: Math.ceil((blockedUntil - now) / 1000) };
+  }
+
+  if (!verifyPassword(password)) {
+    const failure = recordLoginFailure(ip, {
+      now,
+      windowMs: LOGIN_WINDOW_MS,
+      maxAttempts: LOGIN_MAX_ATTEMPTS,
+      blockMs: LOGIN_BLOCK_MS,
+    });
+    const globalFailure = recordLoginFailure(GLOBAL_LOGIN_KEY, {
+      now,
+      windowMs: LOGIN_WINDOW_MS,
+      maxAttempts: GLOBAL_LOGIN_MAX_ATTEMPTS,
+      blockMs: LOGIN_BLOCK_MS,
+    });
+    const failureBlockedUntil = Math.max(failure.blockedUntil, globalFailure.blockedUntil);
+    return failureBlockedUntil > now
+      ? { ok: false, blocked: true, retryAfter: Math.ceil((failureBlockedUntil - now) / 1000) }
+      : { ok: false, blocked: false };
+  }
+
+  clearLoginAttempt(ip);
+  clearLoginAttempt(GLOBAL_LOGIN_KEY);
   deleteExpiredSessions();
   const token = crypto.randomBytes(32).toString("hex");
   createSession(token, Date.now() + SESSION_TTL_MS);
@@ -36,7 +83,7 @@ export async function login(password: string, options: { secure?: boolean } = {}
     path: "/",
     maxAge: SESSION_TTL_MS / 1000,
   });
-  return true;
+  return { ok: true };
 }
 
 /** 读取当前会话（含过期校验），未登录返回 null */

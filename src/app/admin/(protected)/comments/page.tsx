@@ -49,6 +49,9 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
                 <span className="min-w-0 max-w-full text-sm font-medium">
                   {comment.nickname}
                   <span className="ml-2 break-all text-xs font-normal text-neutral-400">{comment.email || "未留邮箱"}</span>
+                  {comment.website && (
+                    <a href={comment.website} target="_blank" rel="noopener noreferrer" className="ml-2 break-all text-xs font-normal text-blue-700 underline">网站</a>
+                  )}
                 </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${comment.status === "pending" ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"}`}>
                   {comment.status === "pending" ? "待审核" : "已公开"}
@@ -63,7 +66,7 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
               <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400">
                 <span>{comment.target_type === "post" ? "文章" : "想法"}：</span>
                 {targetHref ? <Link href={targetHref} target="_blank" className="max-w-full truncate text-blue-700 underline">{comment.target_label ?? "查看内容"}</Link> : <span>{comment.target_label ?? "目标已删除"}</span>}
-                <span>·</span><span>IP {comment.ip}</span><span>·</span><span>{formatDate(comment.created_at)}</span>
+                <span>·</span><span>IP {comment.ip.slice(0, 8)}…</span><span>·</span><span>{formatDate(comment.created_at)}</span>
               </div>
               <CommentActions id={comment.id} status={comment.status} initialReply={comment.admin_reply} />
             </li>

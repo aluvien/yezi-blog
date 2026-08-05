@@ -1,13 +1,17 @@
 import { commentTargetExists, createComment, lastCommentAgeByIp } from "@/lib/db";
+import { getClientIp } from "@/lib/request";
 
 export type CommentResult = { data: unknown; status: number };
 
 const RATE_LIMIT_MS = 30 * 1000; // 同 IP 30 秒内只能发 1 条
 
-function getIp(request: Request): string {
-  const fwd = request.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return request.headers.get("x-real-ip") ?? "unknown";
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export async function submitComment(request: Request): Promise<CommentResult> {
@@ -22,11 +26,13 @@ export async function submitComment(request: Request): Promise<CommentResult> {
   const targetId = Number(body?.target_id);
   const nickname = String(body?.nickname ?? "").trim();
   const email = String(body?.email ?? "").trim() || null;
+  const website = String(body?.website_url ?? "").trim() || null;
   const content = String(body?.content ?? "").trim();
-  const website = String(body?.website ?? "").trim();
-
   // 隐形蜜罐字段：正常用户不可见，自动填表机器人通常会填写。
-  if (website) {
+  const honeypot = String(body?.website ?? "").trim();
+
+  // 蜜罐命中直接返回假成功，不落库也不触发限频，让机器人以为自己成功了。
+  if (honeypot) {
     return { data: { message: "评论已提交，审核后展示" }, status: 201 };
   }
 
@@ -42,16 +48,19 @@ export async function submitComment(request: Request): Promise<CommentResult> {
   if (email && (email.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
     return { data: { error: "邮箱格式不正确" }, status: 400 };
   }
+  if (website && (website.length > 200 || !isHttpUrl(website))) {
+    return { data: { error: "网站地址不正确" }, status: 400 };
+  }
   if (!content || content.length > 1000) {
     return { data: { error: "请填写评论内容（1000 字以内）" }, status: 400 };
   }
-  const ip = getIp(request);
+  const ip = getClientIp(request);
   const age = lastCommentAgeByIp(ip);
   if (age !== null && age < RATE_LIMIT_MS) {
     return { data: { error: "发布太频繁，请稍后再试" }, status: 429 };
   }
 
-  const comment = createComment({ target_type: targetType, target_id: targetId, nickname, email, content, ip });
+  const comment = createComment({ target_type: targetType, target_id: targetId, nickname, email, website, content, ip });
   return {
     data: {
       message: "评论已提交，审核后展示",

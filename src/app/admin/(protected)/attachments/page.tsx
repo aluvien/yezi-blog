@@ -48,14 +48,19 @@ export default function AdminAttachmentsPage() {
                   <span className={`rounded-full px-2 py-0.5 ${attachment.referenced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-800"}`}>
                     {attachment.referenced ? "已引用" : "未引用"}
                   </span>
-                  {attachment.post_id && (
-                    <Link href={`/admin/posts/${attachment.post_id}/edit`} className="max-w-full truncate text-blue-700 underline">
-                      {attachment.post_title || "查看关联文章"}
+                  {attachment.references.map((ref, i) => (
+                    <Link
+                      key={`${ref.type}-${ref.id}-${i}`}
+                      href={ref.type === "post" ? `/admin/posts/${ref.id}/edit` : `/admin/moments/${ref.id}/edit`}
+                      className="max-w-full truncate text-blue-700 underline hover:text-blue-900"
+                    >
+                      {ref.type === "post" ? ref.label : `想法：${ref.label}`}
                     </Link>
-                  )}
+                  ))}
                 </div>
               </div>
               <div className="ml-[4.25rem] flex shrink-0 flex-wrap gap-x-4 gap-y-2 sm:ml-auto">
+                <Link href={`/admin/attachments/${attachment.id}`} className="text-sm text-blue-700 underline">详情</Link>
                 <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 underline">打开</a>
                 {!attachment.referenced && <DeleteButton action={deleteAttachmentAction.bind(null, attachment.id)} confirmText="确定删除这个未引用附件？此操作不可恢复。" />}
               </div>

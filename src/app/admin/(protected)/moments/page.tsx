@@ -26,7 +26,13 @@ export default function AdminMomentsPage() {
           const images = parseMomentImages(moment);
           return (
             <li key={moment.id} className="rounded-2xl bg-white p-4 shadow-sm sm:p-5">
-              <p className="text-base whitespace-pre-wrap">{moment.content}</p>
+              <Link
+                href={`/admin/moments/${moment.id}/edit`}
+                className="block whitespace-pre-wrap text-base transition-colors hover:text-accent"
+                aria-label="编辑这条想法"
+              >
+                {moment.content}
+              </Link>
               {images.length > 0 && (
                 <div className="mt-2 flex gap-2 overflow-x-auto">
                   {images.map((src, index) => (
@@ -38,8 +44,8 @@ export default function AdminMomentsPage() {
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-xs text-neutral-400">{formatDate(moment.created_at)}</span>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <Link href={`/moments#moment-${moment.id}`} target="_blank" className="text-sm text-blue-700 underline">查看</Link>
-                  <Link href={`/admin/moments/${moment.id}/edit`} className="text-sm text-neutral-700 underline">编辑</Link>
+                  <Link href={`/moments#moment-${moment.id}`} target="_blank" className="text-sm text-blue-700 hover:text-blue-900">查看</Link>
+                  <Link href={`/admin/moments/${moment.id}/edit`} className="text-sm text-neutral-700 hover:text-neutral-950">编辑</Link>
                   <DeleteButton action={deleteMomentAction.bind(null, moment.id)} />
                 </div>
               </div>

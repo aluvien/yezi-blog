@@ -3,7 +3,7 @@
 module.exports = {
   apps: [
     {
-      name: "aluvien-blog",
+      name: "yezi-blog",
       script: "scripts/start-standalone.mjs",
       args: "",
       cwd: __dirname,
@@ -13,7 +13,7 @@ module.exports = {
       max_memory_restart: "512M",
       env: {
         NODE_ENV: "production",
-        PORT: 3000,
+        PORT: 3030,
         HOSTNAME: "0.0.0.0",
       },
     },

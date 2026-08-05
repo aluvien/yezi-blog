@@ -1,28 +1,11 @@
-import type { Moment } from "@/lib/db";
+import type { ContentMetrics, Moment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/db";
-import { formatRelativeTime } from "@/lib/format";
+import { formatDateOnly } from "@/lib/format";
+import { site } from "@/lib/site";
+import { splitMomentContent } from "@/lib/music";
 import { MomentCommentToggle } from "@/components/site/MomentCommentToggle";
-
-function MomentImages({ images }: { images: string[] }) {
-  if (images.length === 0) return null;
-  // 1 张大图，2/4 张两列，其余三列（九宫格）
-  const cols = images.length === 1 ? "grid-cols-1" : images.length === 2 || images.length === 4 ? "grid-cols-2" : "grid-cols-3";
-  return (
-    <div className={`mt-2 grid gap-1.5 ${cols} ${images.length === 1 ? "max-w-[70%]" : ""}`}>
-      {images.slice(0, 9).map((src, i) => (
-        // 图片为后台上传的本地路径，尺寸不固定，用原生 img
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          key={i}
-          src={src}
-          alt=""
-          loading="lazy"
-          className="aspect-square w-full rounded-lg object-cover"
-        />
-      ))}
-    </div>
-  );
-}
+import { MetricIcon } from "@/components/site/MetricIcon";
+import { MomentImages } from "@/components/site/MomentImages";
 
 /**
  * 想法条目（朋友圈样式）。
@@ -31,30 +14,76 @@ function MomentImages({ images }: { images: string[] }) {
 export function MomentEntry({
   moment,
   commentCount,
+  metrics,
+  authorName,
+  authorAvatar,
   children,
-  compact = false,
+  initialLiked = false,
 }: {
   moment: Moment;
   commentCount: number;
+  metrics?: ContentMetrics;
+  authorName?: string;
+  authorAvatar?: string;
   children?: React.ReactNode;
-  compact?: boolean;
+  initialLiked?: boolean;
 }) {
   const images = parseMomentImages(moment);
+  const segments = splitMomentContent(moment.content);
+  const displayAuthor = authorName?.trim() || site.author;
+  const avatar = authorAvatar?.trim();
   return (
-    <article id={`moment-${moment.id}`} className="min-w-0">
-      {compact && <div className="mb-2"><span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-muted">想法</span></div>}
-      <p className={`${compact ? "line-clamp-3" : ""} whitespace-pre-wrap text-[15px] leading-7 text-foreground`}>
-        {moment.content}
-      </p>
-      {!compact && <MomentImages images={images} />}
+    <article id={`moment-${moment.id}`} className="moment-entry min-w-0">
+      <div className="moment-entry-head">
+        <div className="moment-entry-avatar">
+          {avatar ? (
+            // 头像支持后台设置的本地上传路径或外部 URL。
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatar} alt="" />
+          ) : (
+            <span>{displayAuthor.charAt(0).toUpperCase()}</span>
+          )}
+        </div>
+        <div className="moment-entry-author">
+          <strong>{displayAuthor}</strong>
+          <time>{formatDateOnly(moment.created_at)}</time>
+        </div>
+      </div>
+      <div className="moment-entry-content">
+        {segments.map((seg, index) =>
+          seg.kind === "text" ? (
+            <p key={index} className="whitespace-pre-wrap text-[16px] leading-[1.65] text-foreground">
+              {seg.value}
+            </p>
+          ) : (
+            <div
+              key={index}
+              className="blog-music"
+              data-server={seg.value.server}
+              data-id={seg.value.id}
+              data-type={seg.value.type}
+            />
+          ),
+        )}
+        <MomentImages images={images} />
+      </div>
       {children ? (
-        <MomentCommentToggle targetId={moment.id} time={formatRelativeTime(moment.created_at)} count={commentCount}>
+        <MomentCommentToggle targetId={moment.id} count={commentCount} metrics={metrics} initialLiked={initialLiked}>
           {children}
         </MomentCommentToggle>
       ) : (
-        <div className="mt-2 flex items-center gap-x-4 text-[13px] text-muted">
-          <span>{formatRelativeTime(moment.created_at)}</span>
-          {commentCount > 0 && <span>{commentCount} 条评论</span>}
+        <div className="moment-entry-meta site-meta flex items-center gap-4 text-muted">
+          {metrics && (
+            <>
+              <span className="inline-flex items-center gap-1"><MetricIcon type="like" />{metrics.likes}</span>
+              <span className="inline-flex items-center gap-1"><MetricIcon type="view" />{metrics.views}</span>
+            </>
+          )}
+          <span className="site-meta-spacer" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1">
+            <MetricIcon type="comment" />
+            {commentCount}
+          </span>
         </div>
       )}
     </article>

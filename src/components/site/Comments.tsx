@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { formatRelativeTime } from "@/lib/format";
 import { site } from "@/lib/site";
 
@@ -30,36 +30,46 @@ function avatarColor(name: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-function Avatar({ name, size = 36 }: { name: string; size?: number }) {
+function Avatar({ name }: { name: string }) {
   const initial = name.charAt(0).toUpperCase();
   const bg = avatarColor(name);
   return (
     <div
-      className="flex shrink-0 items-center justify-center rounded-full text-white font-medium"
-      style={{ width: size, height: size, backgroundColor: bg, fontSize: size * 0.4 }}
+      className="comment-avatar"
+      style={{ backgroundColor: bg }}
+      aria-hidden="true"
     >
       {initial}
     </div>
   );
 }
 
-/** 评论区：已审核评论列表 + 提交表单（蜜罐防垃圾、后台审核） */
+/** 评论区：已审核评论列表 + 提交表单（蜜罐防垃圾、后台审核）。
+ *  文章页传 commentCount：渲染标题行（标题 + “写评论”按钮同一行，不额外占高），表单默认折叠，点击展开并滚动到位。
+ *  想法页不传 commentCount：无标题行，表单默认展开。 */
 export function Comments({
   targetType,
   targetId,
   comments,
+  defaultFormCollapsed = false,
+  commentCount,
 }: {
   targetType: "post" | "moment";
   targetId: number;
   comments: CommentItem[];
+  defaultFormCollapsed?: boolean;
+  commentCount?: number;
 }) {
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
+  const [profileUrl, setProfileUrl] = useState("");
   const [content, setContent] = useState("");
   const [website, setWebsite] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [submittedComments, setSubmittedComments] = useState<PendingCommentItem[]>([]);
+  const [formCollapsed, setFormCollapsed] = useState(defaultFormCollapsed);
+  const formRef = useRef<HTMLFormElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,6 +85,7 @@ export function Comments({
           target_id: targetId,
           nickname: nickname.trim(),
           email: email.trim(),
+          website_url: profileUrl.trim(),
           content: content.trim(),
           website,
         }),
@@ -100,111 +111,160 @@ export function Comments({
     }
   }
 
-  const inputCls =
-    "w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[14px] outline-none transition-colors placeholder:text-neutral-400 focus:border-accent focus:ring-2 focus:ring-accent/10";
+  function expandForm() {
+    setFormCollapsed(false);
+    // 表单在列表下方，展开后平滑滚动到表单（scrollIntoView 会自动找最近的滚动祖先，桌面端即 .site-main）
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
+
+  const inputCls = "comment-field";
+  const showHeader = commentCount !== undefined;
+  // 头部计数与下方列表保持一致：已审核评论 + 本次会话刚提交（待审核）的评论
+  const shownCount = showHeader ? commentCount! + submittedComments.length : 0;
 
   return (
-    <section className="mt-4">
+    <section className="comments-content">
+      {showHeader && (
+        <div className="comment-header-row mb-5 flex items-center justify-between gap-3">
+          <h2 className="comments-title" style={{ margin: 0, lineHeight: 1 }}>
+            {shownCount > 0 ? `${shownCount} 条精选留言` : "还没有留言"}
+          </h2>
+          {formCollapsed ? (
+            <button
+              type="button"
+              onClick={expandForm}
+              aria-expanded="false"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[13px] leading-none text-muted transition-colors hover:bg-soft hover:text-accent"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <path d="M12 8v6M9 11h6" />
+              </svg>
+              写评论
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setFormCollapsed(true)}
+              aria-expanded="true"
+              className="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[13px] leading-none text-muted transition-colors hover:bg-soft hover:text-accent"
+            >
+              收起
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 评论列表（常显，提供社会证明） */}
       {(comments.length > 0 || submittedComments.length > 0) && (
-        <ul className="space-y-5">
+        <ul className="comments-list">
           {comments.map((c) => (
-            <li key={c.id} className="flex gap-3">
+            <li key={c.id} className="comment-item">
               <Avatar name={c.nickname} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[14px] font-medium text-foreground">{c.nickname}</span>
-                  {c.nickname === site.author && (
-                    <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[11px] text-accent font-medium">
-                      作者
-                    </span>
-                  )}
-                  <span className="text-[12px] text-muted">{formatRelativeTime(c.created_at)}</span>
+              <div className="comment-body">
+                <div className="comment-meta">
+                  <span className="comment-author">{c.nickname}</span>
+                  {c.nickname === site.author && <span className="comment-author-badge">作者</span>}
+                  <span className="comment-time">{formatRelativeTime(c.created_at)}</span>
                 </div>
-                <p className="mt-1 whitespace-pre-wrap text-[15px] leading-relaxed text-foreground/90">
-                  {c.content}
-                </p>
+                <div className="comment-content">{c.content}</div>
                 {c.admin_reply && (
-                  <div className="mt-3 rounded-xl bg-[#f5fbf8] px-3.5 py-3 text-[14px] leading-6 text-foreground/80">
-                    <div className="mb-1 flex items-center gap-2">
-                      <span className="font-medium text-accent">{site.author} · 作者</span>
-                      {c.replied_at && <span className="text-[11px] text-muted">{formatRelativeTime(c.replied_at)}</span>}
+                  <div className="comment-children">
+                    <div className="comment-item comment-item-reply">
+                      <Avatar name={site.author} />
+                      <div className="comment-body">
+                        <div className="comment-meta">
+                          <span className="comment-author">{site.author}</span>
+                          <span className="comment-author-badge">作者</span>
+                          {c.replied_at && <span className="comment-time">{formatRelativeTime(c.replied_at)}</span>}
+                        </div>
+                        <div className="comment-content">{c.admin_reply}</div>
+                      </div>
                     </div>
-                    <p className="whitespace-pre-wrap">{c.admin_reply}</p>
                   </div>
                 )}
               </div>
             </li>
           ))}
           {submittedComments.map((comment) => (
-            <li key={`pending-${comment.id}`} className="flex gap-3 opacity-75">
+            <li key={`pending-${comment.id}`} className="comment-item is-pending">
               <Avatar name={comment.nickname} />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[14px] font-medium text-foreground">{comment.nickname}</span>
-                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">待审核，仅你本次可见</span>
-                  <span className="text-[12px] text-muted">刚刚</span>
+              <div className="comment-body">
+                <div className="comment-meta">
+                  <span className="comment-author">{comment.nickname}</span>
+                  <span className="comment-status">待审核，仅你本次可见</span>
+                  <span className="comment-time">刚刚</span>
                 </div>
-                <p className="mt-1 whitespace-pre-wrap text-[15px] leading-relaxed text-foreground/90">{comment.content}</p>
+                <div className="comment-content">{comment.content}</div>
               </div>
             </li>
           ))}
         </ul>
       )}
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-3 rounded-xl bg-neutral-50 p-4">
-        <div className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true">
-          <label htmlFor={`website-${targetType}-${targetId}`}>网站</label>
-          <input
-            id={`website-${targetType}-${targetId}`}
-            name="website_url"
-            value={website}
-            onChange={(event) => setWebsite(event.target.value)}
-            tabIndex={-1}
-            autoComplete="off"
-          />
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <input
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="昵称（必填）"
-            maxLength={30}
+      {/* 表单：折叠时隐藏，展开后显示在列表下方 */}
+      {!formCollapsed && (
+        <form ref={formRef} onSubmit={handleSubmit} className="comments-form">
+          <div className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true">
+            <label htmlFor={`website-${targetType}-${targetId}`}>网站</label>
+            <input
+              id={`website-${targetType}-${targetId}`}
+              name="website_url"
+              value={website}
+              onChange={(event) => setWebsite(event.target.value)}
+              tabIndex={-1}
+              autoComplete="off"
+            />
+          </div>
+          <div className="comment-form-row">
+            <input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder="昵称（必填）"
+              maxLength={30}
+              required
+              className={inputCls}
+            />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="邮箱（选填，不公开）"
+              type="email"
+              maxLength={100}
+              className={inputCls}
+            />
+            <input
+              value={profileUrl}
+              onChange={(e) => setProfileUrl(e.target.value)}
+              placeholder="网站（选填）"
+              type="url"
+              maxLength={200}
+              className={inputCls}
+            />
+          </div>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="写下你的想法…"
+            maxLength={1000}
             required
-            className={inputCls}
+            rows={4}
+            className={`${inputCls} resize-y`}
           />
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="邮箱（选填，不公开）"
-            type="email"
-            maxLength={100}
-            className={inputCls}
-          />
-        </div>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="写下你的想法…"
-          maxLength={1000}
-          required
-          rows={3}
-          className={`${inputCls} resize-y`}
-        />
-        <div className="-mt-1 text-right text-[11px] text-muted">{content.length}/1000</div>
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] text-muted">提交后经审核公开</span>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="ml-auto shrink-0 rounded-lg bg-accent px-5 py-2.5 text-[14px] font-medium text-white shadow-sm shadow-accent/15 transition-transform hover:-translate-y-0.5 disabled:opacity-50"
-          >
-            {submitting ? "提交中…" : "提交"}
-          </button>
-        </div>
-        {message && (
-          <p role="status" className={`text-[14px] ${message.ok ? "text-accent" : "text-red-500"}`}>{message.text}</p>
-        )}
-      </form>
+          <div className="comment-form-actions">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="comment-submit"
+            >
+              {submitting ? "提交中…" : "提交"}
+            </button>
+          </div>
+          {message && (
+            <p role="status" className={`comment-form-message ${message.ok ? "is-success" : "is-error"}`}>{message.text}</p>
+          )}
+        </form>
+      )}
     </section>
   );
 }

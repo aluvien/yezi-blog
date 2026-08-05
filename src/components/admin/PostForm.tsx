@@ -2,11 +2,13 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { marked } from "marked";
 import { createPostAction, updatePostAction } from "@/lib/actions/posts";
+import { deleteAttachmentAction } from "@/lib/actions/attachments";
 import type { Attachment, Post } from "@/lib/db";
+import { renderMarkdown } from "@/lib/markdown";
 import { parsePostTags } from "@/lib/post-tags";
 import ImageUpload from "./ImageUpload";
+import { MusicInsertDialog } from "./MusicInsertDialog";
 
 const MARKDOWN_TOOLS = [
   { kind: "line-prefix", label: "H2", title: "将选中行设为二级标题", prefix: "## ", placeholder: "小标题" },
@@ -17,6 +19,7 @@ const MARKDOWN_TOOLS = [
   { kind: "line-prefix", label: "列表", title: "将选中行设为列表", prefix: "- ", placeholder: "列表项" },
   { kind: "wrap", label: "代码", title: "将选中文字设为代码块", before: "```\n", after: "\n```", placeholder: "const value = true" },
   { kind: "image", label: "图片", title: "插入图片（输入网址或上传）" },
+  { kind: "music", label: "音乐", title: "插入音乐播放器（网易云/QQ 等）" },
   { kind: "raw", label: "分隔线", title: "插入分隔线", text: "\n---\n" },
 ] as const;
 
@@ -40,10 +43,11 @@ function isSafeMarkdownUrl(value: string) {
   }
 }
 
-export default function PostForm({ post, initialAttachments = [] }: { post?: Post; initialAttachments?: Attachment[] }) {
+export default function PostForm({ post, initialAttachments = [], categories = [], usedTags = [] }: { post?: Post; initialAttachments?: Attachment[]; categories?: string[]; usedTags?: Array<{ tag: string; count: number }> }) {
   const router = useRouter();
   const [title, setTitle] = useState(post?.title ?? "");
   const [slug, setSlug] = useState(post?.slug ?? "");
+  const [category, setCategory] = useState(post?.category ?? "");
   const [tags, setTags] = useState(parsePostTags(post?.tags).join(", "));
   const [attachments, setAttachments] = useState<Attachment[]>(initialAttachments);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
@@ -53,12 +57,14 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState("");
   const [markdownDialog, setMarkdownDialog] = useState<"link" | "image" | null>(null);
+  const [musicDialog, setMusicDialog] = useState(false);
   const [dialogText, setDialogText] = useState("");
   const [dialogUrl, setDialogUrl] = useState("");
   const [dialogError, setDialogError] = useState("");
   const [dialogUploading, setDialogUploading] = useState(false);
   const [dialogAttachment, setDialogAttachment] = useState<Attachment | null>(null);
   const [pending, startTransition] = useTransition();
+  const [attachmentOriginal, setAttachmentOriginal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const markdownImageInputRef = useRef<HTMLInputElement>(null);
@@ -68,7 +74,7 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
   function submit() {
     setError("");
     startTransition(async () => {
-      const data = { title, slug, content, cover, tags, attachmentIds: attachments.map((attachment) => attachment.id), status };
+      const data = { title, slug, content, cover, category, tags, attachmentIds: attachments.map((attachment) => attachment.id), status };
       const r = post ? await updatePostAction(post.id, data) : await createPostAction(data);
       if (!r.ok) {
         setError(r.error);
@@ -77,6 +83,12 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
       router.push("/admin/posts");
       router.refresh();
     });
+  }
+
+  function addTag(tag: string) {
+    const current = parsePostTags(tags);
+    if (current.some((t) => t.toLowerCase() === tag.toLowerCase())) return;
+    setTags([...current, tag].join(", "));
   }
 
   function rememberSelection(textarea = textareaRef.current) {
@@ -140,6 +152,12 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
     replaceTextAtRange(text, range);
   }
 
+  function insertMusicBlock(spec: string) {
+    const range = dialogRangeRef.current ?? getEditingRange();
+    dialogRangeRef.current = null;
+    replaceTextAtRange(`\n\`\`\`music\n${spec}\n\`\`\`\n`, range);
+  }
+
   function openMarkdownDialog(kind: "link" | "image") {
     const range = getEditingRange();
     dialogRangeRef.current = range;
@@ -150,7 +168,19 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
     setDialogAttachment(null);
   }
 
-  function closeMarkdownDialog() {
+  // 取消或改用别的网址时，删除已上传但未插入正文的图片附件，避免孤儿。
+  async function discardDialogAttachment() {
+    const orphan = dialogAttachment;
+    if (!orphan) return;
+    try {
+      await deleteAttachmentAction(orphan.id);
+    } catch {
+      // 附件可能已被删除或已引用，忽略；未引用孤儿也可由附件管理页兜底清理。
+    }
+  }
+
+  function closeMarkdownDialog(discardAttachment = true) {
+    if (discardAttachment) void discardDialogAttachment();
     setMarkdownDialog(null);
     setDialogError("");
     setDialogAttachment(null);
@@ -161,6 +191,9 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
   function runMarkdownTool(tool: (typeof MARKDOWN_TOOLS)[number]) {
     if (tool.kind === "link" || tool.kind === "image") {
       openMarkdownDialog(tool.kind);
+    } else if (tool.kind === "music") {
+      dialogRangeRef.current = getEditingRange();
+      setMusicDialog(true);
     } else if (tool.kind === "line-prefix") {
       insertLinePrefix(tool.prefix, tool.placeholder);
     } else if (tool.kind === "raw") {
@@ -191,7 +224,7 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
     try {
       const form = new FormData();
       form.append("file", file);
-      form.append("kind", "attachment");
+      form.append("original", String(attachmentOriginal));
       // 先不绑定文章，只有点击“插入图片”后才将附件加入当前文章。
       const response = await fetch("/api/admin/upload", { method: "POST", body: form });
       const data = await response.json().catch(() => ({}));
@@ -221,11 +254,14 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
     const markdown = markdownDialog === "image"
       ? `![${text}](${escapeMarkdownUrl(url)})`
       : `[${text}](${escapeMarkdownUrl(url)})`;
+    let usedAttachment = false;
     if (markdownDialog === "image" && dialogAttachment && url === dialogAttachment.path) {
       setAttachments((current) => current.some((item) => item.id === dialogAttachment.id) ? current : [dialogAttachment, ...current]);
+      usedAttachment = true;
     }
     replaceTextAtRange(markdown, range);
-    closeMarkdownDialog();
+    // 已纳入文章附件则保留；否则关闭时丢弃未使用的上传附件。
+    closeMarkdownDialog(!usedAttachment);
   }
 
   async function handleAttachmentFiles(files: FileList | null) {
@@ -235,8 +271,8 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
       for (const file of Array.from(files)) {
         const form = new FormData();
         form.append("file", file);
-        form.append("kind", "attachment");
         if (post?.id) form.append("post_id", String(post.id));
+        form.append("original", String(attachmentOriginal));
         const response = await fetch("/api/admin/upload", { method: "POST", body: form });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.attachment) throw new Error(data.error || "附件上传失败");
@@ -257,7 +293,7 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
       <div className="flex min-w-0 flex-col gap-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">标题</label>
@@ -291,11 +327,11 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
         {preview ? (
           <div
             className="prose-neutral min-h-64 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-base leading-7 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-bold [&_img]:max-w-full [&_p]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-neutral-800 [&_pre]:p-3 [&_pre]:text-neutral-100 [&_blockquote]:border-l-4 [&_blockquote]:border-neutral-300 [&_blockquote]:pl-3 [&_blockquote]:text-neutral-500 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-            dangerouslySetInnerHTML={{ __html: marked.parse(content || "*（暂无内容）*") as string }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(content || "*（暂无内容）*") }}
           />
         ) : (
           <>
-            <div className="mb-2 flex flex-wrap gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 p-2">
+            <div className="mb-2 flex flex-wrap gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 p-2 lg:sticky lg:top-20 lg:z-10">
               {MARKDOWN_TOOLS.map((tool) => (
                 <button
                   key={tool.label}
@@ -324,16 +360,20 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
               onClick={(e) => rememberSelection(e.currentTarget)}
               onKeyUp={(e) => rememberSelection(e.currentTarget)}
               onBlur={(e) => rememberSelection(e.currentTarget)}
-              rows={16}
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm leading-6"
+              rows={20}
+              className="min-h-[420px] w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm leading-6"
               placeholder="# 开始写作…"
             />
           </>
         )}
         </div>
       </div>
-      <aside className="flex flex-col gap-4 lg:sticky lg:top-20">
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+      <aside className="flex flex-col gap-3 lg:sticky lg:top-20">
+        <div className="px-1 pb-1">
+          <p className="text-[11px] font-medium tracking-[0.14em] text-accent">文章设置</p>
+          <p className="mt-1 text-xs text-neutral-400">附件、状态和索引信息</p>
+        </div>
+        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-neutral-800">附件</h2>
@@ -356,6 +396,10 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
             className="hidden"
             onChange={(event) => handleAttachmentFiles(event.target.files)}
           />
+          <label className="mt-2 flex items-center gap-1.5 text-xs text-neutral-500">
+            <input type="checkbox" checked={attachmentOriginal} onChange={(e) => setAttachmentOriginal(e.target.checked)} className="h-3.5 w-3.5 accent-neutral-700" />
+            保留原图(不压缩)
+          </label>
           {attachments.length > 0 && (
             <ul className="mt-3 flex flex-col gap-2">
               {attachments.map((attachment) => {
@@ -363,7 +407,11 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
                 return (
                   <li key={attachment.id} className="rounded-lg border border-neutral-200 px-2.5 py-2">
                     <div className="flex items-center gap-2">
-                      {attachment.mime_type.startsWith("image/") && <img src={attachment.path} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />}
+                      {attachment.mime_type.startsWith("image/") && (
+                        // 上传路径由后台动态生成，使用原生 img 避免 next/image 远程配置与缓存问题。
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={attachment.path} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
+                      )}
                       <p className="min-w-0 flex-1 truncate text-xs text-neutral-700">{attachment.original_name}</p>
                       <span className={`shrink-0 text-[10px] ${referenced ? "text-green-600" : "text-amber-600"}`}>{referenced ? "已引用" : "未引用"}</span>
                     </div>
@@ -378,7 +426,7 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
           )}
         </section>
 
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
           <label htmlFor="post-status" className="mb-1 block text-sm font-medium text-neutral-700">发布状态</label>
           <select
             id="post-status"
@@ -391,18 +439,44 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
           </select>
         </section>
 
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
           <ImageUpload value={cover} onChange={setCover} label="封面图（可空）" />
         </section>
 
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+          <label className="mb-1 block text-sm font-medium text-neutral-700">分类</label>
+          <input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            list="post-categories"
+            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+            placeholder="例如：技术、随笔"
+          />
+          <datalist id="post-categories">
+            {categories.map((c) => <option key={c} value={c} />)}
+          </datalist>
+          <p className="mt-1 text-xs text-neutral-400">用于分类索引，可在分类管理中维护。</p>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
           <label className="mb-1 block text-sm font-medium text-neutral-700">标签</label>
           <input
             value={tags}
             onChange={(e) => setTags(e.target.value)}
+            list="post-tags"
             className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
             placeholder="Next.js, 设计, 随笔"
           />
+          <datalist id="post-tags">
+            {usedTags.map(({ tag }) => <option key={tag} value={tag} />)}
+          </datalist>
+          {usedTags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {usedTags.slice(0, 20).map(({ tag, count }) => (
+                <button type="button" key={tag} onClick={() => addTag(tag)} className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-200">#{tag}<sup>{count}</sup></button>
+              ))}
+            </div>
+          )}
           <p className="mt-1 text-xs text-neutral-400">用逗号分隔，最多保存 12 个标签。</p>
         </section>
 
@@ -436,7 +510,7 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
               <button
                 type="button"
                 aria-label="关闭对话框"
-                onClick={closeMarkdownDialog}
+                onClick={() => closeMarkdownDialog()}
                 className="rounded-full p-1 text-xl leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
               >
                 ×
@@ -495,7 +569,7 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={closeMarkdownDialog}
+                onClick={() => closeMarkdownDialog()}
                 className="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
               >
                 取消
@@ -511,6 +585,14 @@ export default function PostForm({ post, initialAttachments = [] }: { post?: Pos
             </div>
           </div>
         </div>
+      )}
+      {musicDialog && (
+        <MusicInsertDialog
+          onClose={(spec) => {
+            setMusicDialog(false);
+            if (spec) insertMusicBlock(spec);
+          }}
+        />
       )}
     </div>
   );

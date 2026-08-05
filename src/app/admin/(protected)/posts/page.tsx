@@ -28,7 +28,13 @@ export default function AdminPostsPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="truncate text-base font-medium">{post.title}</p>
+                  <Link
+                    href={`/admin/posts/${post.id}/edit`}
+                    className="min-w-0 truncate text-base font-medium transition-colors hover:text-accent"
+                    aria-label={`编辑文章：${post.title}`}
+                  >
+                    {post.title}
+                  </Link>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${post.status === "published" ? "bg-green-100 text-green-700" : "bg-neutral-100 text-neutral-600"}`}>
                     {post.status === "published" ? "已发布" : "草稿"}
                   </span>
@@ -47,9 +53,9 @@ export default function AdminPostsPage() {
               </div>
               <div className="flex shrink-0 flex-wrap gap-x-4 gap-y-2 sm:pt-0.5">
                 {post.status === "published" && (
-                  <Link href={`/posts/${post.slug}`} target="_blank" className="text-sm text-blue-700 underline">查看</Link>
+                  <Link href={`/posts/${post.slug}`} target="_blank" className="text-sm text-blue-700 hover:text-blue-900">查看</Link>
                 )}
-                <Link href={`/admin/posts/${post.id}/edit`} className="text-sm text-neutral-700 underline">
+                <Link href={`/admin/posts/${post.id}/edit`} className="text-sm text-neutral-700 hover:text-neutral-950">
                   编辑
                 </Link>
                 <DeleteButton action={deletePostAction.bind(null, post.id)} />

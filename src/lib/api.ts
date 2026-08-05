@@ -2,17 +2,21 @@ import { NextResponse } from "next/server";
 import type { Comment, Moment, Post, Work } from "@/lib/db";
 import { parsePostTags } from "@/lib/post-tags";
 
-const CORS_ORIGIN = process.env.API_CORS_ORIGIN?.trim() || "*";
+// 默认不发送跨域响应头，避免公开评论接口被任意站点调用。
+// 需要 App 跨域访问时，显式设置 API_CORS_ORIGIN 为一个可信来源。
+const CORS_ORIGIN = process.env.API_CORS_ORIGIN?.trim() || "";
 
 export const API_VERSION = "v1";
 
 export function apiHeaders(): Headers {
-  return new Headers({
-    "Access-Control-Allow-Origin": CORS_ORIGIN,
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Cache-Control": "no-store",
-  });
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  if (CORS_ORIGIN) {
+    headers.set("Access-Control-Allow-Origin", CORS_ORIGIN);
+    headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    headers.set("Vary", "Origin");
+  }
+  return headers;
 }
 
 export function apiJson(data: unknown, status = 200): NextResponse {
@@ -59,6 +63,7 @@ export function publicPost(post: Post, comments?: Comment[], commentsCount?: num
     slug: post.slug,
     content: post.content,
     cover: post.cover,
+    category: post.category,
     tags: parsePostTags(post.tags),
     created_at: post.created_at,
     updated_at: post.updated_at,
@@ -67,7 +72,7 @@ export function publicPost(post: Post, comments?: Comment[], commentsCount?: num
   };
 }
 
-export function publicMoment(moment: Moment, commentsCount: number, comments?: Comment[]) {
+export function publicMoment(moment: Moment, commentsCount: number, comments?: Comment[], metrics?: { views: number; likes: number }) {
   return {
     id: moment.id,
     content: moment.content,
@@ -75,6 +80,7 @@ export function publicMoment(moment: Moment, commentsCount: number, comments?: C
     created_at: moment.created_at,
     updated_at: moment.updated_at,
     comments_count: commentsCount,
+    ...(metrics ? { metrics } : {}),
     ...(comments ? { comments: comments.map(publicComment) } : {}),
   };
 }

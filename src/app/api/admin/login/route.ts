@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { login } from "@/lib/auth";
+import { getClientIp } from "@/lib/request";
 
 export const runtime = "nodejs";
 
@@ -14,10 +15,23 @@ export async function POST(request: Request) {
   if (!process.env.ADMIN_PASSWORD) {
     return NextResponse.json({ error: "服务器未配置 ADMIN_PASSWORD" }, { status: 500 });
   }
-  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const requestProtocol = forwardedProto ?? new URL(request.url).protocol.replace(":", "");
-  const ok = await login(password, { secure: requestProtocol === "https" });
-  if (!ok) {
+  // 反向代理只在显式开启 TRUST_PROXY 时信任 x-forwarded-proto，
+  // 避免直连时客户端伪造协议头强制 Secure cookie（会自锁登录态）。
+  let requestProtocol: string | null = null;
+  if (process.env.TRUST_PROXY === "true") {
+    requestProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? null;
+  }
+  const requestSecure = requestProtocol === "https" || new URL(request.url).protocol === "https:";
+  // 显式配置的 SESSION_COOKIE_SECURE 优先于自动判定
+  const secure = process.env.SESSION_COOKIE_SECURE === "true" ? true : requestSecure;
+  const result = await login(password, { secure, ip: getClientIp(request) });
+  if (!result.ok) {
+    if (result.blocked) {
+      return NextResponse.json(
+        { error: "登录失败次数过多，请 15 分钟后再试" },
+        { status: 429, headers: { "Retry-After": String(result.retryAfter ?? 900) } },
+      );
+    }
     return NextResponse.json({ error: "密码错误" }, { status: 401 });
   }
   return NextResponse.json({ ok: true });

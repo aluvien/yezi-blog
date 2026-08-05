@@ -99,7 +99,7 @@ const seed = db.transaction(() => {
 建站的第一行代码当然是：
 
 \`\`\`bash
-npx create-next-app@latest aluvien-blog
+npx create-next-app@latest yezi-blog
 \`\`\`
 
 希望这里能慢慢积累一些有留存价值的内容。`,
@@ -173,7 +173,7 @@ function greet(name: string): string {
   );
 
   insertWork.run(
-    "Aluvien's Blog",
+    "Yezi's Blog",
     "你现在看到的这个博客：Next.js + SQLite，前后台一体，支持文章、想法、作品和评论。",
     "/placeholder.svg",
     "https://example.com",

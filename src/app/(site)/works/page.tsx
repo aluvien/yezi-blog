@@ -16,7 +16,7 @@ export default function WorksPage() {
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
       <PageHeader
-        eyebrow="Selected works"
+        eyebrow="精选作品"
         title="作品"
         description="把想法做成可以使用的东西，也记录从尝试到完成的过程。"
         trailing={`${works.length} 个项目`}
@@ -39,7 +39,7 @@ export default function WorksPage() {
                   {work.link && <span className="text-muted transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-accent">↗</span>}
                 </div>
                 {work.description && <p className="mt-2 line-clamp-3 text-[14px] leading-6 text-muted">{work.description}</p>}
-                <p className="mt-5 text-[11px] uppercase tracking-[0.16em] text-muted">Project {String(index + 1).padStart(2, "0")}</p>
+                <p className="mt-5 text-[11px] tracking-[0.12em] text-muted">项目 {String(index + 1).padStart(2, "0")}</p>
               </div>
             </article>
           );
