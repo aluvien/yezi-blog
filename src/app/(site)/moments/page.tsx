@@ -33,7 +33,7 @@ export default async function MomentsPage() {
 
       <section className="moments-feed">
         {moments.length === 0 && <p className="py-20 text-center text-[14px] text-muted">还没有想法。</p>}
-        <div className="divide-y divide-divider">
+        <div>
           {moments.map((moment) => {
             return (
               <div key={moment.id} className="py-7 md:py-8">
@@ -44,6 +44,7 @@ export default async function MomentsPage() {
                   authorName={site.author}
                   authorAvatar={getAuthorAvatar(siteSettings) || undefined}
                   initialLiked={liked.get(moment.id) ?? false}
+                  canEdit={isAuthorized}
                 >
                   <CommentSection targetType="moment" targetId={moment.id} />
                 </MomentEntry>

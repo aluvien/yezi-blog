@@ -9,6 +9,7 @@ import { NavIcon } from "@/components/site/NavIcon";
 import { SiteSearch } from "@/components/site/SiteSearch";
 import { ReadingProgress } from "@/components/site/ReadingProgress";
 import { MusicInitializer } from "@/components/site/MusicInitializer";
+import { GlobalMusicPlayer } from "@/components/site/GlobalMusicPlayer";
 import { ErrorBoundary } from "@/components/site/ErrorBoundary";
 import { DEFAULT_METING_API } from "@/lib/music";
 
@@ -59,22 +60,6 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
             </span>
           </Link>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label="切换深浅色主题"
-              title="切换深浅色主题"
-              className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted transition-colors hover:border-accent hover:text-accent"
-            >
-              {/* 两个图标都渲染，由 data-theme 决定显隐，避免水合内容不一致 */}
-              <svg className="h-4 w-4 [html[data-theme='dark']_&]:hidden" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="4.5" />
-                <path strokeLinecap="round" d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
-              </svg>
-              <svg className="hidden h-4 w-4 [html[data-theme='dark']_&]:block" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" />
-              </svg>
-            </button>
             <nav className="hidden items-center gap-0.5 md:flex" aria-label="主导航">
               {NAV_ITEMS.map((item) => (
                 <Link
@@ -90,6 +75,23 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
               ))}
             </nav>
             <SiteSearch />
+            {/* 深色模式切换：仅桌面显示，位于搜索图标右侧（需求 F3） */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label="切换深浅色主题"
+              title="切换深浅色主题"
+              className="hidden h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted transition-colors hover:border-accent hover:text-accent md:flex"
+            >
+              {/* 两个图标都渲染，由 data-theme 决定显隐，避免水合内容不一致 */}
+              <svg className="h-4 w-4 [html[data-theme='dark']_&]:hidden" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4.5" />
+                <path strokeLinecap="round" d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
+              </svg>
+              <svg className="hidden h-4 w-4 [html[data-theme='dark']_&]:block" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" />
+              </svg>
+            </button>
             <button
               type="button"
               aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
@@ -189,6 +191,9 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
       )}
       <ErrorBoundary label="MusicInitializer">
         <MusicInitializer metingApi={siteSettings.meting_api?.trim() || DEFAULT_METING_API} />
+      </ErrorBoundary>
+      <ErrorBoundary label="GlobalMusicPlayer">
+        <GlobalMusicPlayer metingApi={siteSettings.meting_api?.trim() || DEFAULT_METING_API} defaultMusic={siteSettings.default_music?.trim()} />
       </ErrorBoundary>
     </div>
   );

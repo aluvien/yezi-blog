@@ -67,19 +67,6 @@ export default async function PostPage({ params }: Props) {
             <span className="article-author font-medium text-wechat-blue">{site.author}</span>
             <ArticleActionBar commentCount={commentCount} targetId={post.id} initialMetrics={initialMetrics} initialLiked={initialLiked} />
           </div>
-          {tags.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <Link
-                  key={tag}
-                  href={`/tags/${encodeURIComponent(tag)}`}
-                  className="rounded-full bg-accent/10 px-2.5 py-1 text-[12px] text-accent transition-colors hover:bg-accent/15"
-                >
-                  #{tag}
-                </Link>
-              ))}
-            </div>
-          )}
         </header>
 
         <ArticleImageWrapper>
@@ -101,6 +88,21 @@ export default async function PostPage({ params }: Props) {
 
         {/* 装饰性文末分隔 */}
         <div className="my-12 text-center text-[13px] tracking-[0.6em] text-neutral-300">• • •</div>
+
+        {/* 文章标签：显示在正文底部（需求：不显示在顶部） */}
+        {tags.length > 0 && (
+          <div className="mt-10 mb-6 flex flex-wrap justify-center gap-2">
+            {tags.map((tag) => (
+              <Link
+                key={tag}
+                href={`/tags/${encodeURIComponent(tag)}`}
+                className="rounded-full bg-accent/10 px-2.5 py-1 text-[12px] text-accent transition-colors hover:bg-accent/15"
+              >
+                #{tag}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* 作者卡片 */}
         <AuthorCard avatar={getAuthorAvatar(siteSettings)} />

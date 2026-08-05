@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/lib/format";
 import { site } from "@/lib/site";
+import { replyCommentAction } from "@/lib/actions/comments";
 
 export interface CommentItem {
   id: number;
@@ -46,20 +48,24 @@ function Avatar({ name }: { name: string }) {
 
 /** 评论区：已审核评论列表 + 提交表单（蜜罐防垃圾、后台审核）。
  *  文章页传 commentCount：渲染标题行（标题 + “写评论”按钮同一行，不额外占高），表单默认折叠，点击展开并滚动到位。
- *  想法页不传 commentCount：无标题行，表单默认展开。 */
+ *  想法页不传 commentCount：无标题行，表单默认展开。
+ *  isAdmin（管理员已登录）时每条评论可"回复"：以 UP 主身份就地回复，嵌套展示在该评论下方。 */
 export function Comments({
   targetType,
   targetId,
   comments,
   defaultFormCollapsed = false,
   commentCount,
+  isAdmin = false,
 }: {
   targetType: "post" | "moment";
   targetId: number;
   comments: CommentItem[];
   defaultFormCollapsed?: boolean;
   commentCount?: number;
+  isAdmin?: boolean;
 }) {
+  const router = useRouter();
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [profileUrl, setProfileUrl] = useState("");
@@ -70,6 +76,39 @@ export function Comments({
   const [submittedComments, setSubmittedComments] = useState<PendingCommentItem[]>([]);
   const [formCollapsed, setFormCollapsed] = useState(defaultFormCollapsed);
   const formRef = useRef<HTMLFormElement>(null);
+  // 管理员就地回复：当前正在回复的评论 id、输入内容与提交态
+  const [replyingTo, setReplyingTo] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [replyError, setReplyError] = useState("");
+  const [replying, startTransition] = useTransition();
+
+  async function submitReply(commentId: number) {
+    const text = replyText.trim();
+    if (!text || replying) return;
+    setReplyError("");
+    startTransition(async () => {
+      const result = await replyCommentAction(commentId, text);
+      if (!result.ok) {
+        setReplyError(result.error);
+        return;
+      }
+      setReplyingTo(null);
+      setReplyText("");
+      router.refresh();
+    });
+  }
+
+  function openReply(commentId: number) {
+    setReplyText("");
+    setReplyError("");
+    setReplyingTo(commentId);
+  }
+
+  function cancelReply() {
+    setReplyingTo(null);
+    setReplyText("");
+    setReplyError("");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -164,8 +203,13 @@ export function Comments({
               <div className="comment-body">
                 <div className="comment-meta">
                   <span className="comment-author">{c.nickname}</span>
-                  {c.nickname === site.author && <span className="comment-author-badge">作者</span>}
+                  {c.nickname === site.author && <span className="comment-author-badge">UP主</span>}
                   <span className="comment-time">{formatRelativeTime(c.created_at)}</span>
+                  {isAdmin && replyingTo !== c.id && (
+                    <button type="button" className="comment-reply-btn" onClick={() => openReply(c.id)}>
+                      回复
+                    </button>
+                  )}
                 </div>
                 <div className="comment-content">{c.content}</div>
                 {c.admin_reply && (
@@ -175,13 +219,37 @@ export function Comments({
                       <div className="comment-body">
                         <div className="comment-meta">
                           <span className="comment-author">{site.author}</span>
-                          <span className="comment-author-badge">作者</span>
+                          <span className="comment-author-badge">UP主</span>
                           {c.replied_at && <span className="comment-time">{formatRelativeTime(c.replied_at)}</span>}
                         </div>
                         <div className="comment-content">{c.admin_reply}</div>
                       </div>
                     </div>
                   </div>
+                )}
+                {isAdmin && replyingTo === c.id && (
+                  <form
+                    className="comment-reply-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void submitReply(c.id);
+                    }}
+                  >
+                    <textarea
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder="以 UP 主身份回复…"
+                      maxLength={1000}
+                      rows={2}
+                      autoFocus
+                      className="comment-field"
+                    />
+                    {replyError && <p className="comment-reply-error">{replyError}</p>}
+                    <div className="comment-reply-actions">
+                      <button type="button" onClick={cancelReply} className="comment-reply-cancel">取消</button>
+                      <button type="submit" disabled={replying} className="comment-reply-submit">{replying ? "回复中…" : "回复"}</button>
+                    </div>
+                  </form>
                 )}
               </div>
             </li>

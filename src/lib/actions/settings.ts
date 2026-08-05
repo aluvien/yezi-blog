@@ -20,6 +20,7 @@ const SETTING_KEYS = [
   "author_avatar",
   "about_content",
   "meting_api",
+  "default_music",
   "theme",
   "dark_mode",
 ] as const;

@@ -96,3 +96,31 @@ export function buildMetingUrl(base: string, spec: MusicSpec): string {
 export function musicContainerHtml(spec: MusicSpec): string {
   return `<div class="blog-music" data-server="${spec.server}" data-id="${spec.id}" data-type="${spec.type}"></div>`;
 }
+
+/** 归一化后的可播放曲目（与 APlayer 的 APlayerAudio 字段一致）。 */
+export interface MusicTrack {
+  name: string;
+  artist: string;
+  url: string;
+  cover: string;
+  lrc: string;
+}
+
+/**
+ * 调 Meting API 拉取曲目并归一化为 MusicTrack[]。
+ * 前端触发卡片与全局播放器的默认歌单都走这里，避免各自重复实现。
+ */
+export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Promise<MusicTrack[]> {
+  const res = await fetch(buildMetingUrl(metingApi, spec), { signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`meting ${res.status}`);
+  const data = (await res.json()) as Array<{ name?: string; url?: string; artist?: string; cover?: string; lrc?: string }> | null;
+  return (Array.isArray(data) ? data : [])
+    .filter((track) => track && typeof track.url === "string" && track.url.length > 0)
+    .map((track) => ({
+      name: track.name || "未知曲目",
+      artist: track.artist || "",
+      url: track.url as string,
+      cover: track.cover || "",
+      lrc: track.lrc || "",
+    }));
+}

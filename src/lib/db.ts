@@ -5,6 +5,7 @@ import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 import { hashIp } from "@/lib/request";
 
 export { normalizePostTags, parsePostTags } from "@/lib/post-tags";
+export { parseMomentImages } from "@/lib/moments";
 
 const configuredDbPath = process.env.BLOG_DB_PATH?.trim();
 const DB_PATH = configuredDbPath ? path.resolve(configuredDbPath) : path.join(process.cwd(), "data", "blog.db");
@@ -648,15 +649,6 @@ export function deleteContentInteractions(targetType: ContentTarget, targetId: n
 }
 
 // ---------- moments ----------
-
-export function parseMomentImages(moment: Moment): string[] {
-  try {
-    const arr = JSON.parse(moment.images);
-    return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
 
 /** 想法列表。传 options 时走 SQL 分页，不传则返回全部（首页/归档合并时间流依赖全量）。 */
 export function listMoments(options?: { limit?: number; offset?: number }): Moment[] {

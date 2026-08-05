@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ContentMetrics, Moment, Post } from "@/lib/db";
-import { parseMomentImages } from "@/lib/db";
+import { parseMomentImages } from "@/lib/moments";
 import { formatDateOnly } from "@/lib/format";
 import { stripMarkdown } from "@/lib/markdown";
 import { MetricIcon, type MetricIconType } from "@/components/site/MetricIcon";

@@ -1,15 +1,22 @@
+"use client";
+
+import { useState } from "react";
 import type { ContentMetrics, Moment } from "@/lib/db";
-import { parseMomentImages } from "@/lib/db";
+import { parseMomentImages } from "@/lib/moments";
 import { formatDateOnly } from "@/lib/format";
 import { site } from "@/lib/site";
 import { splitMomentContent } from "@/lib/music";
 import { MomentCommentToggle } from "@/components/site/MomentCommentToggle";
 import { MetricIcon } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
+import MomentForm from "@/components/admin/MomentForm";
 
 /**
  * 想法条目（朋友圈样式）。
  * 评论区由父级传入 children，避免在不需要评论区的列表场景重复加载。
+ *
+ * canEdit（管理员已登录）时头部右上角显示"编辑"按钮，点击切换到与"写想法"
+ * 一致的就地编辑表单（MomentForm compact），保存后回到查看态。
  */
 export function MomentEntry({
   moment,
@@ -19,6 +26,7 @@ export function MomentEntry({
   authorAvatar,
   children,
   initialLiked = false,
+  canEdit = false,
 }: {
   moment: Moment;
   commentCount: number;
@@ -27,11 +35,23 @@ export function MomentEntry({
   authorAvatar?: string;
   children?: React.ReactNode;
   initialLiked?: boolean;
+  canEdit?: boolean;
 }) {
+  const [editing, setEditing] = useState(false);
   const images = parseMomentImages(moment);
   const segments = splitMomentContent(moment.content);
   const displayAuthor = authorName?.trim() || site.author;
   const avatar = authorAvatar?.trim();
+
+  // 编辑态：与"写想法"一致的表单，预填该条内容与图片
+  if (editing) {
+    return (
+      <article id={`moment-${moment.id}`} className="moment-entry min-w-0">
+        <MomentForm compact moment={moment} onSuccess={() => setEditing(false)} />
+      </article>
+    );
+  }
+
   return (
     <article id={`moment-${moment.id}`} className="moment-entry min-w-0">
       <div className="moment-entry-head">
@@ -48,6 +68,21 @@ export function MomentEntry({
           <strong>{displayAuthor}</strong>
           <time>{formatDateOnly(moment.created_at)}</time>
         </div>
+        {canEdit && (
+          <button
+            type="button"
+            className="moment-edit-btn"
+            onClick={() => setEditing(true)}
+            title="编辑想法"
+            aria-label="编辑想法"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+            </svg>
+            编辑
+          </button>
+        )}
       </div>
       <div className="moment-entry-content">
         {segments.map((seg, index) =>

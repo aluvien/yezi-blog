@@ -1,8 +1,9 @@
 import { listApprovedComments } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 import { Comments } from "@/components/site/Comments";
 
-/** 服务端包装：取已审核评论后交给客户端组件 */
-export function CommentSection({
+/** 服务端包装：取已审核评论与管理员登录态后交给客户端组件 */
+export async function CommentSection({
   targetType,
   targetId,
   defaultFormCollapsed,
@@ -21,6 +22,8 @@ export function CommentSection({
     admin_reply: c.admin_reply,
     replied_at: c.replied_at,
   }));
+  // 登录态只在服务端判定，前台据此显示"回复"按钮；真正写入仍由 replyCommentAction 的 requireAdmin 兜底。
+  const isAdmin = !!(await getSession());
   return (
     <Comments
       targetType={targetType}
@@ -28,6 +31,7 @@ export function CommentSection({
       comments={comments}
       defaultFormCollapsed={defaultFormCollapsed}
       commentCount={commentCount}
+      isAdmin={isAdmin}
     />
   );
 }

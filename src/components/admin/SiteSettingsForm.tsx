@@ -24,6 +24,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     author_avatar: initialValues.author_avatar ?? "",
     about_content: initialValues.about_content ?? "",
     meting_api: initialValues.meting_api ?? "",
+    default_music: initialValues.default_music ?? "",
     theme: initialValues.theme ?? "default",
     dark_mode: initialValues.dark_mode ?? "auto",
   });
@@ -101,6 +102,12 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         <label className="mb-1 block text-sm font-medium text-neutral-700">音乐 API 地址（留空用默认）</label>
         <input value={values.meting_api} onChange={(event) => update("meting_api", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="https://api.injahow.cn/meting/" />
         <p className="mt-1 text-xs text-neutral-400">用于文章/想法内嵌音乐。默认公共接口可能不稳定，建议自建 Meting API 或换镜像。</p>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-neutral-700">默认音乐列表（形如 netease:数字:playlist，留空不预置）</label>
+        <input value={values.default_music} onChange={(event) => update("default_music", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="netease:3778678:playlist" />
+        <p className="mt-1 text-xs text-neutral-400">格式 <code>server:id:type</code>（server: netease/qq/kugou/kuwo/xiami/baidu；type: song/playlist/album/search）。全站加载后作为全局播放器的基础列表，页面点选的音乐追加其后。</p>
       </div>
 
       <fieldset className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">

@@ -1,0 +1,153 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { fetchMusicTracks, parseMusicSpec, type MusicTrack } from "@/lib/music";
+import { setGlobalPlayListener } from "@/lib/player-store";
+
+type APlayerInstance = import("aplayer").default;
+
+/**
+ * 全局音乐播放器（右下角悬浮球 + 底部控制面板）。
+ *
+ * 全站唯一的 APlayer 实例常驻在此组件，挂在 SiteLayoutInner 的布局持久层
+ * （`{children}` 之外），站内客户端导航时组件不卸载，音乐因此跨页面连续播放。
+ * - 默认列表：后台设置 `default_music`（形如 `netease:xxx:playlist`），加载后作为基础列表。
+ * - 页面音乐：MusicInitializer 的触发卡片经 player-store 请求"追加并播放"，
+ *   新曲目追加到列表末尾并立即播放，默认列表不受影响。
+ * - 底部面板始终渲染（闭合时 transform 移出屏幕而非 display:none），
+ *   避免 display:none 导致 APlayer 布局/音频异常。
+ */
+export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi: string; defaultMusic?: string }) {
+  const [open, setOpen] = useState(false);
+  const [hasTracks, setHasTracks] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const apiRef = useRef(metingApi);
+  const playerRef = useRef<APlayerInstance | null>(null);
+  // 默认歌单未就绪前的页面点选先入队，默认列表加载完成后再追加，保证其始终位于队列前部。
+  const readyRef = useRef(false);
+  const pendingRef = useRef<MusicTrack[][]>([]);
+
+  useEffect(() => {
+    apiRef.current = metingApi;
+  }, [metingApi]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    function appendAndPlay(tracks: MusicTrack[]) {
+      const player = playerRef.current;
+      if (!player || tracks.length === 0) return;
+      const startIndex = player.list.audios.length;
+      player.list.add(tracks);
+      try {
+        player.list.switch(startIndex);
+      } catch {
+        // APlayer 对空列表 switch 可能抛错，忽略即可
+      }
+      player.play();
+      setHasTracks(true);
+      setPlaying(true);
+    }
+
+    async function boot() {
+      try {
+        const mod = await import("aplayer");
+        if (disposed || !hostRef.current) return;
+        const APlayer = mod.default;
+        const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#c25f3d";
+        const player = new APlayer({
+          container: hostRef.current,
+          audio: [],
+          listFolded: false,
+          autoplay: false,
+          order: "list",
+          loop: "all",
+          theme: accent,
+        });
+        playerRef.current = player;
+        player.on("play", () => setPlaying(true));
+        player.on("pause", () => setPlaying(false));
+        player.on("ended", () => setPlaying(false));
+
+        // 默认歌单：后台设置 default_music，加载失败静默（不影响页面点选音乐）。
+        const spec = parseMusicSpec(defaultMusic);
+        if (spec) {
+          try {
+            const tracks = await fetchMusicTracks(apiRef.current, spec);
+            if (disposed) return;
+            if (tracks.length > 0) {
+              player.list.add(tracks);
+              setHasTracks(true);
+            }
+          } catch {
+            // noop
+          }
+        }
+      } catch {
+        // APlayer 初始化异常时降级为"仅静默"：播放器不可用但页面不受影响。
+        if (disposed) return;
+      }
+      readyRef.current = true;
+      for (const batch of pendingRef.current) appendAndPlay(batch);
+      pendingRef.current = [];
+    }
+
+    void boot();
+
+    unlisten = setGlobalPlayListener(({ tracks }) => {
+      if (!readyRef.current) {
+        pendingRef.current.push(tracks);
+        return;
+      }
+      appendAndPlay(tracks);
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        /* noop */
+      }
+      playerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <>
+      {/* 悬浮球：有曲目才显示；面板展开时隐藏，避免与面板重叠 */}
+      {hasTracks && (
+        <button
+          type="button"
+          className={`global-player-float ${open ? "is-open" : ""} ${playing ? "is-playing" : ""}`}
+          aria-label={open ? "收起播放器" : "展开播放器"}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <svg className="global-player-float-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M9 18.5a2.5 2.5 0 1 1-2.5-2.5A2.5 2.5 0 0 1 9 18.5z" />
+            <path d="M12.5 3.5v13.1a3.9 3.9 0 1 1-1.5-3.1V7.2l8-1.8v6.1a3.9 3.9 0 1 1-1.5-3.1V5.5l-5 1.1z" />
+          </svg>
+        </button>
+      )}
+
+      {/* 底部面板：常驻 DOM，闭合时移出屏幕 */}
+      <div className={`global-player-panel ${open ? "is-open" : ""}`} role="region" aria-label="音乐播放器">
+        {open && (
+          <button type="button" className="global-player-collapse" aria-label="收起播放器" onClick={() => setOpen(false)}>
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        )}
+        <div className="global-player-host">
+          <div ref={hostRef} className="aplayer-host" />
+        </div>
+      </div>
+    </>
+  );
+}

@@ -1,23 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { buildMetingUrl, type MusicSpec } from "@/lib/music";
-
-interface MetingTrack {
-  name?: string;
-  url?: string;
-  artist?: string;
-  cover?: string;
-  lrc?: string;
-}
-
-type APlayerInstance = { destroy: () => void };
+import { fetchMusicTracks, type MusicSpec, type MusicTrack } from "@/lib/music";
+import { requestGlobalPlay } from "@/lib/player-store";
 
 /**
- * 全站音乐播放器初始化器。
+ * 全站音乐触发卡片初始化器。
  *
- * 扫描页面（及 SPA 导航后新增）的 `.blog-music` 容器，按需动态加载 APlayer，
- * 调 Meting API 取音频后 `new APlayer`。容器移除时自动 destroy。
+ * 全局唯一 APlayer 由 GlobalMusicPlayer 常驻在布局持久层管理（保证站内导航不中断播放）。
+ * 本组件只负责把文章/想法里的 `.blog-music` 容器渲染成可点击的"触发卡片"
+ * （封面 + 歌名 + 播放按钮），点击后把曲目追加到全局播放器列表末尾并播放。
+ *
+ * 扫描页面（及 SPA 导航后新增）的 `.blog-music` 容器，异步拉 Meting 数据填充卡片。
  * 挂在 SiteLayoutInner 上，文章与想法均可触发。
  */
 export function MusicInitializer({ metingApi }: { metingApi: string }) {
@@ -26,17 +20,7 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
     apiRef.current = metingApi;
   }, [metingApi]);
 
-  const instancesRef = useRef<Map<HTMLElement, APlayerInstance>>(new Map());
-  const aplayerPromiseRef = useRef<Promise<typeof import("aplayer")> | null>(null);
-
   useEffect(() => {
-    async function loadAplayer() {
-      if (!aplayerPromiseRef.current) {
-        aplayerPromiseRef.current = import("aplayer");
-      }
-      return aplayerPromiseRef.current;
-    }
-
     async function initContainer(el: HTMLElement) {
       if (el.dataset.init === "1") return;
       const server = el.dataset.server;
@@ -45,38 +29,47 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       if (!server || !id || !type) return;
       el.dataset.init = "1";
       const spec = { server, id, type } as MusicSpec;
+
+      const card = document.createElement("div");
+      card.className = "music-trigger";
+      card.innerHTML = `
+        <span class="music-trigger-cover"><img alt="" loading="lazy" /></span>
+        <span class="music-trigger-info">
+          <span class="music-trigger-name">音乐加载中…</span>
+          <span class="music-trigger-artist"></span>
+        </span>
+        <span class="music-trigger-play" aria-hidden="true"></span>
+      `;
+      el.replaceChildren(card);
+
+      let tracks: MusicTrack[] = [];
       try {
-        const mod = await loadAplayer();
-        const APlayer = mod.default;
-        // 15s 超时：Meting API 挂起时给出错误占位而不是永久空白
-        const res = await fetch(buildMetingUrl(apiRef.current, spec), { signal: AbortSignal.timeout(15000) });
-        if (!res.ok) throw new Error(`meting ${res.status}`);
-        const data = (await res.json()) as MetingTrack[] | null;
-        const audio = (Array.isArray(data) ? data : [])
-          .filter((track) => track && typeof track.url === "string" && track.url.length > 0)
-          .map((track) => ({
-            name: track.name || "未知曲目",
-            artist: track.artist || "",
-            url: track.url as string,
-            cover: track.cover || "",
-            lrc: track.lrc || "",
-          }));
-        if (audio.length === 0) throw new Error("no audio");
-        // 播放器主题色跟随站点当前配色方案（CSS 变量），切主题后新播放器自动匹配
-        const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#c25f3d";
-        const player = new APlayer({
-          container: el,
-          audio,
-          listFolded: false,
-          autoplay: false,
-          order: "list",
-          loop: "all",
-          theme: accent,
-        });
-        instancesRef.current.set(el, player);
+        tracks = await fetchMusicTracks(apiRef.current, spec);
       } catch {
-        el.innerHTML = '<p class="blog-music-error">音乐暂不可用（版权或接口异常）</p>';
+        card.classList.add("is-error");
+        card.querySelector(".music-trigger-name")!.textContent = "音乐暂不可用（版权或接口异常）";
+        return;
       }
+      if (tracks.length === 0) {
+        card.classList.add("is-error");
+        card.querySelector(".music-trigger-name")!.textContent = "音乐暂不可用（版权或接口异常）";
+        return;
+      }
+
+      const first = tracks[0];
+      const img = card.querySelector("img")!;
+      if (first.cover) img.src = first.cover;
+      card.querySelector(".music-trigger-name")!.textContent =
+        tracks.length === 1 ? first.name : `${first.name} 等 ${tracks.length} 首`;
+      card.querySelector(".music-trigger-artist")!.textContent = first.artist || "";
+      card.classList.add("is-ready");
+
+      // 点击整张卡片：追加到全局播放器并播放（曲目已拉取，直接复用）。
+      card.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        requestGlobalPlay({ tracks });
+      });
     }
 
     function scan(root: Node) {
@@ -90,42 +83,17 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       });
     }
 
-    function destroyIn(node: HTMLElement) {
-      const player = instancesRef.current.get(node);
-      if (player) {
-        try { player.destroy(); } catch { /* noop */ }
-        instancesRef.current.delete(node);
-      }
-      node.querySelectorAll?.(".blog-music").forEach((child) => {
-        const inner = instancesRef.current.get(child as HTMLElement);
-        if (inner) {
-          try { inner.destroy(); } catch { /* noop */ }
-          instancesRef.current.delete(child as HTMLElement);
-        }
-      });
-    }
-
     scan(document.body);
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1) scan(node);
         });
-        mutation.removedNodes.forEach((node) => {
-          if (node.nodeType === 1 && node instanceof HTMLElement) destroyIn(node);
-        });
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    const instances = instancesRef.current;
-    return () => {
-      observer.disconnect();
-      instances.forEach((player) => {
-        try { player.destroy(); } catch { /* noop */ }
-      });
-      instances.clear();
-    };
+    return () => observer.disconnect();
   }, []);
 
   return null;

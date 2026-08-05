@@ -18,10 +18,19 @@ declare module "aplayer" {
     fixed?: boolean;
     mini?: boolean;
   }
+  export interface APlayerList {
+    add(audios: APlayerAudio[], index?: number): void;
+    switch(index: number): void;
+    remove(index: number): void;
+    clear(): void;
+    audios: APlayerAudio[];
+  }
   export default class APlayer {
     constructor(options: APlayerOptions);
     destroy(): void;
     play(): void;
     pause(): void;
+    list: APlayerList;
+    on(event: string, handler: () => void): void;
   }
 }

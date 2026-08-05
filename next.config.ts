@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   // "Invalid Server Actions request"。显式放行站点域名。
   experimental: {
     serverActions: {
-      allowedOrigins: ["yezi.biaozhu.me"],
+      allowedOrigins: ["yezi.biaozhu.me", "yezi.me", "www.yezi.me"],
     },
   },
   // Turbopack 默认向上查找 workspace root；父目录存在 lockfile 时会被误判为根，
@@ -46,7 +46,7 @@ const nextConfig: NextConfig = {
   },
   // 允许通过开发机 IP 或绑定域名访问 HMR 与 Server Actions；
   // 否则页面能打开，但登录、评论等客户端交互会像“没有反应”。
-  allowedDevOrigins: ["192.168.31.31", "yezi.biaozhu.me"],
+  allowedDevOrigins: ["192.168.31.31", "yezi.biaozhu.me", "yezi.me", "www.yezi.me"],
   async headers() {
     return [
       {
