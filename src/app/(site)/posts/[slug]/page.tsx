@@ -105,7 +105,7 @@ export default async function PostPage({ params }: Props) {
         )}
 
         {/* 作者卡片 */}
-        <AuthorCard avatar={getAuthorAvatar(siteSettings)} />
+        <AuthorCard avatar={getAuthorAvatar(siteSettings)} avatarNoBorder={siteSettings.author_avatar_no_border === "1"} />
 
         {/* 推荐阅读 */}
         {relatedPosts.length > 0 && siteSettings.show_related_posts !== "0" && (

@@ -43,6 +43,7 @@ export default async function MomentsPage() {
                   metrics={metrics.get(moment.id) ?? emptyMetrics}
                   authorName={site.author}
                   authorAvatar={getAuthorAvatar(siteSettings) || undefined}
+                  authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"}
                   initialLiked={liked.get(moment.id) ?? false}
                   canEdit={isAuthorized}
                 >

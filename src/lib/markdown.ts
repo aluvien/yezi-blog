@@ -1,19 +1,21 @@
 import { marked, type Renderer, type Tokens } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { musicContainerHtml, parseMusicBlock } from "@/lib/music";
+import { parseVideoBlock, videoContainerHtml } from "@/lib/video";
 
 // 输出端白名单兜底：即使 renderer 层出现回归，也不放行任意标签/属性。
 // 只保留文章实际用到的标签与属性；data-* 为 music 播放器容器所需。
 const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "h2", "h3", "h4", "p", "br", "strong", "em", "del", "blockquote", "code", "pre",
-    "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span",
+    "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "iframe",
   ],
   allowedAttributes: {
     a: ["href", "title", "target", "rel"],
     img: ["src", "alt", "title"],
     code: ["class"],
     div: ["class", "data-server", "data-id", "data-type"],
+    iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen"],
     span: ["class"],
     th: ["align"],
     td: ["align"],
@@ -96,12 +98,18 @@ export function renderMarkdown(content: string): string {
   };
 
   // ```music 代码块：渲染为播放器容器，交由前端 MusicInitializer 初始化。
-  // 非 music 语言走 marked 默认渲染，保持原有代码块样式不变。
+  // ```video 代码块：只渲染由 parseVideoBlock 校验过的 Bilibili/YouTube iframe。
+  // 非 music/video 语言走 marked 默认渲染，保持原有代码块样式不变。
   const defaultCode = renderer.code.bind(renderer);
   renderer.code = function (token: Tokens.Code) {
     if (token.lang && token.lang.trim() === "music") {
       return parseMusicBlock(token.text)
         .map((spec) => musicContainerHtml(spec))
+        .join("\n");
+    }
+    if (token.lang && token.lang.trim() === "video") {
+      return parseVideoBlock(token.text)
+        .map((spec) => videoContainerHtml(spec))
         .join("\n");
     }
     return defaultCode(token);

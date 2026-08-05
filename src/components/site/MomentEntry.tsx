@@ -24,6 +24,7 @@ export function MomentEntry({
   metrics,
   authorName,
   authorAvatar,
+  authorAvatarNoBorder = false,
   children,
   initialLiked = false,
   canEdit = false,
@@ -33,6 +34,7 @@ export function MomentEntry({
   metrics?: ContentMetrics;
   authorName?: string;
   authorAvatar?: string;
+  authorAvatarNoBorder?: boolean;
   children?: React.ReactNode;
   initialLiked?: boolean;
   canEdit?: boolean;
@@ -55,7 +57,7 @@ export function MomentEntry({
   return (
     <article id={`moment-${moment.id}`} className="moment-entry min-w-0">
       <div className="moment-entry-head">
-        <div className="moment-entry-avatar">
+        <div className={`moment-entry-avatar ${avatar ? "has-avatar" : ""} ${authorAvatarNoBorder ? "no-border" : ""}`}>
           {avatar ? (
             // 头像支持后台设置的本地上传路径或外部 URL。
             // eslint-disable-next-line @next/next/no-img-element

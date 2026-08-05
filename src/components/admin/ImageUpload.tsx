@@ -60,10 +60,12 @@ export default function ImageUpload({
   value,
   onChange,
   label = "封面图",
+  contain = false,
 }: {
   value: string | null;
   onChange: (path: string | null) => void;
   label?: string;
+  contain?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -88,7 +90,7 @@ export default function ImageUpload({
       {value ? (
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="封面" className="h-20 w-20 rounded-lg border border-neutral-200 object-cover" />
+          <img src={value} alt="封面" className={`h-20 w-20 rounded-lg border border-neutral-200 ${contain ? "object-contain" : "object-cover"}`} />
           <div className="flex flex-col gap-1">
             <button type="button" onClick={() => inputRef.current?.click()} className="text-sm text-neutral-600 underline">更换</button>
             <button type="button" onClick={() => onChange(null)} className="text-sm text-red-600 underline">移除</button>

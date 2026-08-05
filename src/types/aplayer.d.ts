@@ -25,12 +25,16 @@ declare module "aplayer" {
     clear(): void;
     audios: APlayerAudio[];
   }
+  export interface APlayerEventPayload {
+    index?: number;
+  }
   export default class APlayer {
     constructor(options: APlayerOptions);
     destroy(): void;
     play(): void;
     pause(): void;
+    paused: boolean;
     list: APlayerList;
-    on(event: string, handler: () => void): void;
+    on(event: string, handler: (arg?: APlayerEventPayload) => void): void;
   }
 }

@@ -14,6 +14,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     site_name: initialValues.site_name ?? "",
     site_subtitle: initialValues.site_subtitle ?? "",
     site_logo: initialValues.site_logo ?? "",
+    site_logo_no_border: initialValues.site_logo_no_border ?? "0",
     footer_text: initialValues.footer_text ?? "",
     social_links: initialValues.social_links ?? "",
     show_related_posts: initialValues.show_related_posts ?? "1",
@@ -22,6 +23,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     author_email: initialValues.author_email ?? "",
     gravatar_mirror: initialValues.gravatar_mirror ?? "",
     author_avatar: initialValues.author_avatar ?? "",
+    author_avatar_no_border: initialValues.author_avatar_no_border ?? "0",
     about_content: initialValues.about_content ?? "",
     meting_api: initialValues.meting_api ?? "",
     default_music: initialValues.default_music ?? "",
@@ -69,7 +71,16 @@ export default function SiteSettingsForm({ initialValues }: Props) {
       </div>
 
       <div>
-        <ImageUpload value={values.site_logo || null} onChange={(path) => update("site_logo", path ?? "")} label="站点 Logo（可选）" />
+        <ImageUpload value={values.site_logo || null} onChange={(path) => update("site_logo", path ?? "")} label="站点 Logo（可选）" contain />
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
+          <input
+            type="checkbox"
+            checked={values.site_logo_no_border === "1"}
+            onChange={(event) => update("site_logo_no_border", event.target.checked ? "1" : "0")}
+            className="h-3.5 w-3.5 accent-neutral-700"
+          />
+          隐藏 Logo 图片边框
+        </label>
       </div>
 
       <div className="space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
@@ -85,6 +96,15 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           </div>
         </div>
         <ImageUpload value={values.author_avatar || null} onChange={(path) => update("author_avatar", path ?? "")} label="自定义头像（上传后优先于 Gravatar）" />
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
+          <input
+            type="checkbox"
+            checked={values.author_avatar_no_border === "1"}
+            onChange={(event) => update("author_avatar_no_border", event.target.checked ? "1" : "0")}
+            className="h-3.5 w-3.5 accent-neutral-700"
+          />
+          隐藏头像图片边框
+        </label>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -106,7 +126,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
 
       <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">默认音乐列表（形如 netease:数字:playlist，留空不预置）</label>
-        <input value={values.default_music} onChange={(event) => update("default_music", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="netease:3778678:playlist" />
+        <input value={values.default_music} onChange={(event) => update("default_music", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="netease:7785232779:playlist" />
         <p className="mt-1 text-xs text-neutral-400">格式 <code>server:id:type</code>（server: netease/qq/kugou/kuwo/xiami/baidu；type: song/playlist/album/search）。全站加载后作为全局播放器的基础列表，页面点选的音乐追加其后。</p>
       </div>
 

@@ -41,6 +41,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
   const siteName = siteSettings.site_name?.trim() || site.name;
   const siteSubtitle = siteSettings.site_subtitle?.trim() || "文章 · 想法 · 作品";
   const siteLogo = siteSettings.site_logo?.trim();
+  const hideSiteLogoBorder = siteSettings.site_logo_no_border === "1";
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
   const socialLinks = parseSocialLinks(siteSettings.social_links, 6);
 
@@ -52,7 +53,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
             {siteLogo ? (
               // 管理员可配置站点 Logo；使用原生 img 允许本地上传路径。
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={siteLogo} alt="" className="h-10 w-10 shrink-0 rounded-[4px] border border-divider object-cover" />
+              <img src={siteLogo} alt="" className={`h-10 w-10 shrink-0 rounded-[4px] bg-transparent object-contain ${hideSiteLogoBorder ? "border-0" : "border border-divider"}`} />
             ) : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-foreground bg-foreground text-[16px] font-bold text-white transition-colors group-hover:border-accent group-hover:bg-accent">{site.author.charAt(0).toUpperCase()}</span>}
             <span className="min-w-0">
               <span className="block truncate text-[15px] font-semibold leading-none tracking-tight">{siteName}</span>
@@ -81,7 +82,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
               onClick={toggleTheme}
               aria-label="切换深浅色主题"
               title="切换深浅色主题"
-              className="hidden h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted transition-colors hover:border-accent hover:text-accent md:flex"
+              className="site-header-icon-button hidden h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted transition-colors hover:border-accent hover:text-accent md:flex"
             >
               {/* 两个图标都渲染，由 data-theme 决定显隐，避免水合内容不一致 */}
               <svg className="h-4 w-4 [html[data-theme='dark']_&]:hidden" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" aria-hidden="true">

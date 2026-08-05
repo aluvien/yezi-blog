@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { countApprovedCommentsBulk, getContentMetricsBulk, getSiteSettings, listMoments, listPosts } from "@/lib/db";
 import { site } from "@/lib/site";
+import { getAuthorAvatar } from "@/lib/author";
 import { parsePostTags } from "@/lib/post-tags";
 import { PostEntry } from "@/components/site/PostEntry";
 import { MomentEntry } from "@/components/site/MomentEntry";
@@ -60,7 +61,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                 commentCount={momentCommentCounts.get(result.moment.id) ?? 0}
                 metrics={momentMetrics.get(result.moment.id) ?? emptyMetrics}
                 authorName={site.author}
-                authorAvatar={siteSettings.site_logo?.trim() || undefined}
+                authorAvatar={getAuthorAvatar(siteSettings) || undefined}
+                authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"}
               />
             </div>
           ))}

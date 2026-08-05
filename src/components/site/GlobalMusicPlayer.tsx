@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fetchMusicTracks, parseMusicSpec, type MusicTrack } from "@/lib/music";
-import { setGlobalPlayListener } from "@/lib/player-store";
+import { emitGlobalPlaybackState, setGlobalPlayListener } from "@/lib/player-store";
 
 type APlayerInstance = import("aplayer").default;
 
@@ -26,7 +26,11 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
   const playerRef = useRef<APlayerInstance | null>(null);
   // 默认歌单未就绪前的页面点选先入队，默认列表加载完成后再追加，保证其始终位于队列前部。
   const readyRef = useRef(false);
-  const pendingRef = useRef<MusicTrack[][]>([]);
+  const pendingRef = useRef<Array<{ tracks: MusicTrack[]; cardId?: string | null }>>([]);
+  // 当前正在播放的触发卡片 id + 播放列表各 index 归属的卡片 id（用于面板内切歌时回显）
+  const currentCardIdRef = useRef<string | null>(null);
+  const ownerMapRef = useRef(new Map<number, string | null>());
+  const trackIndexRef = useRef(new Map<string, number>());
 
   useEffect(() => {
     apiRef.current = metingApi;
@@ -35,20 +39,70 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
+    // ref 在 effect 生命周期内不会变，取局部引用避免 effect cleanup 依赖过期的 ref 读取
+    const ownerMap = ownerMapRef.current;
+    const trackIndex = trackIndexRef.current;
 
-    function appendAndPlay(tracks: MusicTrack[]) {
+    function trackKey(track: MusicTrack): string {
+      return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist}`;
+    }
+
+    function addUniqueTracks(tracks: MusicTrack[], owner: string | null): void {
       const player = playerRef.current;
       if (!player || tracks.length === 0) return;
-      const startIndex = player.list.audios.length;
-      player.list.add(tracks);
+      const uniqueTracks: MusicTrack[] = [];
+      for (const track of tracks) {
+        const key = trackKey(track);
+        const existingIndex = trackIndex.get(key);
+        if (existingIndex !== undefined) {
+          ownerMap.set(existingIndex, owner);
+          continue;
+        }
+        const index = player.list.audios.length + uniqueTracks.length;
+        trackIndex.set(key, index);
+        ownerMap.set(index, owner);
+        uniqueTracks.push(track);
+      }
+      if (uniqueTracks.length > 0) {
+        player.list.add(uniqueTracks);
+        setHasTracks(true);
+      }
+    }
+
+    function appendAndPlay(tracks: MusicTrack[], cardId: string | null) {
+      const player = playerRef.current;
+      if (!player || tracks.length === 0) return;
+      currentCardIdRef.current = cardId;
+      let targetIndex: number | null = null;
+      const uniqueTracks: MusicTrack[] = [];
+      for (const track of tracks) {
+        const key = trackKey(track);
+        const existingIndex = trackIndex.get(key);
+        if (existingIndex !== undefined) {
+          ownerMap.set(existingIndex, cardId);
+          if (targetIndex === null) targetIndex = existingIndex;
+          continue;
+        }
+        const index = player.list.audios.length + uniqueTracks.length;
+        trackIndex.set(key, index);
+        ownerMap.set(index, cardId);
+        uniqueTracks.push(track);
+        if (targetIndex === null) targetIndex = index;
+      }
+      if (uniqueTracks.length > 0) {
+        player.list.add(uniqueTracks);
+        setHasTracks(true);
+      }
+      if (targetIndex === null) return;
       try {
-        player.list.switch(startIndex);
+        player.list.switch(targetIndex);
       } catch {
         // APlayer 对空列表 switch 可能抛错，忽略即可
       }
       player.play();
       setHasTracks(true);
       setPlaying(true);
+      emitGlobalPlaybackState({ playing: true, cardId });
     }
 
     async function boot() {
@@ -67,9 +121,25 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
           theme: accent,
         });
         playerRef.current = player;
-        player.on("play", () => setPlaying(true));
-        player.on("pause", () => setPlaying(false));
-        player.on("ended", () => setPlaying(false));
+        player.on("play", () => {
+          setPlaying(true);
+          emitGlobalPlaybackState({ playing: true, cardId: currentCardIdRef.current });
+        });
+        player.on("pause", () => {
+          setPlaying(false);
+          emitGlobalPlaybackState({ playing: false, cardId: currentCardIdRef.current });
+        });
+        player.on("ended", () => {
+          setPlaying(false);
+          emitGlobalPlaybackState({ playing: false, cardId: null });
+        });
+        // 面板内手动切歌：按当前 index 找到归属卡片，回显"正在播放"
+        player.on("listswitch", (event) => {
+          const index = typeof event?.index === "number" ? event.index : null;
+          const cardId = index === null ? null : (ownerMap.get(index) ?? null);
+          currentCardIdRef.current = cardId;
+          emitGlobalPlaybackState({ playing: !player.paused, cardId });
+        });
 
         // 默认歌单：后台设置 default_music，加载失败静默（不影响页面点选音乐）。
         const spec = parseMusicSpec(defaultMusic);
@@ -77,10 +147,7 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
           try {
             const tracks = await fetchMusicTracks(apiRef.current, spec);
             if (disposed) return;
-            if (tracks.length > 0) {
-              player.list.add(tracks);
-              setHasTracks(true);
-            }
+            addUniqueTracks(tracks, null);
           } catch {
             // noop
           }
@@ -90,18 +157,18 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
         if (disposed) return;
       }
       readyRef.current = true;
-      for (const batch of pendingRef.current) appendAndPlay(batch);
+      for (const batch of pendingRef.current) appendAndPlay(batch.tracks, batch.cardId ?? null);
       pendingRef.current = [];
     }
 
     void boot();
 
-    unlisten = setGlobalPlayListener(({ tracks }) => {
+    unlisten = setGlobalPlayListener(({ tracks, cardId }) => {
       if (!readyRef.current) {
-        pendingRef.current.push(tracks);
+        pendingRef.current.push({ tracks, cardId });
         return;
       }
-      appendAndPlay(tracks);
+      appendAndPlay(tracks, cardId ?? null);
     });
 
     return () => {
@@ -113,6 +180,9 @@ export function GlobalMusicPlayer({ metingApi, defaultMusic = "" }: { metingApi:
         /* noop */
       }
       playerRef.current = null;
+      ownerMap.clear();
+      trackIndex.clear();
+      emitGlobalPlaybackState({ playing: false, cardId: null });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

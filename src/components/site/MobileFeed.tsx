@@ -18,13 +18,13 @@ function Metric({ type, value, href }: { type: MetricIconType; value: number; hr
   return <span className="mobile-feed-metric">{content}</span>;
 }
 
-function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, initialLiked }: { moment: Moment; commentCount: number; metrics: ContentMetrics; authorName: string; authorAvatar?: string; initialLiked: boolean }) {
+function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, authorAvatarNoBorder, initialLiked }: { moment: Moment; commentCount: number; metrics: ContentMetrics; authorName: string; authorAvatar?: string; authorAvatarNoBorder: boolean; initialLiked: boolean }) {
   const images = parseMomentImages(moment);
   const segments = splitMomentContent(moment.content);
   return (
     <article className="mobile-feed-memo">
       <div className="mobile-feed-memo-head">
-        <div className="mobile-feed-avatar">
+        <div className={`mobile-feed-avatar ${authorAvatar ? "has-avatar" : ""} ${authorAvatarNoBorder ? "no-border" : ""}`}>
           {authorAvatar ? (
             // 头像支持后台设置的本地上传路径或外部 URL。
             // eslint-disable-next-line @next/next/no-img-element
@@ -88,11 +88,11 @@ function MobilePost({ post, commentCount, metrics, initialLiked }: { post: Post;
   );
 }
 
-export function MobileFeed({ items, authorName = "", authorAvatar }: { items: FeedItem[]; authorName?: string; authorAvatar?: string }) {
+export function MobileFeed({ items, authorName = "", authorAvatar, authorAvatarNoBorder = false }: { items: FeedItem[]; authorName?: string; authorAvatar?: string; authorAvatarNoBorder?: boolean }) {
   return (
     <div className="mobile-feed">
       {items.map((item) => item.type === "moment" ? (
-        <MobileMemo key={`moment-${item.value.id}`} moment={item.value} commentCount={item.commentCount} metrics={item.metrics} authorName={authorName} authorAvatar={authorAvatar} initialLiked={item.initialLiked} />
+        <MobileMemo key={`moment-${item.value.id}`} moment={item.value} commentCount={item.commentCount} metrics={item.metrics} authorName={authorName} authorAvatar={authorAvatar} authorAvatarNoBorder={authorAvatarNoBorder} initialLiked={item.initialLiked} />
       ) : (
         <MobilePost key={`post-${item.value.id}`} post={item.value} commentCount={item.commentCount} metrics={item.metrics} initialLiked={item.initialLiked} />
       ))}

@@ -9,6 +9,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { parsePostTags } from "@/lib/post-tags";
 import ImageUpload from "./ImageUpload";
 import { MusicInsertDialog } from "./MusicInsertDialog";
+import { VideoInsertDialog } from "./VideoInsertDialog";
 
 const MARKDOWN_TOOLS = [
   { kind: "line-prefix", label: "H2", title: "将选中行设为二级标题", prefix: "## ", placeholder: "小标题" },
@@ -20,6 +21,7 @@ const MARKDOWN_TOOLS = [
   { kind: "wrap", label: "代码", title: "将选中文字设为代码块", before: "```\n", after: "\n```", placeholder: "const value = true" },
   { kind: "image", label: "图片", title: "插入图片（输入网址或上传）" },
   { kind: "music", label: "音乐", title: "插入音乐播放器（网易云/QQ 等）" },
+  { kind: "video", label: "视频", title: "插入 Bilibili 或 YouTube 视频" },
   { kind: "raw", label: "分隔线", title: "插入分隔线", text: "\n---\n" },
 ] as const;
 
@@ -58,6 +60,7 @@ export default function PostForm({ post, initialAttachments = [], categories = [
   const [error, setError] = useState("");
   const [markdownDialog, setMarkdownDialog] = useState<"link" | "image" | null>(null);
   const [musicDialog, setMusicDialog] = useState(false);
+  const [videoDialog, setVideoDialog] = useState(false);
   const [dialogText, setDialogText] = useState("");
   const [dialogUrl, setDialogUrl] = useState("");
   const [dialogError, setDialogError] = useState("");
@@ -158,6 +161,12 @@ export default function PostForm({ post, initialAttachments = [], categories = [
     replaceTextAtRange(`\n\`\`\`music\n${spec}\n\`\`\`\n`, range);
   }
 
+  function insertVideoBlock(spec: string) {
+    const range = dialogRangeRef.current ?? getEditingRange();
+    dialogRangeRef.current = null;
+    replaceTextAtRange(`\n\`\`\`video\n${spec}\n\`\`\`\n`, range);
+  }
+
   function openMarkdownDialog(kind: "link" | "image") {
     const range = getEditingRange();
     dialogRangeRef.current = range;
@@ -194,6 +203,9 @@ export default function PostForm({ post, initialAttachments = [], categories = [
     } else if (tool.kind === "music") {
       dialogRangeRef.current = getEditingRange();
       setMusicDialog(true);
+    } else if (tool.kind === "video") {
+      dialogRangeRef.current = getEditingRange();
+      setVideoDialog(true);
     } else if (tool.kind === "line-prefix") {
       insertLinePrefix(tool.prefix, tool.placeholder);
     } else if (tool.kind === "raw") {
@@ -591,6 +603,18 @@ export default function PostForm({ post, initialAttachments = [], categories = [
           onClose={(spec) => {
             setMusicDialog(false);
             if (spec) insertMusicBlock(spec);
+          }}
+        />
+      )}
+      {videoDialog && (
+        <VideoInsertDialog
+          onClose={(spec) => {
+            setVideoDialog(false);
+            if (spec) {
+              insertVideoBlock(spec);
+            } else {
+              dialogRangeRef.current = null;
+            }
           }}
         />
       )}

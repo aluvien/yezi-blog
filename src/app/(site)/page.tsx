@@ -47,7 +47,7 @@ export default async function Home() {
 
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
-      <MobileFeed items={items} authorName={site.author} authorAvatar={authorAvatar} />
+      <MobileFeed items={items} authorName={site.author} authorAvatar={authorAvatar} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} />
     </div>
   );
 }
