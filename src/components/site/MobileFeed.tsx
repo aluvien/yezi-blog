@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type { ContentMetrics, Moment, Post } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
