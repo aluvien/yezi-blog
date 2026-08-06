@@ -10,6 +10,7 @@ import { MomentCommentToggle } from "@/components/site/MomentCommentToggle";
 import { MetricIcon } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
 import MomentForm from "@/components/admin/MomentForm";
+import { useMomentView } from "@/components/site/MomentViewTracker";
 
 /**
  * 想法条目（朋友圈样式）。
@@ -40,22 +41,30 @@ export function MomentEntry({
   canEdit?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  const [touchActive, setTouchActive] = useState(false);
   const images = parseMomentImages(moment);
   const segments = splitMomentContent(moment.content);
   const displayAuthor = authorName?.trim() || site.author;
   const avatar = authorAvatar?.trim();
+  const { views, targetRef } = useMomentView(moment.id, metrics?.views ?? 0);
+  const displayMetrics = metrics ? { ...metrics, views } : undefined;
 
   // 编辑态：与"写想法"一致的表单，预填该条内容与图片
   if (editing) {
     return (
       <article id={`moment-${moment.id}`} className="moment-entry min-w-0">
-        <MomentForm compact moment={moment} onSuccess={() => setEditing(false)} />
+        <MomentForm compact moment={moment} onSuccess={() => setEditing(false)} onCancel={() => setEditing(false)} />
       </article>
     );
   }
 
   return (
-    <article id={`moment-${moment.id}`} className="moment-entry min-w-0">
+    <article
+      ref={targetRef}
+      id={`moment-${moment.id}`}
+      className={`moment-entry min-w-0 ${touchActive ? "is-touch-active" : ""}`}
+      onTouchStart={() => setTouchActive(true)}
+    >
       <div className="moment-entry-head">
         <div className={`moment-entry-avatar ${avatar ? "has-avatar" : ""} ${authorAvatarNoBorder ? "no-border" : ""}`}>
           {avatar ? (
@@ -106,15 +115,15 @@ export function MomentEntry({
         <MomentImages images={images} />
       </div>
       {children ? (
-        <MomentCommentToggle targetId={moment.id} count={commentCount} metrics={metrics} initialLiked={initialLiked}>
+        <MomentCommentToggle targetId={moment.id} count={commentCount} metrics={displayMetrics} initialLiked={initialLiked}>
           {children}
         </MomentCommentToggle>
       ) : (
         <div className="moment-entry-meta site-meta flex items-center gap-4 text-muted">
-          {metrics && (
+          {displayMetrics && (
             <>
-              <span className="inline-flex items-center gap-1"><MetricIcon type="like" />{metrics.likes}</span>
-              <span className="inline-flex items-center gap-1"><MetricIcon type="view" />{metrics.views}</span>
+              <span className="inline-flex items-center gap-1"><MetricIcon type="like" />{displayMetrics.likes}</span>
+              <span className="inline-flex items-center gap-1"><MetricIcon type="view" />{displayMetrics.views}</span>
             </>
           )}
           <span className="site-meta-spacer" aria-hidden="true" />

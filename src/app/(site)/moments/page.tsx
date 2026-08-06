@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { countApprovedCommentsBulk, getContentMetricsBulk, getSiteSettings, hasLikedBulk, listMoments } from "@/lib/db";
-import { site } from "@/lib/site";
+import { getSiteAuthor } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
 import { MomentEntry } from "@/components/site/MomentEntry";
 import { CommentSection } from "@/components/site/CommentSection";
@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 export default async function MomentsPage() {
   const moments = listMoments();
   const siteSettings = getSiteSettings();
+  const authorName = getSiteAuthor(siteSettings);
   const isAuthorized = !!(await getSession());
   const visitorKey = await getVisitorKeyFromRequest();
   const momentIds = moments.map((moment) => moment.id);
@@ -41,13 +42,13 @@ export default async function MomentsPage() {
                   moment={moment}
                   commentCount={commentCounts.get(moment.id) ?? 0}
                   metrics={metrics.get(moment.id) ?? emptyMetrics}
-                  authorName={site.author}
+                  authorName={authorName}
                   authorAvatar={getAuthorAvatar(siteSettings) || undefined}
                   authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"}
                   initialLiked={liked.get(moment.id) ?? false}
                   canEdit={isAuthorized}
                 >
-                  <CommentSection targetType="moment" targetId={moment.id} />
+                  <CommentSection targetType="moment" targetId={moment.id} authorName={authorName} />
                 </MomentEntry>
               </div>
             );

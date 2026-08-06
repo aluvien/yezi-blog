@@ -20,6 +20,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     show_related_posts: initialValues.show_related_posts ?? "1",
     show_more_posts: initialValues.show_more_posts ?? "1",
     show_table_of_contents: initialValues.show_table_of_contents ?? "1",
+    author_name: initialValues.author_name ?? "",
     author_email: initialValues.author_email ?? "",
     gravatar_mirror: initialValues.gravatar_mirror ?? "",
     author_avatar: initialValues.author_avatar ?? "",
@@ -87,8 +88,12 @@ export default function SiteSettingsForm({ initialValues }: Props) {
       </div>
 
       <div className="space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="text-sm font-medium text-neutral-700">作者头像</p>
-        <div className="grid gap-4 md:grid-cols-2">
+        <p className="text-sm font-medium text-neutral-700">个人资料与头像</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs text-neutral-600">个人名称</label>
+            <input value={values.author_name} onChange={(event) => update("author_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="Yezi" />
+          </div>
           <div>
             <label className="mb-1 block text-xs text-neutral-600">作者邮箱（用于 Gravatar 默认头像）</label>
             <input value={values.author_email} onChange={(event) => update("author_email", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="you@example.com" />

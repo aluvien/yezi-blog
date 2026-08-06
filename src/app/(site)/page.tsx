@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { countApprovedCommentsBulk, getContentMetricsBulk, getSiteSettings, hasLikedBulk, listMoments, listPosts } from "@/lib/db";
-import { site } from "@/lib/site";
+import { getSiteAuthor, site } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
 import { getVisitorKeyFromRequest } from "@/lib/request";
 import { MobileFeed, type FeedItem } from "@/components/site/MobileFeed";
@@ -17,6 +17,7 @@ export default async function Home() {
   const posts = listPosts();
   const moments = listMoments();
   const siteSettings = getSiteSettings();
+  const authorName = getSiteAuthor(siteSettings);
   const authorAvatar = getAuthorAvatar(siteSettings) || undefined;
   const visitorKey = await getVisitorKeyFromRequest();
   const postIds = posts.map((post) => post.id);
@@ -47,7 +48,7 @@ export default async function Home() {
 
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
-      <MobileFeed items={items} authorName={site.author} authorAvatar={authorAvatar} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} />
+      <MobileFeed items={items} authorName={authorName} authorAvatar={authorAvatar} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} />
     </div>
   );
 }

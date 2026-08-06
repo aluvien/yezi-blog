@@ -6,6 +6,11 @@ export const site = {
   url: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3030").replace(/\/+$/, ""),
 };
 
+/** 后台可覆盖的个人名称；未设置时兼容使用默认作者名。 */
+export function getSiteAuthor(siteSettings?: Record<string, string>): string {
+  return siteSettings?.author_name?.trim() || site.author;
+}
+
 export interface SocialLink {
   label: string;
   url: string;

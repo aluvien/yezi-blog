@@ -652,7 +652,7 @@ body {
   padding-left: 48px;
 }
 
-/* 想法就地编辑按钮：仅管理员可见，右上角。桌面 hover 显示，触屏常显低透明度。 */
+/* 想法就地编辑按钮：仅管理员可见，悬停/触摸该条想法时显示。 */
 .moment-edit-btn {
   display: inline-flex;
   align-items: center;
@@ -666,25 +666,20 @@ body {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
-  opacity: 0.35;
-  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
 .moment-entry:hover .moment-edit-btn,
 .moment-entry:focus-within .moment-edit-btn,
+.moment-entry.is-touch-active .moment-edit-btn,
 .moment-edit-btn:focus-visible {
   opacity: 1;
-}
-@media (hover: hover) {
-  .moment-entry .moment-edit-btn {
-    opacity: 0;
-  }
-  .moment-entry:hover .moment-edit-btn,
-  .moment-entry:focus-within .moment-edit-btn {
-    opacity: 1;
-  }
+  pointer-events: auto;
 }
 .moment-edit-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--paper));
   color: var(--accent);
 }
 
@@ -1219,6 +1214,43 @@ summary {
   background: transparent;
 }
 
+.article-edit-zone {
+  position: relative;
+}
+
+/* 前台文章编辑按钮：管理员登录后，悬停/触摸文章区域时显示。 */
+.article-edit-btn {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+.article-edit-zone:hover .article-edit-btn,
+.article-edit-zone:focus-within .article-edit-btn,
+.article-edit-zone.is-touch-active .article-edit-btn,
+.article-edit-btn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.article-edit-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--paper));
+  color: var(--accent);
+}
+
 .article-shell > header {
   max-width: 800px;
 }
@@ -1409,17 +1441,7 @@ summary {
 }
 
 .article-body hr {
-  width: 100%;
-  margin: 2.8em auto;
-  border: 0;
-  text-align: center;
-}
-
-.article-body hr::before {
-  color: var(--faint);
-  content: "•  •  •";
-  font-size: 14px;
-  letter-spacing: 0.4em;
+  display: none;
 }
 
 .article-body table {

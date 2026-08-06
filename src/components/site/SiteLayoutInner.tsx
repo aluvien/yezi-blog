@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { site, parseSocialLinks } from "@/lib/site";
+import { getSiteAuthor, site, parseSocialLinks } from "@/lib/site";
 import { NAV_ITEMS } from "@/components/site/SiteNav";
 import { NavIcon } from "@/components/site/NavIcon";
 import { SiteSearch } from "@/components/site/SiteSearch";
@@ -39,6 +39,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
     document.cookie = `theme_mode=${next ? "dark" : "light"}; path=/; max-age=31536000; samesite=lax`;
   }
   const siteName = siteSettings.site_name?.trim() || site.name;
+  const authorName = getSiteAuthor(siteSettings);
   const siteSubtitle = siteSettings.site_subtitle?.trim() || "文章 · 想法 · 作品";
   const siteLogo = siteSettings.site_logo?.trim();
   const hideSiteLogoBorder = siteSettings.site_logo_no_border === "1";
@@ -54,7 +55,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
               // 管理员可配置站点 Logo；使用原生 img 允许本地上传路径。
               // eslint-disable-next-line @next/next/no-img-element
               <img src={siteLogo} alt="" className={`h-10 w-10 shrink-0 rounded-[4px] bg-transparent object-contain ${hideSiteLogoBorder ? "border-0" : "border border-divider"}`} />
-            ) : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-foreground bg-foreground text-[16px] font-bold text-white transition-colors group-hover:border-accent group-hover:bg-accent">{site.author.charAt(0).toUpperCase()}</span>}
+            ) : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-foreground bg-foreground text-[16px] font-bold text-white transition-colors group-hover:border-accent group-hover:bg-accent">{authorName.charAt(0).toUpperCase()}</span>}
             <span className="min-w-0">
               <span className="block truncate text-[15px] font-semibold leading-none tracking-tight">{siteName}</span>
               <span className="mt-1 block truncate text-[10px] leading-none tracking-[0.12em] text-muted">{siteSubtitle}</span>

@@ -2,23 +2,25 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getSiteSettings } from "@/lib/db";
 import { renderMarkdown } from "@/lib/markdown";
-import { site } from "@/lib/site";
+import { getSiteAuthor } from "@/lib/site";
 import { PageHeader } from "@/components/site/PageHeader";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "关于",
-  description: `关于 ${site.author}`,
-};
+export function generateMetadata(): Metadata {
+  const authorName = getSiteAuthor(getSiteSettings());
+  return { title: "关于", description: `关于 ${authorName}` };
+}
 
 export default function AboutPage() {
-  const aboutContent = getSiteSettings().about_content?.trim();
+  const siteSettings = getSiteSettings();
+  const authorName = getSiteAuthor(siteSettings);
+  const aboutContent = siteSettings.about_content?.trim();
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
       <PageHeader
         eyebrow="关于作者"
-        title={`你好，我是 ${site.author}。`}
+        title={`你好，我是 ${authorName}。`}
         description="写代码，也写字。相信清晰的表达，和好产品一样，能让复杂的事变得简单。"
       />
 
@@ -35,7 +37,7 @@ export default function AboutPage() {
             <blockquote className="border-l-3 border-accent bg-[#f5fbf8] px-5 py-4 text-[15px] leading-7 text-foreground/70">把经验写下来，是给未来的自己留一条回来的路。</blockquote>
           </div>
           <aside className="space-y-7 border-t border-divider pt-8 md:border-l md:border-t-0 md:pl-8 md:pt-0">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-[18px] font-bold text-white">{site.author.charAt(0).toUpperCase()}</div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-[18px] font-bold text-white">{authorName.charAt(0).toUpperCase()}</div>
             <div><p className="text-[11px] uppercase tracking-[0.18em] text-muted">正在关注</p><p className="mt-2 text-[14px] leading-6">产品设计、软件工程、个人创作与日常观察</p></div>
             <div><p className="text-[11px] uppercase tracking-[0.18em] text-muted">写作原则</p><p className="mt-2 text-[14px] leading-6">真诚、具体、有用，也允许保留一点未完成</p></div>
             <Link href="/" className="inline-flex items-center gap-2 text-[14px] font-medium text-wechat-blue">从最新文章开始 <span>→</span></Link>

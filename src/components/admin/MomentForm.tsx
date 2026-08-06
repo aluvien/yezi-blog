@@ -19,11 +19,12 @@ function initialImages(moment?: Moment): string[] {
   }
 }
 
-export default function MomentForm({ moment, onSuccess, compact }: { moment?: Moment; onSuccess?: () => void; compact?: boolean }) {
+export default function MomentForm({ moment, onSuccess, onCancel, compact }: { moment?: Moment; onSuccess?: () => void; onCancel?: () => void; compact?: boolean }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [content, setContent] = useState(moment?.content ?? "");
   const [images, setImages] = useState<string[]>(() => initialImages(moment));
+  const [original, setOriginal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [musicDialog, setMusicDialog] = useState(false);
@@ -36,7 +37,7 @@ export default function MomentForm({ moment, onSuccess, compact }: { moment?: Mo
     try {
       const available = Math.max(0, MAX_IMAGES - images.length);
       for (const file of Array.from(files).slice(0, available)) {
-        const path = await uploadImage(file);
+        const path = await uploadImage(file, original);
         setImages((prev) => (prev.length >= MAX_IMAGES ? prev : [...prev, path]));
       }
     } catch (e) {
@@ -110,10 +111,14 @@ export default function MomentForm({ moment, onSuccess, compact }: { moment?: Mo
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-neutral-400">{images.length > 0 ? `${images.length}/${MAX_IMAGES}` : ""}</span>
-          <div className="flex items-center gap-2">
-            <button
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-neutral-400">{images.length > 0 ? `${images.length}/${MAX_IMAGES}` : ""}</span>
+            <div className="flex items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-500">
+                <input type="checkbox" checked={original} onChange={(e) => setOriginal(e.target.checked)} className="h-3.5 w-3.5 accent-neutral-700" />
+                保留原图
+              </label>
+              <button
               type="button"
               disabled={uploading || images.length >= MAX_IMAGES}
               onClick={() => inputRef.current?.click()}
@@ -128,6 +133,15 @@ export default function MomentForm({ moment, onSuccess, compact }: { moment?: Mo
             >
               + 音乐
             </button>
+            {moment && onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-md border border-neutral-300 px-3 py-1 text-sm text-neutral-600 hover:bg-neutral-50"
+              >
+                取消
+              </button>
+            )}
             <button
               type="button"
               disabled={pending || uploading}
@@ -196,7 +210,13 @@ export default function MomentForm({ moment, onSuccess, compact }: { moment?: Mo
             </button>
           )}
         </div>
-        <p className="mt-1 text-xs text-neutral-400">最多 {MAX_IMAGES} 张，已选 {images.length} 张</p>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-400">
+          <span>最多 {MAX_IMAGES} 张，已选 {images.length} 张</span>
+          <label className="flex cursor-pointer items-center gap-1.5 text-neutral-500">
+            <input type="checkbox" checked={original} onChange={(e) => setOriginal(e.target.checked)} className="h-3.5 w-3.5 accent-neutral-700" />
+            保留原图（不压缩）
+          </label>
+        </div>
         <input
           ref={inputRef}
           type="file"

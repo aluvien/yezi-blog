@@ -3,10 +3,10 @@ import path from "node:path";
 import sharp from "sharp";
 import { getSiteSettings } from "@/lib/db";
 import { getUploadDir } from "@/lib/uploads";
-import { site } from "@/lib/site";
+import { getSiteAuthor } from "@/lib/site";
 
 function fallbackIcon(): Buffer {
-  const letter = site.author.charAt(0).toUpperCase();
+  const letter = getSiteAuthor(getSiteSettings()).charAt(0).toUpperCase();
   return Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
       <rect width="512" height="512" rx="72" fill="#17191f" />

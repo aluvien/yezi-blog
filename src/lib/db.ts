@@ -136,9 +136,10 @@ function createDb(): Database.Database {
       db.prepare("UPDATE moments SET updated_at = created_at WHERE updated_at IS NULL").run();
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_status_time ON posts (status, created_at DESC)");
 
-      // 互动去重表按时间清理（保留 180 天），防止长期运行无限膨胀。
-      // 只在进程启动时执行一次；过期记录被清理后，旧访客可再次点赞/计数，属可接受的取舍。
-      db.prepare("DELETE FROM content_interactions WHERE created_at < ?").run(new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString());
+      // 想法浏览按 30 天去重，文章浏览保持 180 天；点赞记录也保留 180 天。
+      db.prepare("DELETE FROM content_interactions WHERE target_type = 'moment' AND kind = 'view' AND created_at < ?").run(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+      db.prepare("DELETE FROM content_interactions WHERE target_type = 'post' AND kind = 'view' AND created_at < ?").run(new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString());
+      db.prepare("DELETE FROM content_interactions WHERE kind = 'like' AND created_at < ?").run(new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString());
 
       // 会话与登录失败记录同样只留短暂有效期：过期 session 删除；
       // login_attempts 保留 24 小时（远超 15 分钟限流/封禁窗口），随后清掉不再需要的历史失败记录。
@@ -591,6 +592,19 @@ export function recordContentInteraction(
 ): ContentMetrics {
   const key = visitorKey.trim().slice(0, 128);
   if (!key) return getContentMetrics(targetType, targetId);
+  if (kind === "view") {
+    const viewWindowMs = (targetType === "moment" ? 30 : 180) * 24 * 60 * 60 * 1000;
+    const existing = db
+      .prepare("SELECT created_at FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'view' AND visitor_key = ?")
+      .get(targetType, targetId, key) as { created_at: string } | undefined;
+    const createdAt = existing ? Date.parse(existing.created_at) : Number.NaN;
+    if (existing && Number.isFinite(createdAt) && Date.now() - createdAt < viewWindowMs) {
+      return getContentMetrics(targetType, targetId);
+    }
+    if (existing) {
+      db.prepare("DELETE FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'view' AND visitor_key = ?").run(targetType, targetId, key);
+    }
+  }
   const inserted = db
     .prepare("INSERT OR IGNORE INTO content_interactions (target_type, target_id, kind, visitor_key, created_at) VALUES (?, ?, ?, ?, ?)")
     .run(targetType, targetId, kind, key, now());

@@ -237,13 +237,9 @@ export function GlobalMusicPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function closePlayer(): void {
+  function minimizePlayer(): void {
+    // 最小化只收起面板，不暂停或清空播放列表；音乐应继续在后台播放。
     setOpen(false);
-    if (!hasDefaultPlaylist) {
-      playerRef.current?.pause();
-      setPlaying(false);
-      setHasTracks(false);
-    }
   }
 
   return (
@@ -267,7 +263,7 @@ export function GlobalMusicPlayer({
       {/* 底部面板：常驻 DOM，闭合时移出屏幕 */}
       <div className={`global-player-panel ${panelOpen ? "is-open" : ""}`} role="region" aria-label="音乐播放器">
         {open && playerPosition !== "bottom" && (
-          <button type="button" className="global-player-collapse" aria-label="收起播放器" onClick={closePlayer}>
+          <button type="button" className="global-player-collapse" aria-label="最小化播放器" title="最小化播放器" onClick={minimizePlayer}>
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
             </svg>

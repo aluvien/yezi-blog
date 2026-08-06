@@ -7,6 +7,7 @@ import { MetricIcon, type MetricIconType } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
 import { LikeButton } from "@/components/site/LikeButton";
 import { splitMomentContent } from "@/lib/music";
+import { useMomentView } from "@/components/site/MomentViewTracker";
 
 export type FeedItem =
   | { type: "moment"; value: Moment; commentCount: number; metrics: ContentMetrics; initialLiked: boolean }
@@ -21,8 +22,9 @@ function Metric({ type, value, href }: { type: MetricIconType; value: number; hr
 function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, authorAvatarNoBorder, initialLiked }: { moment: Moment; commentCount: number; metrics: ContentMetrics; authorName: string; authorAvatar?: string; authorAvatarNoBorder: boolean; initialLiked: boolean }) {
   const images = parseMomentImages(moment);
   const segments = splitMomentContent(moment.content);
+  const { views, targetRef } = useMomentView(moment.id, metrics.views);
   return (
-    <article className="mobile-feed-memo">
+    <article ref={targetRef} className="mobile-feed-memo">
       <div className="mobile-feed-memo-head">
         <div className={`mobile-feed-avatar ${authorAvatar ? "has-avatar" : ""} ${authorAvatarNoBorder ? "no-border" : ""}`}>
           {authorAvatar ? (
@@ -50,7 +52,7 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
       </div>
       <div className="mobile-feed-meta">
         <LikeButton targetType="moment" targetId={moment.id} initialLikes={metrics.likes} initialLiked={initialLiked} />
-        <Metric type="view" value={metrics.views} />
+        <Metric type="view" value={views} />
         <span className="mobile-feed-meta-spacer" />
         <Metric type="comment" value={commentCount} href={`/moments#moment-${moment.id}`} />
       </div>

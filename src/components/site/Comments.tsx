@@ -57,6 +57,7 @@ export function Comments({
   defaultFormCollapsed = false,
   commentCount,
   isAdmin = false,
+  authorName = site.author,
 }: {
   targetType: "post" | "moment";
   targetId: number;
@@ -64,6 +65,7 @@ export function Comments({
   defaultFormCollapsed?: boolean;
   commentCount?: number;
   isAdmin?: boolean;
+  authorName?: string;
 }) {
   const router = useRouter();
   const [nickname, setNickname] = useState("");
@@ -203,7 +205,7 @@ export function Comments({
               <div className="comment-body">
                 <div className="comment-meta">
                   <span className="comment-author">{c.nickname}</span>
-                  {c.nickname === site.author && <span className="comment-author-badge">UP主</span>}
+                  {c.nickname === authorName && <span className="comment-author-badge">UP主</span>}
                   <span className="comment-time">{formatRelativeTime(c.created_at)}</span>
                   {isAdmin && replyingTo !== c.id && (
                     <button type="button" className="comment-reply-btn" onClick={() => openReply(c.id)}>
@@ -215,10 +217,10 @@ export function Comments({
                 {c.admin_reply && (
                   <div className="comment-children">
                     <div className="comment-item comment-item-reply">
-                      <Avatar name={site.author} />
+                      <Avatar name={authorName} />
                       <div className="comment-body">
                         <div className="comment-meta">
-                          <span className="comment-author">{site.author}</span>
+                          <span className="comment-author">{authorName}</span>
                           <span className="comment-author-badge">UP主</span>
                           {c.replied_at && <span className="comment-time">{formatRelativeTime(c.replied_at)}</span>}
                         </div>

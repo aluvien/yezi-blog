@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { countApprovedCommentsBulk, getContentMetricsBulk, getSiteSettings, listMoments, listPosts } from "@/lib/db";
-import { site } from "@/lib/site";
+import { getSiteAuthor } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
 import { parsePostTags } from "@/lib/post-tags";
 import { PostEntry } from "@/components/site/PostEntry";
@@ -27,6 +27,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   });
   const moments = listMoments().filter((moment) => !query || includesQuery(moment.content, query));
   const siteSettings = getSiteSettings();
+  const authorName = getSiteAuthor(siteSettings);
   const postCommentCounts = countApprovedCommentsBulk("post", posts.map((post) => post.id));
   const momentCommentCounts = countApprovedCommentsBulk("moment", moments.map((moment) => moment.id));
   const momentMetrics = getContentMetricsBulk("moment", moments.map((moment) => moment.id));
@@ -60,7 +61,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                 moment={result.moment}
                 commentCount={momentCommentCounts.get(result.moment.id) ?? 0}
                 metrics={momentMetrics.get(result.moment.id) ?? emptyMetrics}
-                authorName={site.author}
+                authorName={authorName}
                 authorAvatar={getAuthorAvatar(siteSettings) || undefined}
                 authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"}
               />

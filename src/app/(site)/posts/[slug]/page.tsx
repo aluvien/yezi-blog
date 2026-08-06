@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getContentMetrics, getPostBySlug, getSiteSettings, listRelatedPosts, countApprovedComments, hasLiked } from "@/lib/db";
 import { formatDateOnly } from "@/lib/format";
 import { renderMarkdown, stripMarkdown, extractHeadings } from "@/lib/markdown";
-import { site } from "@/lib/site";
+import { getSiteAuthor } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
 import { getVisitorKeyFromRequest } from "@/lib/request";
 import { CommentSection } from "@/components/site/CommentSection";
@@ -15,6 +15,8 @@ import { TableOfContents } from "@/components/site/TableOfContents";
 import { RelatedPosts } from "@/components/site/RelatedPosts";
 import { parsePostTags } from "@/lib/post-tags";
 import { BackToTopButton } from "@/components/site/BackToTopButton";
+import { ArticleEditZone } from "@/components/site/ArticleEditZone";
+import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const post = getPostBySlug(slug);
   if (!post) return { title: "文章不存在" };
+  const authorName = getSiteAuthor(getSiteSettings());
   const description = stripMarkdown(post.content, 120);
   return {
     title: post.title,
@@ -35,7 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       publishedTime: post.created_at,
       modifiedTime: post.updated_at,
-      authors: [site.author],
+      authors: [authorName],
       ...(post.cover ? { images: [post.cover] } : {}),
     },
   };
@@ -50,13 +53,16 @@ export default async function PostPage({ params }: Props) {
   const headings = extractHeadings(post.content);
   const relatedPosts = listRelatedPosts(post.id, 3);
   const siteSettings = getSiteSettings();
+  const authorName = getSiteAuthor(siteSettings);
   const commentCount = countApprovedComments("post", post.id);
   const tags = parsePostTags(post.tags);
   const articleCategory = post.category || tags[0] || "文章";
   const initialMetrics = getContentMetrics("post", post.id);
   const initialLiked = hasLiked("post", post.id, await getVisitorKeyFromRequest());
+  const isAuthorized = !!(await getSession());
   return (
     <>
+      <ArticleEditZone href={`/admin/posts/${post.id}/edit`} enabled={isAuthorized}>
       <article className="article-shell mx-auto min-h-[70vh] max-w-none pb-6 pt-0 md:pb-8 md:pt-0">
         <header className="mx-auto max-w-[800px]">
           <p className="mb-3 text-[12px] font-medium tracking-[0.12em] text-accent">{articleCategory}</p>
@@ -64,7 +70,7 @@ export default async function PostPage({ params }: Props) {
           <div className="article-meta site-meta mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
             <span>{formatDateOnly(post.created_at)}</span>
             <span className="article-author text-neutral-300">·</span>
-            <span className="article-author font-medium text-wechat-blue">{site.author}</span>
+            <span className="article-author font-medium text-wechat-blue">{authorName}</span>
             <ArticleActionBar commentCount={commentCount} targetId={post.id} initialMetrics={initialMetrics} initialLiked={initialLiked} />
           </div>
         </header>
@@ -79,9 +85,6 @@ export default async function PostPage({ params }: Props) {
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </ArticleImageWrapper>
-
-        {/* 装饰性文末分隔 */}
-        <div className="my-12 text-center text-[13px] tracking-[0.6em] text-neutral-300">• • •</div>
 
         {/* 文章标签：显示在正文底部（需求：不显示在顶部） */}
         {tags.length > 0 && (
@@ -99,7 +102,7 @@ export default async function PostPage({ params }: Props) {
         )}
 
         {/* 作者卡片 */}
-        <AuthorCard avatar={getAuthorAvatar(siteSettings)} avatarNoBorder={siteSettings.author_avatar_no_border === "1"} />
+        <AuthorCard authorName={authorName} avatar={getAuthorAvatar(siteSettings)} avatarNoBorder={siteSettings.author_avatar_no_border === "1"} />
 
         {/* 推荐阅读 */}
         {relatedPosts.length > 0 && siteSettings.show_related_posts !== "0" && (
@@ -110,9 +113,10 @@ export default async function PostPage({ params }: Props) {
 
         {/* 评论区：标题行带“写评论”按钮（与标题同行，不额外占高），表单默认折叠 */}
         <div id="comments" className="article-comments comments-section mx-auto max-w-[800px]">
-          <CommentSection targetType="post" targetId={post.id} commentCount={commentCount} defaultFormCollapsed />
+          <CommentSection targetType="post" targetId={post.id} commentCount={commentCount} defaultFormCollapsed authorName={authorName} />
         </div>
       </article>
+      </ArticleEditZone>
 
       <BackToTopButton />
 
