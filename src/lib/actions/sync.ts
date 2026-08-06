@@ -28,8 +28,18 @@ function runCommand(command: string, args: string[], cwd: string, timeout: numbe
 type Pm2Process = { name?: string; pm2_env?: { pm_cwd?: string } };
 
 function deploymentEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+
+  // 当前 Server Action 运行在 Next standalone 进程中。standalone 会把已经
+  // JSON 序列化的配置写进 __NEXT_PRIVATE_STANDALONE_CONFIG；若子进程继承它，
+  // `next build` 会跳过 next.config.ts，并因函数配置已丢失而构建失败。
+  // 所有 __NEXT_PRIVATE_* 都是当前 Next 进程的内部状态，不应带入新的构建进程。
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("__NEXT_PRIVATE_")) delete env[key];
+  }
+
   return {
-    ...process.env,
+    ...env,
     // 同步按钮不能等待 Git 询问账号密码，否则 Server Action 会一直挂起。
     GIT_TERMINAL_PROMPT: "0",
     PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2",
