@@ -84,6 +84,11 @@ pm2 start ecosystem.config.js   # standalone server，端口 3030
 pm2 save && pm2 startup         # 开机自启
 ```
 
+后台“同步 GitHub”按钮会在服务器项目目录中执行安全的 `git pull --ff-only origin main`，
+同步前自动备份 SQLite，随后构建并重启 `yezi-blog`。它不会执行 `git reset --hard`、`git clean`、
+`rsync --delete` 或复制数据库的操作。生产环境请在 `.env.local` 中配置 `BLOG_DB_PATH` 和 `UPLOAD_DIR`
+的绝对路径，并确保服务器 Git 已配置 GitHub 访问凭证。
+
 Nginx 反向代理示例见 `deploy/nginx.conf.example`（含 `client_max_body_size` 上传大小限制）。上线后记得把 `NEXT_PUBLIC_SITE_URL` 改为正式域名并重新 build。
 
 ### 方式二：Docker（standalone 输出）

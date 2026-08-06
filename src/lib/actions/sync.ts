@@ -26,11 +26,19 @@ function runCommand(command: string, args: string[], cwd: string, timeout: numbe
 
 type Pm2Process = { name?: string; pm2_env?: { pm_cwd?: string } };
 
+function deploymentEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    // 同步按钮不能等待 Git 询问账号密码，否则 Server Action 会一直挂起。
+    GIT_TERMINAL_PROMPT: "0",
+    PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2",
+  };
+}
+
 async function findPm2Name(projectDir: string): Promise<string | null> {
   const configuredName = process.env.DEPLOY_PM2_NAME?.trim();
   if (configuredName) return configuredName;
-  const pm2Env = { ...process.env, PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2" };
-  const result = await runCommand("pm2", ["jlist"], projectDir, 15_000, pm2Env);
+  const result = await runCommand("pm2", ["jlist"], projectDir, 15_000, deploymentEnv());
   const processes = JSON.parse(result.stdout) as Pm2Process[];
   const expectedDir = path.resolve(projectDir);
   const match = processes.find((item) => item.name && item.pm2_env?.pm_cwd && path.resolve(item.pm2_env.pm_cwd) === expectedDir);
@@ -44,52 +52,68 @@ function schedulePm2Restart(projectDir: string, processName: string): void {
     cwd: projectDir,
     detached: true,
     stdio: "ignore",
-    env: { ...process.env, PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2" },
+    env: deploymentEnv(),
   });
   child.unref();
 }
 
-/** 在服务端触发服务器拉取 GitHub main 并部署，避免把 access_key 暴露给浏览器。 */
+async function ensureDeploymentRepository(projectDir: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const root = await runCommand("git", ["rev-parse", "--show-toplevel"], projectDir, 15_000, env);
+  if (path.resolve(root.stdout.trim()) !== path.resolve(projectDir)) {
+    throw new Error(`部署目录不是 Git 仓库根目录：${projectDir}`);
+  }
+
+  const branch = await runCommand("git", ["branch", "--show-current"], projectDir, 15_000, env);
+  if (branch.stdout.trim() !== "main") {
+    throw new Error(`当前分支不是 main：${branch.stdout.trim() || "未知分支"}`);
+  }
+
+  const status = await runCommand("git", ["status", "--porcelain=v1", "--untracked-files=no"], projectDir, 15_000, env);
+  if (status.stdout.trim()) {
+    throw new Error("服务器有未提交的源码改动，已停止同步，避免覆盖本地修改");
+  }
+}
+
+function getDatabasePath(projectDir: string): string {
+  const configuredPath = process.env.BLOG_DB_PATH?.trim();
+  if (process.env.NODE_ENV === "production" && !configuredPath) {
+    throw new Error("生产环境未配置 BLOG_DB_PATH，已停止同步，避免误用其他数据库");
+  }
+  return path.resolve(configuredPath || path.join(projectDir, "data", "blog.db"));
+}
+
+/** 在服务端直接拉取 GitHub main 并部署，不再依赖外部 hook。 */
 export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> {
   await requireAdmin();
 
-  const hookUrl = process.env.GITHUB_SYNC_HOOK_URL?.trim();
-  if (!hookUrl) return { ok: false, error: "未配置 GITHUB_SYNC_HOOK_URL" };
-
   try {
-    const response = await fetch(hookUrl, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
-    });
-    const raw = await response.text();
-    let payload: unknown = null;
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      // hook 返回非 JSON 时按失败处理，并在界面显示状态码。
-    }
+    const projectDir = path.resolve(process.env.DEPLOY_PROJECT_DIR?.trim() || "/www/wwwroot/yezi.me");
+    if (!fs.existsSync(path.join(projectDir, "package.json"))) return { ok: false, error: `部署目录无效：${projectDir}` };
 
-    if (!response.ok) return { ok: false, error: `同步请求失败（HTTP ${response.status}）` };
-    if (payload && typeof payload === "object" && "code" in payload && Number(payload.code) === 1) {
-      const projectDir = process.env.DEPLOY_PROJECT_DIR?.trim() || "/www/wwwroot/yezi.me";
-      if (!fs.existsSync(path.join(projectDir, "package.json"))) return { ok: false, error: `源码已同步，但部署目录无效：${projectDir}` };
+    const env = deploymentEnv();
+    await ensureDeploymentRepository(projectDir, env);
 
-      try {
-        await runCommand("npm", ["run", "build"], projectDir, 180_000);
-        const processName = await findPm2Name(projectDir);
-        if (!processName) return { ok: false, error: "源码已同步并构建成功，但没有找到对应的 PM2 进程" };
-        schedulePm2Restart(projectDir, processName);
-        return { ok: true, message: "同步成功，构建已完成，服务正在重启。" };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "构建或重启失败";
-        return { ok: false, error: `源码已同步，但部署失败：${message}` };
-      }
-    }
+    const databasePath = getDatabasePath(projectDir);
+    if (!fs.existsSync(databasePath)) return { ok: false, error: `数据库不存在，已停止同步：${databasePath}` };
 
-    const message = payload && typeof payload === "object" && "message" in payload ? String(payload.message ?? "") : "";
-    return { ok: false, error: message || "服务器未确认同步成功" };
+    const before = await runCommand("git", ["rev-parse", "--short", "HEAD"], projectDir, 15_000, env);
+    // 先用 SQLite backup API 生成可恢复副本，再拉取代码和构建。
+    await runCommand("npm", ["run", "backup"], projectDir, 60_000, env);
+    await runCommand("git", ["pull", "--ff-only", "origin", "main"], projectDir, 120_000, env);
+    const after = await runCommand("git", ["rev-parse", "--short", "HEAD"], projectDir, 15_000, env);
+
+    await runCommand("npm", ["run", "build"], projectDir, 180_000, env);
+    const processName = await findPm2Name(projectDir);
+    if (!processName) return { ok: false, error: "代码同步并构建成功，但没有找到对应的 PM2 进程" };
+    schedulePm2Restart(projectDir, processName);
+
+    const changed = before.stdout.trim() !== after.stdout.trim();
+    return {
+      ok: true,
+      message: changed ? "GitHub 代码已更新，数据库已备份，构建完成，服务正在重启。" : "代码已经是最新版本，数据库已备份，构建完成，服务正在重启。",
+    };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "网络请求异常";
-    return { ok: false, error: `同步请求失败：${message}` };
+    const message = error instanceof Error ? error.message : "同步或部署异常";
+    return { ok: false, error: `同步失败：${message}` };
   }
 }
