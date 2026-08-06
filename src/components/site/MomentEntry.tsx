@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ContentMetrics, Moment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
 import { formatDateOnly } from "@/lib/format";
@@ -49,6 +49,15 @@ export function MomentEntry({
   const { views, targetRef } = useMomentView(moment.id, metrics?.views ?? 0);
   const displayMetrics = metrics ? { ...metrics, views } : undefined;
 
+  useEffect(() => {
+    if (!touchActive) return;
+    const handleOutsideTouch = (event: TouchEvent) => {
+      if (!targetRef.current?.contains(event.target as Node)) setTouchActive(false);
+    };
+    document.addEventListener("touchstart", handleOutsideTouch, { passive: true });
+    return () => document.removeEventListener("touchstart", handleOutsideTouch);
+  }, [targetRef, touchActive]);
+
   // 编辑态：与"写想法"一致的表单，预填该条内容与图片
   if (editing) {
     return (
@@ -60,8 +69,8 @@ export function MomentEntry({
 
   return (
     <article
-      ref={targetRef}
       id={`moment-${moment.id}`}
+      ref={targetRef}
       className={`moment-entry min-w-0 ${touchActive ? "is-touch-active" : ""}`}
       onTouchStart={() => setTouchActive(true)}
     >

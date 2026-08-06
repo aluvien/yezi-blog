@@ -666,16 +666,24 @@ body {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+  visibility: hidden;
   opacity: 0;
   pointer-events: none;
   transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
-.moment-entry:hover .moment-edit-btn,
 .moment-entry:focus-within .moment-edit-btn,
 .moment-entry.is-touch-active .moment-edit-btn,
 .moment-edit-btn:focus-visible {
+  visibility: visible;
   opacity: 1;
   pointer-events: auto;
+}
+@media (hover: hover) {
+  .moment-entry:hover .moment-edit-btn {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .moment-edit-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
@@ -1234,16 +1242,24 @@ summary {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+  visibility: hidden;
   opacity: 0;
   pointer-events: none;
   transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
-.article-edit-zone:hover .article-edit-btn,
 .article-edit-zone:focus-within .article-edit-btn,
 .article-edit-zone.is-touch-active .article-edit-btn,
 .article-edit-btn:focus-visible {
+  visibility: visible;
   opacity: 1;
   pointer-events: auto;
+}
+@media (hover: hover) {
+  .article-edit-zone:hover .article-edit-btn {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .article-edit-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);

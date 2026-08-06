@@ -1,16 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** 管理员前台编辑入口：悬停或触摸文章区域时显示。 */
 export function ArticleEditZone({ href, enabled, children }: { href: string; enabled: boolean; children: React.ReactNode }) {
   const [touchActive, setTouchActive] = useState(false);
+  const zoneRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!touchActive) return;
+    const handleOutsideTouch = (event: TouchEvent) => {
+      if (!zoneRef.current?.contains(event.target as Node)) setTouchActive(false);
+    };
+    document.addEventListener("touchstart", handleOutsideTouch, { passive: true });
+    return () => document.removeEventListener("touchstart", handleOutsideTouch);
+  }, [touchActive]);
 
   if (!enabled) return <>{children}</>;
 
   return (
     <div
+      ref={zoneRef}
       className={`article-edit-zone ${touchActive ? "is-touch-active" : ""}`}
       onTouchStart={() => setTouchActive(true)}
     >
