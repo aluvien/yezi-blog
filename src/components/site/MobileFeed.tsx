@@ -8,6 +8,7 @@ import { MomentImages } from "@/components/site/MomentImages";
 import { LikeButton } from "@/components/site/LikeButton";
 import { splitMomentContent } from "@/lib/music";
 import { useMomentView } from "@/components/site/MomentViewTracker";
+import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 
 export type FeedItem =
   | { type: "moment"; value: Moment; commentCount: number; metrics: ContentMetrics; initialLiked: boolean }
@@ -19,11 +20,18 @@ function Metric({ type, value, href }: { type: MetricIconType; value: number; hr
   return <span className="mobile-feed-metric">{content}</span>;
 }
 
-function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, authorAvatarNoBorder, initialLiked }: { moment: Moment; commentCount: number; metrics: ContentMetrics; authorName: string; authorAvatar?: string; authorAvatarNoBorder: boolean; initialLiked: boolean }) {
+function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, authorAvatarNoBorder, initialLiked, canEdit }: { moment: Moment; commentCount: number; metrics: ContentMetrics; authorName: string; authorAvatar?: string; authorAvatarNoBorder: boolean; initialLiked: boolean; canEdit: boolean }) {
   const images = parseMomentImages(moment);
   const segments = splitMomentContent(moment.content);
   const { views, targetRef } = useMomentView(moment.id, metrics.views);
   return (
+    <ArticleEditZone
+      href={`/admin/moments/${moment.id}/edit`}
+      enabled={canEdit}
+      zoneClassName="mobile-feed-edit-zone"
+      buttonClassName="mobile-feed-edit-btn"
+      label="编辑想法"
+    >
     <article ref={targetRef} className="mobile-feed-memo">
       <div className="mobile-feed-memo-head">
         <div className={`mobile-feed-avatar ${authorAvatar ? "has-avatar" : ""} ${authorAvatarNoBorder ? "no-border" : ""}`}>
@@ -57,12 +65,19 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
         <Metric type="comment" value={commentCount} href={`/moments#moment-${moment.id}`} />
       </div>
     </article>
+    </ArticleEditZone>
   );
 }
 
-function MobilePost({ post, commentCount, metrics, initialLiked }: { post: Post; commentCount: number; metrics: ContentMetrics; initialLiked: boolean }) {
+function MobilePost({ post, commentCount, metrics, initialLiked, canEdit }: { post: Post; commentCount: number; metrics: ContentMetrics; initialLiked: boolean; canEdit: boolean }) {
   const excerpt = stripMarkdown(post.content, 120);
   return (
+    <ArticleEditZone
+      href={`/admin/posts/${post.id}/edit`}
+      enabled={canEdit}
+      zoneClassName="mobile-feed-edit-zone"
+      buttonClassName="mobile-feed-edit-btn"
+    >
     <article className="mobile-feed-post">
       {post.cover ? (
         <>
@@ -90,16 +105,17 @@ function MobilePost({ post, commentCount, metrics, initialLiked }: { post: Post;
         <Metric type="comment" value={commentCount} href={`/posts/${post.slug}#comments`} />
       </div>
     </article>
+    </ArticleEditZone>
   );
 }
 
-export function MobileFeed({ items, authorName = "", authorAvatar, authorAvatarNoBorder = false }: { items: FeedItem[]; authorName?: string; authorAvatar?: string; authorAvatarNoBorder?: boolean }) {
+export function MobileFeed({ items, authorName = "", authorAvatar, authorAvatarNoBorder = false, canEdit = false }: { items: FeedItem[]; authorName?: string; authorAvatar?: string; authorAvatarNoBorder?: boolean; canEdit?: boolean }) {
   return (
     <div className="mobile-feed">
       {items.map((item) => item.type === "moment" ? (
-        <MobileMemo key={`moment-${item.value.id}`} moment={item.value} commentCount={item.commentCount} metrics={item.metrics} authorName={authorName} authorAvatar={authorAvatar} authorAvatarNoBorder={authorAvatarNoBorder} initialLiked={item.initialLiked} />
+        <MobileMemo key={`moment-${item.value.id}`} moment={item.value} commentCount={item.commentCount} metrics={item.metrics} authorName={authorName} authorAvatar={authorAvatar} authorAvatarNoBorder={authorAvatarNoBorder} initialLiked={item.initialLiked} canEdit={canEdit} />
       ) : (
-        <MobilePost key={`post-${item.value.id}`} post={item.value} commentCount={item.commentCount} metrics={item.metrics} initialLiked={item.initialLiked} />
+        <MobilePost key={`post-${item.value.id}`} post={item.value} commentCount={item.commentCount} metrics={item.metrics} initialLiked={item.initialLiked} canEdit={canEdit} />
       ))}
       <p className="mobile-feed-end">继续向下浏览更早的记录</p>
     </div>

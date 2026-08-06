@@ -74,6 +74,12 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
       </div>
 
+      <div className="rounded-xl border-2 border-accent/25 bg-accent/5 p-4">
+        <label className="mb-1 block text-sm font-semibold text-neutral-800">前台作者名称</label>
+        <input value={values.author_name} onChange={(event) => update("author_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2" placeholder="例如：Yezi" />
+        <p className="mt-1.5 text-xs text-neutral-500">会显示在首页、想法、文章页、评论和作者卡片中；留空时使用默认名称 Yezi。</p>
+      </div>
+
       <div>
         <ImageUpload value={values.site_logo || null} onChange={(path) => update("site_logo", path ?? "")} label="站点 Logo（可选）" contain />
         <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
@@ -90,10 +96,6 @@ export default function SiteSettingsForm({ initialValues }: Props) {
       <div className="space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
         <p className="text-sm font-medium text-neutral-700">个人资料与头像</p>
         <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs text-neutral-600">个人名称</label>
-            <input value={values.author_name} onChange={(event) => update("author_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="Yezi" />
-          </div>
           <div>
             <label className="mb-1 block text-xs text-neutral-600">作者邮箱（用于 Gravatar 默认头像）</label>
             <input value={values.author_email} onChange={(event) => update("author_email", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="you@example.com" />

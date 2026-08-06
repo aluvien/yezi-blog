@@ -4,6 +4,7 @@ import { getSiteAuthor, site } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
 import { getVisitorKeyFromRequest } from "@/lib/request";
 import { MobileFeed, type FeedItem } from "@/components/site/MobileFeed";
+import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export default async function Home() {
   const siteSettings = getSiteSettings();
   const authorName = getSiteAuthor(siteSettings);
   const authorAvatar = getAuthorAvatar(siteSettings) || undefined;
+  const isAuthorized = !!(await getSession());
   const visitorKey = await getVisitorKeyFromRequest();
   const postIds = posts.map((post) => post.id);
   const momentIds = moments.map((moment) => moment.id);
@@ -48,7 +50,7 @@ export default async function Home() {
 
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
-      <MobileFeed items={items} authorName={authorName} authorAvatar={authorAvatar} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} />
+      <MobileFeed items={items} authorName={authorName} authorAvatar={authorAvatar} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} canEdit={isAuthorized} />
     </div>
   );
 }

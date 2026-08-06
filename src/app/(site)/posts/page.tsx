@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { countApprovedCommentsBulk, countPublishedPosts, getSiteSettings, listPosts } from "@/lib/db";
 import { PostEntry } from "@/components/site/PostEntry";
+import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
   const hasMore = total > shown.length;
   // 后台开关：控制"查看更多文章"按钮是否显示
   const showMore = getSiteSettings().show_more_posts !== "0";
+  const isAuthorized = !!(await getSession());
   const commentCounts = countApprovedCommentsBulk("post", shown.map((post) => post.id));
 
   return (
@@ -34,10 +36,10 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
       {shown.length === 0 ? (
         <p className="py-16 text-center text-[14px] text-muted">还没有文章，敬请期待。</p>
       ) : (
-        <div className="divide-y divide-divider">
+        <div>
           {shown.map((post) => (
             <div key={post.id} className="py-6 md:py-7">
-              <PostEntry post={post} commentCount={commentCounts.get(post.id) ?? 0} />
+              <PostEntry post={post} commentCount={commentCounts.get(post.id) ?? 0} canEdit={isAuthorized} />
             </div>
           ))}
         </div>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { countApprovedCommentsBulk, listPostsByTag } from "@/lib/db";
 import { PostEntry } from "@/components/site/PostEntry";
+import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function TagPage({ params }: Props) {
   const tag = decodeTag((await params).tag);
   if (!tag) notFound();
   const posts = listPostsByTag(tag);
+  const isAuthorized = !!(await getSession());
   const commentCounts = countApprovedCommentsBulk("post", posts.map((post) => post.id));
 
   return (
@@ -39,10 +41,10 @@ export default async function TagPage({ params }: Props) {
       {posts.length === 0 ? (
         <p className="py-16 text-center text-[14px] text-muted">这个标签下暂时没有文章。</p>
       ) : (
-        <div className="divide-y divide-divider">
+        <div>
           {posts.map((post) => (
             <div key={post.id} className="py-6 md:py-7">
-              <PostEntry post={post} commentCount={commentCounts.get(post.id) ?? 0} />
+              <PostEntry post={post} commentCount={commentCounts.get(post.id) ?? 0} canEdit={isAuthorized} />
             </div>
           ))}
         </div>

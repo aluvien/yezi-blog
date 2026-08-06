@@ -4,12 +4,14 @@ import { formatDateOnly } from "@/lib/format";
 import { stripMarkdown } from "@/lib/markdown";
 import { parsePostTags } from "@/lib/post-tags";
 import { MetricIcon } from "@/components/site/MetricIcon";
+import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 
 /** 首页时间线中的文章条目 */
-export function PostEntry({ post, commentCount = 0 }: { post: Post; commentCount?: number }) {
+export function PostEntry({ post, commentCount = 0, canEdit = false }: { post: Post; commentCount?: number; canEdit?: boolean }) {
   const excerpt = stripMarkdown(post.content, 110);
   const firstTag = parsePostTags(post.tags)[0];
   return (
+    <ArticleEditZone href={`/admin/posts/${post.id}/edit`} enabled={canEdit}>
     <article>
       <Link href={`/posts/${post.slug}`} className="group block">
         <div className="flex gap-4 md:gap-5">
@@ -43,5 +45,6 @@ export function PostEntry({ post, commentCount = 0 }: { post: Post; commentCount
         </div>
       </Link>
     </article>
+    </ArticleEditZone>
   );
 }
