@@ -11,9 +11,9 @@ export type SyncGithubActionResult =
 
 type CommandResult = { stdout: string; stderr: string };
 
-function runCommand(command: string, args: string[], cwd: string, timeout: number): Promise<CommandResult> {
+function runCommand(command: string, args: string[], cwd: string, timeout: number, env?: NodeJS.ProcessEnv): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { cwd, timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(command, args, { cwd, env, timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
         const detail = String(stderr || stdout || error.message).trim().slice(-500);
         reject(new Error(detail));
@@ -29,7 +29,8 @@ type Pm2Process = { name?: string; pm2_env?: { pm_cwd?: string } };
 async function findPm2Name(projectDir: string): Promise<string | null> {
   const configuredName = process.env.DEPLOY_PM2_NAME?.trim();
   if (configuredName) return configuredName;
-  const result = await runCommand("pm2", ["jlist"], projectDir, 15_000);
+  const pm2Env = { ...process.env, PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2" };
+  const result = await runCommand("pm2", ["jlist"], projectDir, 15_000, pm2Env);
   const processes = JSON.parse(result.stdout) as Pm2Process[];
   const expectedDir = path.resolve(projectDir);
   const match = processes.find((item) => item.name && item.pm2_env?.pm_cwd && path.resolve(item.pm2_env.pm_cwd) === expectedDir);
@@ -43,7 +44,7 @@ function schedulePm2Restart(projectDir: string, processName: string): void {
     cwd: projectDir,
     detached: true,
     stdio: "ignore",
-    env: process.env,
+    env: { ...process.env, PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2" },
   });
   child.unref();
 }
