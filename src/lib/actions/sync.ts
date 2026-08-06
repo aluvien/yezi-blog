@@ -15,7 +15,8 @@ function runCommand(command: string, args: string[], cwd: string, timeout: numbe
   return new Promise((resolve, reject) => {
     execFile(command, args, { cwd, env, timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
-        const detail = String(stderr || stdout || error.message).trim().slice(-500);
+        const rawDetail = String(stderr || stdout || error.message).trim();
+        const detail = rawDetail.length > 1_400 ? `${rawDetail.slice(0, 700)}\n…\n${rawDetail.slice(-700)}` : rawDetail;
         reject(new Error(detail));
         return;
       }
@@ -102,7 +103,10 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
     await runCommand("git", ["pull", "--ff-only", "origin", "main"], projectDir, 120_000, env);
     const after = await runCommand("git", ["rev-parse", "--short", "HEAD"], projectDir, 15_000, env);
 
-    await runCommand("npm", ["run", "build"], projectDir, 180_000, env);
+    // 以 package-lock.json 为准重装依赖，避免服务器残留旧版 Next/插件导致构建出现
+    // “generate is not a function”这类本地构建无法复现的错误。npm ci 不会触碰 data/。
+    await runCommand("npm", ["ci", "--no-audit", "--no-fund"], projectDir, 300_000, env);
+    await runCommand("npm", ["run", "build"], projectDir, 300_000, env);
     const processName = await findPm2Name(projectDir);
     if (!processName) return { ok: false, error: "代码同步并构建成功，但没有找到对应的 PM2 进程" };
     schedulePm2Restart(projectDir, processName);
