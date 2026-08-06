@@ -58,8 +58,13 @@ export default function SiteSettingsForm({ initialValues }: Props) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-5 shadow-sm sm:p-7">
-      <div className="grid gap-4 md:grid-cols-3">
+    <form onSubmit={submit} className="space-y-6">
+      <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-neutral-800">站点信息</h2>
+          <p className="mt-1 text-xs text-neutral-500">设置网站名称、副标题和页脚显示内容。</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">站点名称</label>
           <input value={values.site_name} onChange={(event) => update("site_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="Yezi's Blog" />
@@ -72,52 +77,63 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           <label className="mb-1 block text-sm font-medium text-neutral-700">页脚文案</label>
           <input value={values.footer_text} onChange={(event) => update("footer_text", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="认真写字，也认真生活。" />
         </div>
-      </div>
-
-      <div className="rounded-xl border-2 border-accent/25 bg-accent/5 p-4">
-        <label className="mb-1 block text-sm font-semibold text-neutral-800">前台作者名称</label>
-        <input value={values.author_name} onChange={(event) => update("author_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2" placeholder="例如：Yezi" />
-        <p className="mt-1.5 text-xs text-neutral-500">会显示在首页、想法、文章页、评论和作者卡片中；留空时使用默认名称 Yezi。</p>
-      </div>
-
-      <div>
-        <ImageUpload value={values.site_logo || null} onChange={(path) => update("site_logo", path ?? "")} label="站点 Logo（可选）" contain />
-        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
-          <input
-            type="checkbox"
-            checked={values.site_logo_no_border === "1"}
-            onChange={(event) => update("site_logo_no_border", event.target.checked ? "1" : "0")}
-            className="h-3.5 w-3.5 accent-neutral-700"
-          />
-          隐藏 Logo 图片边框
-        </label>
-      </div>
-
-      <div className="space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="text-sm font-medium text-neutral-700">个人资料与头像</p>
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs text-neutral-600">作者邮箱（用于 Gravatar 默认头像）</label>
-            <input value={values.author_email} onChange={(event) => update("author_email", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="you@example.com" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-neutral-600">Gravatar 镜像地址（留空用官方）</label>
-            <input value={values.gravatar_mirror} onChange={(event) => update("gravatar_mirror", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="https://secure.gravatar.com" />
-          </div>
         </div>
-        <ImageUpload value={values.author_avatar || null} onChange={(path) => update("author_avatar", path ?? "")} label="自定义头像（上传后优先于 Gravatar）" />
-        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
-          <input
-            type="checkbox"
-            checked={values.author_avatar_no_border === "1"}
-            onChange={(event) => update("author_avatar_no_border", event.target.checked ? "1" : "0")}
-            className="h-3.5 w-3.5 accent-neutral-700"
-          />
-          隐藏头像图片边框
-        </label>
-      </div>
+      </section>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-neutral-800">个人资料与品牌</h2>
+          <p className="mt-1 text-xs text-neutral-500">这些内容会显示在前台页头、想法、文章和作者卡片中。</p>
+        </div>
+        <div className="rounded-xl border-2 border-accent/25 bg-accent/5 p-4">
+          <label className="mb-1 block text-sm font-semibold text-neutral-800">前台作者名称</label>
+          <input value={values.author_name} onChange={(event) => update("author_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2" placeholder="例如：Yezi" />
+          <p className="mt-1.5 text-xs text-neutral-500">会显示在首页、想法、文章页、评论和作者卡片中；留空时使用默认名称 Yezi。</p>
+        </div>
+        <div className="mt-5">
+          <ImageUpload value={values.site_logo || null} onChange={(path) => update("site_logo", path ?? "")} label="站点 Logo（可选）" contain />
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
+            <input
+              type="checkbox"
+              checked={values.site_logo_no_border === "1"}
+              onChange={(event) => update("site_logo_no_border", event.target.checked ? "1" : "0")}
+              className="h-3.5 w-3.5 accent-neutral-700"
+            />
+            隐藏 Logo 图片边框
+          </label>
+        </div>
+
+        <div className="mt-5 space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+          <p className="text-sm font-medium text-neutral-700">头像与 Gravatar</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-neutral-600">作者邮箱（用于 Gravatar 默认头像）</label>
+              <input value={values.author_email} onChange={(event) => update("author_email", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="you@example.com" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-neutral-600">Gravatar 镜像地址（留空用官方）</label>
+              <input value={values.gravatar_mirror} onChange={(event) => update("gravatar_mirror", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="https://secure.gravatar.com" />
+            </div>
+          </div>
+          <ImageUpload value={values.author_avatar || null} onChange={(path) => update("author_avatar", path ?? "")} label="自定义头像（上传后优先于 Gravatar）" />
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
+            <input
+              type="checkbox"
+              checked={values.author_avatar_no_border === "1"}
+              onChange={(event) => update("author_avatar_no_border", event.target.checked ? "1" : "0")}
+              className="h-3.5 w-3.5 accent-neutral-700"
+            />
+            隐藏头像图片边框
+          </label>
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-neutral-800">社交与关于</h2>
+          <p className="mt-1 text-xs text-neutral-500">配置个人链接和关于页的 Markdown 内容。</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">社交链接（每行：名称 | URL）</label>
           <textarea value={values.social_links} onChange={(event) => update("social_links", event.target.value)} rows={5} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="GitHub | https://github.com/..." />
@@ -126,15 +142,21 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           <label className="mb-1 block text-sm font-medium text-neutral-700">关于页内容（Markdown，留空用默认）</label>
           <textarea value={values.about_content} onChange={(event) => update("about_content", event.target.value)} rows={5} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm leading-6" placeholder="支持 Markdown 语法，留空显示默认关于页。" />
         </div>
-      </div>
+        </div>
+      </section>
 
-      <div>
+      <section className="space-y-5 rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+        <div>
+          <h2 className="text-base font-semibold text-neutral-800">音乐设置</h2>
+          <p className="mt-1 text-xs text-neutral-500">配置音乐接口、默认歌单和前台播放器入口。</p>
+        </div>
+        <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">音乐 API 地址（留空用默认）</label>
         <input value={values.meting_api} onChange={(event) => update("meting_api", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="https://api.injahow.cn/meting/" />
         <p className="mt-1 text-xs text-neutral-400">用于文章/想法内嵌音乐。默认公共接口可能不稳定，建议自建 Meting API 或换镜像。</p>
-      </div>
+        </div>
 
-      <div>
+        <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">默认音乐列表（形如 netease:数字:playlist，留空不预置）</label>
         <input value={values.default_music} onChange={(event) => update("default_music", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="netease:7785232779:playlist" />
         <p className="mt-1 text-xs text-neutral-400">格式 <code>server:id:type</code>（server: netease/qq/kugou/kuwo/xiami/baidu；type: song/playlist/album/search）。也可在末尾加 <code>:random</code>。全站加载后作为全局播放器的基础列表，页面点选的音乐追加其后。</p>
@@ -147,9 +169,9 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           />
           随机播放默认歌单
         </label>
-      </div>
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
         <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
           <input
             type="checkbox"
@@ -175,7 +197,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           </div>
         </div>
         <p className="text-xs text-neutral-400 md:col-span-2">关闭图标按钮后，播放器仍可由文章音乐触发；选择“底部展开播放器”时不显示悬浮图标，播放器面板会固定展开在页面底部。</p>
-      </div>
+        </div>
+      </section>
 
       <fieldset className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
         <legend className="px-1 text-sm font-medium text-neutral-700">外观主题</legend>

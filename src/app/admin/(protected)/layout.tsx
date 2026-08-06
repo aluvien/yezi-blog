@@ -3,7 +3,6 @@ import { requireAdmin } from "@/lib/auth";
 import { countPendingComments } from "@/lib/db";
 import LogoutButton from "@/components/admin/LogoutButton";
 import { AdminNav } from "@/components/admin/AdminNav";
-import SyncGithubButton from "@/components/admin/SyncGithubButton";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +16,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="mx-auto flex min-h-14 max-w-[1280px] items-center gap-2 px-3 sm:px-6 lg:px-8">
           <AdminNav pendingCount={pendingCount} />
           <div className="flex shrink-0 items-center gap-3">
-            <SyncGithubButton />
             <Link href="/" target="_blank" rel="noopener noreferrer" className="text-sm text-neutral-500 transition-colors hover:text-neutral-900">网站</Link>
             <LogoutButton />
           </div>
