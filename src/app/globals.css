@@ -1911,8 +1911,8 @@ textarea.comment-field {
   }
 
   .article-toc-mobile-marker.is-active {
-    background: rgb(7 193 96 / 8%);
-    color: var(--foreground);
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+    color: var(--accent-strong);
     font-weight: 600;
   }
 
@@ -1922,7 +1922,7 @@ textarea.comment-field {
     height: 2px;
     flex: 0 0 auto;
     border-radius: 999px 0 0 999px;
-    background: #d3d6d9;
+    background: var(--divider-strong);
   }
 
   .article-toc-mobile-marker-level-2 .article-toc-mobile-line {
@@ -1931,7 +1931,7 @@ textarea.comment-field {
 
   .article-toc-mobile-marker.is-active .article-toc-mobile-line {
     width: 1.6rem;
-    background: var(--foreground);
+    background: var(--accent);
   }
 }
 
