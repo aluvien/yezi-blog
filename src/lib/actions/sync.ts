@@ -105,7 +105,7 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
 
     // 以 package-lock.json 为准重装依赖，避免服务器残留旧版 Next/插件导致构建出现
     // “generate is not a function”这类本地构建无法复现的错误。npm ci 不会触碰 data/。
-    await runCommand("npm", ["ci", "--no-audit", "--no-fund"], projectDir, 300_000, env);
+    await runCommand("npm", ["ci", "--include=dev", "--no-audit", "--no-fund"], projectDir, 300_000, env);
     await runCommand("npm", ["run", "build"], projectDir, 300_000, env);
     const processName = await findPm2Name(projectDir);
     if (!processName) return { ok: false, error: "代码同步并构建成功，但没有找到对应的 PM2 进程" };
