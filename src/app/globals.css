@@ -2262,11 +2262,29 @@ textarea.comment-field {
   width: 22px;
   height: 22px;
 }
+.global-player-float-cover,
+.global-player-float-fallback {
+  display: block;
+  width: 46px;
+  height: 46px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px;
+}
+.global-player-float-cover {
+  object-fit: cover;
+}
+.global-player-float-fallback {
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 12%, var(--paper));
+  color: var(--accent);
+}
 .global-player-float:hover {
   color: var(--accent-strong);
   transform: translateY(-2px);
 }
-.global-player-float.is-playing .global-player-float-icon {
+.global-player-float.is-playing .global-player-float-cover {
   animation: global-player-spin 3.2s linear infinite;
 }
 @keyframes global-player-spin {

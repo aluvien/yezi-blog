@@ -33,9 +33,11 @@ export function GlobalMusicPlayer({
   const [open, setOpen] = useState(false);
   const [hasTracks, setHasTracks] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef(metingApi);
   const playerRef = useRef<APlayerInstance | null>(null);
+  const currentTrackRef = useRef<MusicTrack | null>(null);
   // 默认歌单未就绪前的页面点选先入队，默认列表加载完成后再追加，保证其始终位于队列前部。
   const readyRef = useRef(false);
   const pendingRef = useRef<Array<{ tracks: MusicTrack[]; cardId?: string | null }>>([]);
@@ -58,6 +60,12 @@ export function GlobalMusicPlayer({
     // ref 在 effect 生命周期内不会变，取局部引用避免 effect cleanup 依赖过期的 ref 读取
     const ownerMap = ownerMapRef.current;
     const trackIndex = trackIndexRef.current;
+    const trackMap = new Map<string, MusicTrack>();
+
+    function updateCurrentTrack(track: MusicTrack | null): void {
+      currentTrackRef.current = track;
+      setCurrentTrack(track);
+    }
 
     function trackKey(track: { key?: string; url: string; name: string; artist?: string }): string {
       return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist ?? ""}`;
@@ -65,6 +73,8 @@ export function GlobalMusicPlayer({
 
     function emitPlayerState(player: APlayerInstance, playing: boolean, cardId: string | null, index = player.list.index): void {
       const track = player.list.audios[index];
+      const normalizedTrack = track ? trackMap.get(trackKey(track)) ?? null : null;
+      if (normalizedTrack) updateCurrentTrack(normalizedTrack);
       emitGlobalPlaybackState({
         playing,
         cardId,
@@ -79,6 +89,7 @@ export function GlobalMusicPlayer({
       const uniqueTracks: MusicTrack[] = [];
       for (const track of tracks) {
         const key = trackKey(track);
+        trackMap.set(key, track);
         const existingIndex = trackIndex.get(key);
         if (existingIndex !== undefined) {
           ownerMap.set(existingIndex, owner);
@@ -92,6 +103,7 @@ export function GlobalMusicPlayer({
       if (uniqueTracks.length > 0) {
         player.list.add(uniqueTracks);
         setHasTracks(true);
+        if (!currentTrackRef.current) updateCurrentTrack(uniqueTracks[0]);
       }
     }
 
@@ -103,6 +115,7 @@ export function GlobalMusicPlayer({
       const uniqueTracks: MusicTrack[] = [];
       for (const track of tracks) {
         const key = trackKey(track);
+        trackMap.set(key, track);
         const existingIndex = trackIndex.get(key);
         if (existingIndex !== undefined) {
           ownerMap.set(existingIndex, cardId);
@@ -177,7 +190,8 @@ export function GlobalMusicPlayer({
         });
         player.on("ended", () => {
           setPlaying(false);
-          emitGlobalPlaybackState({ playing: false, cardId: null, trackKey: null, currentTime: 0 });
+          currentCardIdRef.current = null;
+          emitPlayerState(player, false, null);
         });
         player.on("timeupdate", () => {
           emitPlayerState(player, !player.paused, currentCardIdRef.current);
@@ -232,6 +246,8 @@ export function GlobalMusicPlayer({
       playerRef.current = null;
       ownerMap.clear();
       trackIndex.clear();
+      trackMap.clear();
+      currentTrackRef.current = null;
       emitGlobalPlaybackState({ playing: false, cardId: null, trackKey: null, currentTime: 0 });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -249,14 +265,21 @@ export function GlobalMusicPlayer({
         <button
           type="button"
           className={`global-player-float ${open ? "is-open" : ""} ${playing ? "is-playing" : ""} ${playerPosition === "right" ? "is-right" : ""}`}
-          aria-label={open ? "收起播放器" : "展开播放器"}
+          aria-label={open ? "收起播放器" : currentTrack ? `${playing ? "正在播放" : "播放"}：${currentTrack.name}` : "展开播放器"}
+          title={open ? "收起播放器" : currentTrack?.name || "展开播放器"}
           aria-expanded={panelOpen}
           onClick={() => setOpen((value) => !value)}
         >
-          <svg className="global-player-float-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M9 18.5a2.5 2.5 0 1 1-2.5-2.5A2.5 2.5 0 0 1 9 18.5z" />
-            <path d="M12.5 3.5v13.1a3.9 3.9 0 1 1-1.5-3.1V7.2l8-1.8v6.1a3.9 3.9 0 1 1-1.5-3.1V5.5l-5 1.1z" />
-          </svg>
+          {currentTrack?.cover ? (
+            <img className="global-player-float-cover" src={currentTrack.cover} alt="" />
+          ) : (
+            <span className="global-player-float-fallback" aria-hidden="true">
+              <svg className="global-player-float-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 18.5a2.5 2.5 0 1 1-2.5-2.5A2.5 2.5 0 0 1 9 18.5z" />
+                <path d="M12.5 3.5v13.1a3.9 3.9 0 1 1-1.5-3.1V7.2l8-1.8v6.1a3.9 3.9 0 1 1-1.5-3.1V5.5l-5 1.1z" />
+              </svg>
+            </span>
+          )}
         </button>
       )}
 
