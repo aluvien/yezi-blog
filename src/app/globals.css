@@ -2251,18 +2251,19 @@ textarea.comment-field {
   height: 48px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--divider);
+  border: 0;
   border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
-  transition: opacity 200ms ease, transform 200ms ease, background-color 160ms ease;
+  background: transparent;
+  color: var(--accent);
+  box-shadow: none;
+  transition: opacity 200ms ease, transform 200ms ease, color 160ms ease;
 }
 .global-player-float-icon {
   width: 22px;
   height: 22px;
 }
 .global-player-float:hover {
+  color: var(--accent-strong);
   transform: translateY(-2px);
 }
 .global-player-float.is-playing .global-player-float-icon {

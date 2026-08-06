@@ -159,14 +159,21 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           />
           显示音乐图标按钮
         </label>
-        <label className="text-sm text-neutral-700">
-          音乐图标/播放器位置
-          <select value={values.music_position} onChange={(event) => update("music_position", event.target.value)} className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm">
-            <option value="left">左下角</option>
-            <option value="right">右下角</option>
-            <option value="bottom">底部展开播放器</option>
-          </select>
-        </label>
+        <div className="text-sm text-neutral-700">
+          <p>音乐图标/播放器位置</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {[
+              ["left", "左下角"],
+              ["right", "右下角"],
+              ["bottom", "底部展开播放器"],
+            ].map(([value, label]) => (
+              <label key={value} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${values.music_position === value ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
+                <input type="radio" name="music-position" value={value} checked={values.music_position === value} onChange={(event) => update("music_position", event.target.value)} className="h-3.5 w-3.5 accent-current" />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
         <p className="text-xs text-neutral-400 md:col-span-2">关闭图标按钮后，播放器仍可由文章音乐触发；选择“底部展开播放器”时不显示悬浮图标，播放器面板会固定展开在页面底部。</p>
       </div>
 

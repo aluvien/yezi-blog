@@ -73,6 +73,7 @@ export default function PostForm({ post, initialAttachments = [], categories = [
   const markdownImageInputRef = useRef<HTMLInputElement>(null);
   const selectionRef = useRef<TextRange | null>(null);
   const dialogRangeRef = useRef<TextRange | null>(null);
+  const selectedTags = parsePostTags(tags);
 
   function submit() {
     setError("");
@@ -88,10 +89,10 @@ export default function PostForm({ post, initialAttachments = [], categories = [
     });
   }
 
-  function addTag(tag: string) {
+  function toggleTag(tag: string) {
     const current = parsePostTags(tags);
-    if (current.some((t) => t.toLowerCase() === tag.toLowerCase())) return;
-    setTags([...current, tag].join(", "));
+    const exists = current.some((t) => t.toLowerCase() === tag.toLowerCase());
+    setTags((exists ? current.filter((t) => t.toLowerCase() !== tag.toLowerCase()) : [...current, tag]).join(", "));
   }
 
   function rememberSelection(textarea = textareaRef.current) {
@@ -474,39 +475,36 @@ export default function PostForm({ post, initialAttachments = [], categories = [
         </section>
 
         <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
-          <label className="mb-1 block text-sm font-medium text-neutral-700">分类</label>
-          <input
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            list="post-categories"
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
-            placeholder="例如：技术、随笔"
-          />
-          <datalist id="post-categories">
-            {categories.map((c) => <option key={c} value={c} />)}
-          </datalist>
-          <p className="mt-1 text-xs text-neutral-400">用于分类索引，可在分类管理中维护。</p>
+          <p className="text-sm font-medium text-neutral-700">分类</p>
+          <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="选择分类">
+            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${category === "" ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
+              <input type="radio" name="post-category" value="" checked={category === ""} onChange={() => setCategory("")} className="h-3.5 w-3.5 accent-current" />
+              未分类
+            </label>
+            {categories.map((c) => (
+              <label key={c} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${category === c ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
+                <input type="radio" name="post-category" value={c} checked={category === c} onChange={() => setCategory(c)} className="h-3.5 w-3.5 accent-current" />
+                {c}
+              </label>
+            ))}
+          </div>
+          <input value={category} onChange={(e) => setCategory(e.target.value)} className="mt-3 w-full rounded-lg border border-neutral-300 px-3 py-2 text-base" placeholder="也可直接填写新分类" />
+          <p className="mt-1 text-xs text-neutral-400">单选一个分类；分类选项来自分类管理，也可以直接填写新分类。</p>
         </section>
 
         <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
-          <label className="mb-1 block text-sm font-medium text-neutral-700">标签</label>
-          <input
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            list="post-tags"
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
-            placeholder="Next.js, 设计, 随笔"
-          />
-          <datalist id="post-tags">
-            {usedTags.map(({ tag }) => <option key={tag} value={tag} />)}
-          </datalist>
+          <p className="text-sm font-medium text-neutral-700">标签</p>
           {usedTags.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="选择标签">
               {usedTags.slice(0, 20).map(({ tag, count }) => (
-                <button type="button" key={tag} onClick={() => addTag(tag)} className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-200">#{tag}<sup>{count}</sup></button>
+                <label key={tag} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${selectedTags.some((selected) => selected.toLowerCase() === tag.toLowerCase()) ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
+                  <input type="checkbox" checked={selectedTags.some((selected) => selected.toLowerCase() === tag.toLowerCase())} onChange={() => toggleTag(tag)} className="h-3.5 w-3.5 rounded accent-current" />
+                  #{tag}<sup>{count}</sup>
+                </label>
               ))}
             </div>
           )}
+          <input value={tags} onChange={(e) => setTags(e.target.value)} className="mt-3 w-full rounded-lg border border-neutral-300 px-3 py-2 text-base" placeholder="也可直接填写，逗号分隔" />
           <p className="mt-1 text-xs text-neutral-400">用逗号分隔，最多保存 12 个标签。</p>
         </section>
 
