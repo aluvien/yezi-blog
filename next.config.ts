@@ -6,6 +6,8 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // 显式提供构建 ID 生成器，避免服务器上的 Next 配置缓存/加载差异把默认值解析成非函数。
+  generateBuildId: async () => null,
   serverExternalPackages: ["better-sqlite3"],
   // 反代（nginx/tunnel）转发时 Host 可能变成 127.0.0.1，导致 Next 的
   // Server Actions 同源校验（origin vs host）失败、后台所有保存操作报
