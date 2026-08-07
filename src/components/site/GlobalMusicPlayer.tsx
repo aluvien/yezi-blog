@@ -481,10 +481,19 @@ export function GlobalMusicPlayer({
 
   function startPanelDrag(event: ReactPointerEvent<HTMLDivElement>): void {
     if (!panelOpen || playerPosition === "bottom" || !event.isPrimary || event.button !== 0) return;
-    revealCollapseHint();
     const target = event.target instanceof Element ? event.target : null;
-    // 歌曲列表继续保持原生纵向滚动；控制卡片和顶部把手负责下滑收起。
-    if (!target?.closest(".aplayer-body, .global-player-collapse")) return;
+    const collapseHandle = target?.closest(".global-player-collapse");
+    const playerBody = target?.closest(".aplayer-body");
+    // 列表和播放控件必须保留完整的原生点击/滚动事件，父级既不更新状态也不捕获指针。
+    // 下滑收起只由顶部把手，以及控制卡片内的封面、歌名等非交互区域触发。
+    if (!collapseHandle && !playerBody) return;
+    if (
+      !collapseHandle &&
+      target?.closest(".aplayer-controller, .aplayer-icon, button, a, input, select, textarea, [role='button']")
+    ) {
+      return;
+    }
+    revealCollapseHint();
     panelDragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
