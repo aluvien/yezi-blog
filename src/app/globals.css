@@ -2442,13 +2442,13 @@ textarea.comment-field {
  * 的变量，避免版式主题和明暗、颜色设置互相覆盖。
  * ========================================================= */
 [data-layout-theme="editorial"] {
-  --editorial-header: #fbf8f5;
+  --editorial-header: var(--paper);
   --editorial-accent: #c56845;
   --editorial-cover: #f3faf8;
 }
 
 [data-layout-theme="editorial"][data-theme="dark"] {
-  --editorial-header: color-mix(in srgb, var(--paper) 92%, var(--accent));
+  --editorial-header: var(--paper);
   --editorial-cover: var(--soft);
 }
 
