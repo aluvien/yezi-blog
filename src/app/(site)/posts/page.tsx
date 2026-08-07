@@ -49,7 +49,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
         <div className="border-t border-divider py-5 text-center">
           <Link
             href={`/posts?page=${current + 1}`}
-            className="inline-flex rounded-full border border-neutral-200 px-6 py-2 text-[13px] text-foreground/65 transition-colors hover:border-accent hover:text-accent"
+            className="inline-flex rounded-full border border-divider px-6 py-2 text-[13px] text-foreground/65 transition-colors hover:border-accent hover:text-accent"
           >
             查看更多文章
           </Link>
