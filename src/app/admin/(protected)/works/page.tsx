@@ -38,7 +38,7 @@ export default function AdminWorksPage() {
                 {work.link && ` · ${work.link}`}
               </p>
             </div>
-            <div className="ml-[4.25rem] flex shrink-0 flex-wrap gap-x-4 gap-y-2 sm:ml-auto">
+            <div className="basis-full flex shrink-0 flex-wrap gap-x-4 gap-y-2 border-t border-neutral-100 pl-[4.25rem] pt-3">
               {work.link && <a href={work.link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 underline">查看</a>}
               <Link href={`/admin/works/${work.id}/edit`} className="text-sm text-neutral-700 underline">
                 编辑

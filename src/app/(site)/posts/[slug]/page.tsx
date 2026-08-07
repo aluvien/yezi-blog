@@ -62,7 +62,11 @@ export default async function PostPage({ params }: Props) {
   const isAuthorized = !!(await getSession());
   return (
     <>
-      <ArticleEditZone href={`/admin/posts/${post.id}/edit`} enabled={isAuthorized}>
+      <ArticleEditZone
+        href={`/admin/posts/${post.id}/edit`}
+        enabled={isAuthorized}
+        zoneClassName="article-edit-zone article-detail-edit-zone"
+      >
       <article className="article-shell mx-auto min-h-[70vh] max-w-none pb-6 pt-0 md:pb-8 md:pt-0">
         <header className="mx-auto max-w-[800px]">
           <p className="mb-3 text-[12px] font-medium tracking-[0.12em] text-accent">{articleCategory}</p>

@@ -215,6 +215,45 @@
   box-sizing: border-box;
 }
 
+/* 后台顶部导航：手机端让全部菜单自动换行，避免低频菜单被横向裁掉。 */
+@media (max-width: 699px) {
+  .admin-header-inner {
+    gap: 6px;
+    flex-wrap: nowrap;
+    padding-right: 10px;
+    padding-left: 10px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .admin-nav {
+    gap: 4px;
+    overflow: visible;
+  }
+
+  .admin-header-actions {
+    align-self: center;
+    gap: 0;
+  }
+
+  .admin-header-divider {
+    margin-right: 2px;
+  }
+
+  .admin-site-link {
+    white-space: nowrap;
+  }
+
+  .admin-nav-link {
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  .admin-attachments-link {
+    display: none;
+  }
+}
+
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 5rem;
@@ -2498,11 +2537,17 @@ textarea.comment-field {
 
 [data-layout-theme="editorial"] .site-search-trigger,
 [data-layout-theme="editorial"] .site-menu-trigger {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: 0;
   border-radius: 999px;
   color: var(--foreground);
+}
+
+[data-layout-theme="editorial"] .site-search-trigger svg,
+[data-layout-theme="editorial"] .site-menu-trigger svg {
+  width: 20px;
+  height: 20px;
 }
 
 [data-layout-theme="editorial"] .site-theme-toggle {
@@ -2525,6 +2570,16 @@ textarea.comment-field {
   border-color: color-mix(in srgb, var(--editorial-accent) 45%, transparent);
   background: color-mix(in srgb, var(--editorial-accent) 7%, transparent);
   color: var(--editorial-accent);
+}
+
+/* 编辑版文章入口：按钮与标题行垂直居中，避免贴在文章区域最上沿。 */
+[data-layout-theme="editorial"] .post-entry-edit-zone .article-edit-btn {
+  top: 2px;
+}
+
+[data-layout-theme="editorial"] .post-entry-edit-zone.has-post-tag .article-edit-btn,
+[data-layout-theme="editorial"] .article-detail-edit-zone .article-edit-btn {
+  top: 30px;
 }
 
 [data-layout-theme="editorial"] .site-list-heading,

@@ -60,6 +60,7 @@ function createDb(): Database.Database {
       website TEXT,
       content TEXT NOT NULL,
       ip TEXT NOT NULL DEFAULT '',
+      ip_address TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved')),
       created_at TEXT NOT NULL
     );
@@ -133,6 +134,7 @@ function createDb(): Database.Database {
       ensureColumn("comments", "admin_reply", "TEXT");
       ensureColumn("comments", "replied_at", "TEXT");
       ensureColumn("comments", "website", "TEXT");
+      ensureColumn("comments", "ip_address", "TEXT NOT NULL DEFAULT ''");
       db.prepare("UPDATE moments SET updated_at = created_at WHERE updated_at IS NULL").run();
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_status_time ON posts (status, created_at DESC)");
 
@@ -212,6 +214,7 @@ export interface Comment {
   website: string | null;
   content: string;
   ip: string;
+  ip_address: string;
   status: "pending" | "approved";
   created_at: string;
   admin_reply: string | null;
@@ -541,14 +544,32 @@ export function createCategory(name: string): Category | undefined {
   return db.prepare("SELECT * FROM categories WHERE id = ? OR name = ?").get(Number(info.lastInsertRowid), normalized) as Category | undefined;
 }
 
-function ensureUniqueCategorySlug(name: string): string {
-  // 注意：无 excludeId 参数，分类目前不可改名（仅创建/删除），重名分类改名会冲突。
-  // 若未来支持分类改名，需要像 ensureUniqueSlug 那样传入排除 id。
+export function updateCategory(id: number, name: string): Category | undefined {
+  const current = db.prepare("SELECT * FROM categories WHERE id = ?").get(id) as Category | undefined;
+  const normalized = name.trim().slice(0, 80);
+  if (!current || !normalized) return undefined;
+  const duplicate = db.prepare("SELECT id FROM categories WHERE name = ? AND id != ?").get(normalized, id) as { id: number } | undefined;
+  if (duplicate) return undefined;
+
+  const slug = ensureUniqueCategorySlug(normalized, id);
+  const timestamp = now();
+  const transaction = db.transaction(() => {
+    db.prepare("UPDATE categories SET name = ?, slug = ? WHERE id = ?").run(normalized, slug, id);
+    db.prepare("UPDATE posts SET category = ?, updated_at = ? WHERE category = ?").run(normalized, timestamp, current.name);
+  });
+  transaction();
+  return db.prepare("SELECT * FROM categories WHERE id = ?").get(id) as Category | undefined;
+}
+
+function ensureUniqueCategorySlug(name: string, excludeId?: number): string {
   const base = slugify(name) || `category-${Date.now().toString(36)}`;
   let slug = base;
   let suffix = 2;
-  while (db.prepare("SELECT id FROM categories WHERE slug = ?").get(slug)) slug = `${base}-${suffix++}`;
-  return slug;
+  while (true) {
+    const row = db.prepare("SELECT id FROM categories WHERE slug = ?").get(slug) as { id: number } | undefined;
+    if (!row || row.id === excludeId) return slug;
+    slug = `${base}-${suffix++}`;
+  }
 }
 
 export function deleteCategory(id: number): void {
@@ -798,6 +819,61 @@ export function listAllTags(): Array<{ tag: string; count: number }> {
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "zh-CN"));
 }
 
+function canonicalTagName(value: string): string {
+  return value.trim().replace(/^#+/, "").slice(0, 80);
+}
+
+function normalizeUniqueTags(tags: string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const tag of normalizePostTags(tags)) {
+    const key = tag.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(tag);
+  }
+  return result;
+}
+
+export function renameTag(oldTag: string, newTag: string): boolean {
+  const from = canonicalTagName(oldTag);
+  const to = canonicalTagName(newTag);
+  if (!from || !to) return false;
+  const fromKey = from.toLocaleLowerCase();
+  const timestamp = now();
+  const posts = db.prepare("SELECT id, tags FROM posts").all() as Array<{ id: number; tags: string }>;
+  const update = db.prepare("UPDATE posts SET tags = ?, updated_at = ? WHERE id = ?");
+  const transaction = db.transaction(() => {
+    for (const post of posts) {
+      const nextTags = normalizeUniqueTags(parsePostTags(post.tags).map((tag) => tag.toLocaleLowerCase() === fromKey ? to : tag));
+      if (JSON.stringify(nextTags) !== JSON.stringify(parsePostTags(post.tags))) {
+        update.run(JSON.stringify(nextTags), timestamp, post.id);
+      }
+    }
+  });
+  transaction();
+  return true;
+}
+
+export function deleteTag(tag: string): boolean {
+  const target = canonicalTagName(tag);
+  if (!target) return false;
+  const targetKey = target.toLocaleLowerCase();
+  const timestamp = now();
+  const posts = db.prepare("SELECT id, tags FROM posts").all() as Array<{ id: number; tags: string }>;
+  const update = db.prepare("UPDATE posts SET tags = ?, updated_at = ? WHERE id = ?");
+  const transaction = db.transaction(() => {
+    for (const post of posts) {
+      const nextTags = normalizeUniqueTags(parsePostTags(post.tags).filter((item) => item.toLocaleLowerCase() !== targetKey));
+      if (JSON.stringify(nextTags) !== JSON.stringify(parsePostTags(post.tags))) {
+        update.run(JSON.stringify(nextTags), timestamp, post.id);
+      }
+    }
+  });
+  transaction();
+  return true;
+}
+
 /** 已发布文章的标签聚合（按计数降序，最多 limit 个），供前台侧栏与移动菜单共用。 */
 export function listPublishedTags(limit = 12): Array<{ tag: string; count: number }> {
   const counts = new Map<string, number>();
@@ -875,9 +951,9 @@ export function createComment(data: {
 }): Comment {
   const info = db
     .prepare(
-      "INSERT INTO comments (target_type, target_id, nickname, email, website, content, ip, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+      "INSERT INTO comments (target_type, target_id, nickname, email, website, content, ip, ip_address, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
     )
-    .run(data.target_type, data.target_id, data.nickname, data.email ?? null, data.website ?? null, data.content, hashIp(data.ip), now());
+    .run(data.target_type, data.target_id, data.nickname, data.email ?? null, data.website ?? null, data.content, hashIp(data.ip), data.ip.trim().slice(0, 100), now());
   return db.prepare("SELECT * FROM comments WHERE id = ?").get(Number(info.lastInsertRowid)) as Comment;
 }
 

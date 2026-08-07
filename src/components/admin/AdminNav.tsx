@@ -21,17 +21,15 @@ function isActive(pathname: string, href: string, exact?: boolean): boolean {
 export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
   const pathname = usePathname();
   return (
-    <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="后台导航">
+    <nav className="admin-nav flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-visible sm:flex-nowrap sm:overflow-x-auto" aria-label="后台导航">
       {NAV.map((item) => {
         const active = isActive(pathname, item.href, item.exact);
+        const className = `admin-nav-link relative shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${
+          active ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"
+        }${item.href === "/admin/attachments" ? " admin-attachments-link" : ""}`;
+
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`relative shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${
-              active ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"
-            }`}
-          >
+          <Link key={item.href} href={item.href} className={className}>
             {item.label}
             {item.href === "/admin/comments" && pendingCount > 0 && (
               <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-medium text-white">

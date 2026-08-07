@@ -55,26 +55,41 @@ export default function AdminDashboard() {
       <h1 className="text-xl font-bold">仪表盘</h1>
 
       {/* 第一排:文章 / 想法 / 作品 / 评论 */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-4 gap-2 sm:gap-3">
         {row1.map((s) => (
-          <Link key={s.label} href={s.href} className="rounded-2xl bg-white p-4 text-center shadow-sm">
-            <div className="text-2xl font-bold">{s.count}</div>
-            <div className="mt-1 text-sm text-neutral-500">{s.label}</div>
+          <Link
+            key={s.label}
+            href={s.href}
+            className="min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
+          >
+            <div className="text-xl font-bold sm:text-2xl">{s.count}</div>
+            <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">
+              {s.label}
+            </div>
           </Link>
         ))}
       </div>
 
       {/* 第二排:阅读 / 点赞 / 附件 / 分类管理(不显示数量) */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-4 gap-2 sm:gap-3">
         {row2.map((s) => (
-          <Link key={s.label} href={s.href} className="rounded-2xl bg-white p-4 text-center shadow-sm">
-            <div className="text-2xl font-bold">{s.count}</div>
-            <div className="mt-1 text-sm text-neutral-500">{s.label}</div>
+          <Link
+            key={s.label}
+            href={s.href}
+            className="min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
+          >
+            <div className="text-xl font-bold sm:text-2xl">{s.count}</div>
+            <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">
+              {s.label}
+            </div>
           </Link>
         ))}
-        <Link href="/admin/categories" className="rounded-2xl bg-white p-4 text-center shadow-sm">
-          <div className="text-base font-medium text-neutral-700">分类管理</div>
-          <div className="mt-1 text-sm text-neutral-500">维护索引</div>
+        <Link
+          href="/admin/categories"
+          className="min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
+        >
+          <div className="truncate whitespace-nowrap text-sm font-medium text-neutral-700 sm:text-base">分类管理</div>
+          <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">维护索引</div>
         </Link>
       </div>
 
@@ -85,7 +100,7 @@ export default function AdminDashboard() {
           {recentCategories.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-2">
               {recentCategories.map((c) => (
-                <Link key={c.id} href={`/categories/${encodeURIComponent(c.name)}`} className="rounded-full bg-neutral-100 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-200">{c.name}</Link>
+                <Link key={c.id} href="/admin/categories" className="rounded-full bg-neutral-100 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-200">{c.name}</Link>
               ))}
             </div>
           ) : <p className="mt-3 text-sm text-neutral-400">还没有分类</p>}
@@ -94,7 +109,7 @@ export default function AdminDashboard() {
           {recentTags.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-2">
               {recentTags.map((tag) => (
-                <Link key={tag} href={`/tags/${encodeURIComponent(tag)}`} className="rounded-full bg-neutral-100 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-200">#{tag}</Link>
+                <Link key={tag} href="/admin/categories" className="rounded-full bg-neutral-100 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-200">#{tag}</Link>
               ))}
             </div>
           ) : <p className="mt-3 text-sm text-neutral-400">还没有标签</p>}
@@ -126,10 +141,9 @@ export default function AdminDashboard() {
           {recentComments.length > 0 ? (
             <ul className="mt-3 flex flex-col gap-3 text-sm">
               {recentComments.map((c) => {
-                const href = c.target_type === "post" && c.target_slug ? `/posts/${c.target_slug}#comments` : `/moments#moment-${c.target_id}`;
                 return (
                   <li key={c.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
-                    <Link href={href} className="block">
+                    <Link href="/admin/comments" className="block">
                       <div className="text-xs text-neutral-400">{c.nickname} · {formatDateOnly(c.created_at)}{c.status === "pending" ? " · 待审" : ""}</div>
                       <p className="mt-0.5 line-clamp-2 text-neutral-700">{c.content}</p>
                     </Link>

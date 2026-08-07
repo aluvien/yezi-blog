@@ -45,16 +45,16 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
             : `/moments#moment-${comment.target_id}`;
           return (
             <li key={comment.id} className="rounded-2xl bg-white p-4 shadow-sm sm:p-5">
-              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="min-w-0 max-w-full text-sm font-medium">
                   {comment.nickname}
                   <span className="ml-2 break-all text-xs font-normal text-neutral-400">{comment.email || "未留邮箱"}</span>
+                  <span className={`ml-2 inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs ${comment.status === "pending" ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"}`}>
+                    {comment.status === "pending" ? "待审核" : "已公开"}
+                  </span>
                   {comment.website && (
                     <a href={comment.website} target="_blank" rel="noopener noreferrer" className="ml-2 break-all text-xs font-normal text-blue-700 underline">网站</a>
                   )}
-                </span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${comment.status === "pending" ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"}`}>
-                  {comment.status === "pending" ? "待审核" : "已公开"}
                 </span>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-base leading-7">{comment.content}</p>
@@ -63,10 +63,12 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
                   <span className="font-medium">作者回复：</span>{comment.admin_reply}
                 </div>
               )}
-              <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400">
+              <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500">
                 <span>{comment.target_type === "post" ? "文章" : "想法"}：</span>
-                {targetHref ? <Link href={targetHref} target="_blank" className="max-w-full truncate text-blue-700 underline">{comment.target_label ?? "查看内容"}</Link> : <span>{comment.target_label ?? "目标已删除"}</span>}
-                <span>·</span><span>IP {comment.ip.slice(0, 8)}…</span><span>·</span><span>{formatDate(comment.created_at)}</span>
+                {targetHref ? <Link href={targetHref} target="_blank" className="max-w-full truncate text-blue-700 hover:text-blue-900">{comment.target_label ?? "查看内容"}</Link> : <span>{comment.target_label ?? "目标已删除"}</span>}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400">
+                <span>IP {comment.ip_address || "历史记录无真实 IP"}</span><span>·</span><span>{formatDate(comment.created_at)}</span>
               </div>
               <CommentActions id={comment.id} status={comment.status} initialReply={comment.admin_reply} />
             </li>

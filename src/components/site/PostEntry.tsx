@@ -11,7 +11,11 @@ export function PostEntry({ post, commentCount = 0, canEdit = false }: { post: P
   const excerpt = stripMarkdown(post.content, 110);
   const firstTag = parsePostTags(post.tags)[0];
   return (
-    <ArticleEditZone href={`/admin/posts/${post.id}/edit`} enabled={canEdit}>
+    <ArticleEditZone
+      href={`/admin/posts/${post.id}/edit`}
+      enabled={canEdit}
+      zoneClassName={`article-edit-zone post-entry-edit-zone ${firstTag ? "has-post-tag" : ""}`}
+    >
     <article>
       <Link href={`/posts/${post.slug}`} className="group block">
         <div className="flex gap-4 md:gap-5">

@@ -1,7 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createCategory, deleteCategory, getSiteSettings, setSiteSettings } from "@/lib/db";
+import {
+  createCategory,
+  deleteCategory,
+  deleteTag as deleteTagInDb,
+  getSiteSettings,
+  renameTag as renameTagInDb,
+  setSiteSettings,
+  updateCategory,
+} from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 
 export type SettingsActionResult = { ok: true } | { ok: false; error: string };
@@ -69,4 +77,49 @@ export async function deleteCategoryAction(formData: FormData): Promise<void> {
   deleteCategory(id);
   revalidatePath("/admin/categories");
   revalidatePath("/", "layout");
+}
+
+function revalidateTaxonomy(): void {
+  revalidatePath("/admin/categories");
+  revalidatePath("/admin/posts");
+  revalidatePath("/", "layout");
+}
+
+export async function updateCategoryAction(id: number, name: string): Promise<SettingsActionResult> {
+  await requireAdmin();
+  if (!Number.isInteger(id) || id < 1) return { ok: false, error: "分类不存在" };
+  const normalized = String(name ?? "").trim();
+  if (!normalized || normalized.length > 80) return { ok: false, error: "分类名称不能为空且不超过 80 个字符" };
+  const updated = updateCategory(id, normalized);
+  if (!updated) return { ok: false, error: "分类不存在，或名称已经被使用" };
+  revalidateTaxonomy();
+  return { ok: true };
+}
+
+export async function deleteCategoryByIdAction(id: number): Promise<SettingsActionResult> {
+  await requireAdmin();
+  if (!Number.isInteger(id) || id < 1) return { ok: false, error: "分类不存在" };
+  deleteCategory(id);
+  revalidateTaxonomy();
+  return { ok: true };
+}
+
+function validTagName(value: string): boolean {
+  return Boolean(value.trim()) && value.trim().length <= 80 && !/[,，\n]/.test(value);
+}
+
+export async function renameTagAction(oldTag: string, newTag: string): Promise<SettingsActionResult> {
+  await requireAdmin();
+  if (!validTagName(oldTag) || !validTagName(newTag)) return { ok: false, error: "标签不能为空、不能包含逗号，且不超过 80 个字符" };
+  if (!renameTagInDb(oldTag, newTag)) return { ok: false, error: "标签修改失败" };
+  revalidateTaxonomy();
+  return { ok: true };
+}
+
+export async function deleteTagAction(tag: string): Promise<SettingsActionResult> {
+  await requireAdmin();
+  if (!validTagName(tag)) return { ok: false, error: "标签名称无效" };
+  if (!deleteTagInDb(tag)) return { ok: false, error: "标签删除失败" };
+  revalidateTaxonomy();
+  return { ok: true };
 }
