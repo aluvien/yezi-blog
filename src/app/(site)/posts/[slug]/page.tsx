@@ -73,7 +73,7 @@ export default async function PostPage({ params }: Props) {
           <h1 className="article-title text-[26px] font-bold leading-[1.35] tracking-[-0.025em] md:text-[30px]">{post.title}</h1>
           <div className="article-meta site-meta mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
             <span>{formatDateOnly(post.created_at)}</span>
-            <span className="article-author text-neutral-300">·</span>
+            <span className="article-author text-divider-strong">·</span>
             <span className="article-author font-medium text-wechat-blue">{authorName}</span>
             <ArticleActionBar commentCount={commentCount} targetId={post.id} initialMetrics={initialMetrics} initialLiked={initialLiked} />
           </div>

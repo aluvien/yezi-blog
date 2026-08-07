@@ -2482,13 +2482,13 @@ textarea.comment-field {
  * ========================================================= */
 [data-layout-theme="editorial"] {
   --editorial-header: var(--paper);
-  --editorial-accent: #c56845;
-  --editorial-cover: #f3faf8;
+  --editorial-accent: var(--accent);
+  --editorial-cover: color-mix(in srgb, var(--soft) 88%, var(--accent) 12%);
 }
 
 [data-layout-theme="editorial"][data-theme="dark"] {
   --editorial-header: var(--paper);
-  --editorial-cover: var(--soft);
+  --editorial-cover: color-mix(in srgb, var(--soft) 88%, var(--accent) 12%);
 }
 
 [data-layout-theme="editorial"] .site-canvas {
