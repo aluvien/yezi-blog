@@ -29,9 +29,9 @@ export default function WorksPage() {
             <article className="paper-card group h-full overflow-hidden rounded-2xl transition-transform duration-300 hover:-translate-y-1">
               {work.cover && work.cover !== "/placeholder.svg" ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={work.cover} alt={work.title} loading="lazy" className="aspect-[16/9] w-full bg-neutral-100 object-cover" />
+                <img src={work.cover} alt={work.title} loading="lazy" className="work-cover aspect-[16/9] w-full bg-neutral-100 object-cover" />
               ) : (
-                <div className="flex aspect-[16/9] items-center justify-center bg-gradient-to-br from-[#edf9f3] to-[#e9eef7] text-[52px] font-bold text-accent/15">{String(index + 1).padStart(2, "0")}</div>
+                <div className="work-cover flex aspect-[16/9] items-center justify-center bg-gradient-to-br from-[#edf9f3] to-[#e9eef7] text-[52px] font-bold text-accent/15">{String(index + 1).padStart(2, "0")}</div>
               )}
               <div className="p-6">
                 <div className="flex items-start justify-between gap-3">

@@ -28,7 +28,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
-      <div className="mb-7 flex items-center justify-between gap-4 border-b border-divider pb-4">
+      <div className="site-posts-header site-list-heading mb-7 flex items-center justify-between gap-4 border-b border-divider pb-4">
         <h1 className="text-xl font-semibold tracking-[-0.02em] text-foreground">文章</h1>
         <span className="text-sm text-muted">{total} 篇</span>
       </div>

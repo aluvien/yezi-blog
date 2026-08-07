@@ -28,6 +28,7 @@ const SETTING_KEYS = [
   "music_float_enabled",
   "music_position",
   "theme",
+  "layout_theme",
   "dark_mode",
 ] as const;
 

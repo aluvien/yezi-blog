@@ -7,8 +7,8 @@ import MomentForm from "@/components/admin/MomentForm";
 export function MomentWriter({ count, isAuthorized }: { count: number; isAuthorized: boolean }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mb-7">
-      <div className="flex items-center justify-between gap-4 border-b border-divider pb-4">
+    <div className="site-moments-header mb-7">
+      <div className="site-list-heading flex items-center justify-between gap-4 border-b border-divider pb-4">
         <h1 className="text-xl font-semibold tracking-[-0.02em] text-foreground">想法</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted">{count} 条记录</span>

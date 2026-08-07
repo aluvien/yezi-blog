@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateSiteSettingsAction } from "@/lib/actions/settings";
-import { DARK_MODE_OPTIONS, THEME_PALETTES } from "@/lib/theme";
+import { DARK_MODE_OPTIONS, LAYOUT_THEMES, THEME_PALETTES } from "@/lib/theme";
 import ImageUpload from "./ImageUpload";
 
 type Props = { initialValues: Record<string, string> };
@@ -32,6 +32,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     music_float_enabled: initialValues.music_float_enabled ?? "1",
     music_position: initialValues.music_position ?? "left",
     theme: initialValues.theme ?? "default",
+    layout_theme: initialValues.layout_theme ?? "classic",
     dark_mode: initialValues.dark_mode ?? "auto",
   });
   const [message, setMessage] = useState("");
@@ -203,7 +204,29 @@ export default function SiteSettingsForm({ initialValues }: Props) {
       <fieldset className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
         <legend className="px-1 text-sm font-medium text-neutral-700">外观主题</legend>
         <div>
-          <p className="text-sm text-neutral-600">配色方案（保存后前台立即生效，当前为默认方案）</p>
+          <p className="text-sm text-neutral-600">前台版式主题（不改变现有内容与数据）</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {LAYOUT_THEMES.map((layout) => {
+              const selected = values.layout_theme === layout.id;
+              return (
+                <button
+                  key={layout.id}
+                  type="button"
+                  onClick={() => update("layout_theme", layout.id)}
+                  aria-pressed={selected}
+                  className={`flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-colors ${
+                    selected ? "border-neutral-900 bg-white ring-2 ring-neutral-900/10" : "border-neutral-200 hover:border-neutral-400"
+                  }`}
+                >
+                  <span className="text-sm font-medium text-neutral-800">{layout.name}</span>
+                  <span className="text-xs leading-5 text-neutral-500">{layout.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <p className="text-sm text-neutral-600">配色方案（保存后前台立即生效）</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {THEME_PALETTES.map((palette) => {
               const selected = values.theme === palette.id;

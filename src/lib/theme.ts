@@ -64,6 +64,31 @@ export const THEME_PALETTES: ThemePalette[] = [
 
 export const THEME_PALETTE_IDS = THEME_PALETTES.map((palette) => palette.id);
 
+/**
+ * 前台版式主题：与配色方案分开，避免切换布局时覆盖现有颜色设置。
+ * classic 是当前线上版式，editorial 对应新的编辑感布局预览。
+ */
+export const LAYOUT_THEMES = [
+  {
+    id: "classic",
+    name: "经典版 · 当前",
+    description: "保留现在的前台布局与组件样式",
+  },
+  {
+    id: "editorial",
+    name: "编辑版 · 新视觉",
+    description: "紧凑页头、连续标题区与无方框操作图标",
+  },
+] as const;
+
+export const LAYOUT_THEME_IDS = LAYOUT_THEMES.map((theme) => theme.id);
+export type LayoutTheme = (typeof LAYOUT_THEMES)[number]["id"];
+
+/** 从站点设置中取前台版式主题，旧数据库或非法值回退当前经典版。 */
+export function normalizeLayoutTheme(raw: string | undefined): LayoutTheme {
+  return LAYOUT_THEME_IDS.includes(raw as LayoutTheme) ? (raw as LayoutTheme) : "classic";
+}
+
 export const DARK_MODE_OPTIONS = [
   { value: "auto", label: "跟随系统", description: "根据设备系统外观自动切换" },
   { value: "light", label: "浅色", description: "始终使用浅色外观" },

@@ -50,15 +50,15 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
     <div className="site-canvas flex min-h-full flex-1 flex-col">
       <div className="site-frame">
         <header className="site-frame-header">
-          <Link href="/" className="group flex min-w-0 items-center gap-3">
+          <Link href="/" className="site-brand-link group flex min-w-0 items-center gap-3">
             {siteLogo ? (
               // 管理员可配置站点 Logo；使用原生 img 允许本地上传路径。
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={siteLogo} alt="" className={`h-10 w-10 shrink-0 rounded-[4px] bg-transparent object-contain ${hideSiteLogoBorder ? "border-0" : "border border-divider"}`} />
-            ) : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-foreground bg-foreground text-[16px] font-bold text-white transition-colors group-hover:border-accent group-hover:bg-accent">{authorName.charAt(0).toUpperCase()}</span>}
-            <span className="min-w-0">
-              <span className="block truncate text-[15px] font-semibold leading-none tracking-tight">{siteName}</span>
-              <span className="mt-1 block truncate text-[10px] leading-none tracking-[0.12em] text-muted">{siteSubtitle}</span>
+              <img src={siteLogo} alt="" className={`site-brand-logo h-10 w-10 shrink-0 rounded-[4px] bg-transparent object-contain ${hideSiteLogoBorder ? "border-0" : "border border-divider"}`} />
+            ) : <span className="site-brand-logo flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-foreground bg-foreground text-[16px] font-bold text-white transition-colors group-hover:border-accent group-hover:bg-accent">{authorName.charAt(0).toUpperCase()}</span>}
+            <span className="site-brand-copy min-w-0">
+              <span className="site-brand-name block truncate text-[15px] font-semibold leading-none tracking-tight">{siteName}</span>
+              <span className="site-brand-subtitle mt-1 block truncate text-[10px] leading-none tracking-[0.12em] text-muted">{siteSubtitle}</span>
             </span>
           </Link>
           <div className="flex items-center gap-2">
@@ -83,7 +83,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
               onClick={toggleTheme}
               aria-label="切换深浅色主题"
               title="切换深浅色主题"
-              className="site-header-icon-button hidden h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted transition-colors hover:border-accent hover:text-accent md:flex"
+              className="site-theme-toggle site-header-icon-button hidden h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted transition-colors hover:border-accent hover:text-accent md:flex"
             >
               {/* 两个图标都渲染，由 data-theme 决定显隐，避免水合内容不一致 */}
               <svg className="h-4 w-4 [html[data-theme='dark']_&]:hidden" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" aria-hidden="true">
@@ -99,7 +99,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
               aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((value) => !value)}
-              className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted transition-colors hover:border-accent hover:text-accent md:hidden"
+              className="site-menu-trigger flex h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted transition-colors hover:border-accent hover:text-accent md:hidden"
             >
               {menuOpen ? (
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" d="m6 6 12 12M18 6 6 18" /></svg>
