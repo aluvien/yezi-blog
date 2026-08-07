@@ -116,7 +116,12 @@ export function buildVideoEmbedUrl(spec: VideoSpec): string {
     url.searchParams.set("autoplay", "0");
     return url.toString();
   }
-  return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(spec.id)}?rel=0`;
+  const url = new URL(`https://www.youtube-nocookie.com/embed/${encodeURIComponent(spec.id)}`);
+  url.searchParams.set("rel", "0");
+  // 允许页面在音乐重新播放时通过 YouTube IFrame API 暂停视频。
+  url.searchParams.set("enablejsapi", "1");
+  url.searchParams.set("playsinline", "1");
+  return url.toString();
 }
 
 function escapeAttribute(value: string): string {
@@ -134,7 +139,7 @@ function escapeAttribute(value: string): string {
 /** 将规范化的视频规格渲染为响应式 iframe。 */
 export function videoContainerHtml(spec: VideoSpec): string {
   const title = spec.platform === "bilibili" ? "Bilibili 视频" : "YouTube 视频";
-  return `<div class="blog-video"><iframe src="${escapeAttribute(buildVideoEmbedUrl(spec))}" title="${title}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>`;
+  return `<div class="blog-video"><iframe src="${escapeAttribute(buildVideoEmbedUrl(spec))}" data-video-platform="${spec.platform}" title="${title}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>`;
 }
 
 /** 视频代码块每行一个视频规格；无效行忽略。 */

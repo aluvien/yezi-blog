@@ -38,7 +38,7 @@ async function resizeImage(file: File, maxDim: number, quality: number): Promise
 }
 
 /** 上传图片:默认客户端 canvas 预压缩 + 服务端 sharp 精压;original=true 保留原图。返回 path。 */
-async function uploadImageData(file: File, original = false): Promise<{ path: string; attachment?: Attachment }> {
+async function uploadImageData(file: File, original = false, endpoint = "/api/admin/upload"): Promise<{ path: string; attachment?: Attachment }> {
   let uploadFile: Blob = file;
   if (!original && file.type.startsWith("image/") && file.type !== "image/gif") {
     try {
@@ -50,14 +50,32 @@ async function uploadImageData(file: File, original = false): Promise<{ path: st
   const fd = new FormData();
   fd.append("file", uploadFile, file.name);
   fd.append("original", String(original));
-  const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 60_000);
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      body: fd,
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch {
+    if (controller.signal.aborted) {
+      throw new Error("上传超时，请检查网络后重试");
+    }
+    throw new Error("无法连接上传服务，请刷新页面后重试");
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "上传失败");
   return { path: data.path as string, attachment: data.attachment as Attachment | undefined };
 }
 
-export async function uploadImage(file: File, original = false): Promise<string> {
-  return (await uploadImageData(file, original)).path;
+export async function uploadImage(file: File, original = false, endpoint = "/api/admin/upload"): Promise<string> {
+  return (await uploadImageData(file, original, endpoint)).path;
 }
 
 /** 单图上传:显示缩略图,可更换/移除,可勾选"保留原图"。 */

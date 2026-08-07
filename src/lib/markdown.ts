@@ -15,7 +15,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     img: ["src", "alt", "title"],
     code: ["class"],
     div: ["class", "data-server", "data-id", "data-type", "data-shuffle"],
-    iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen"],
+    iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
     span: ["class"],
     th: ["align"],
     td: ["align"],

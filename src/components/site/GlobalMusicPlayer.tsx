@@ -1,10 +1,47 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { fetchMusicTracks, parseMusicSpec, type MusicTrack } from "@/lib/music";
 import { emitGlobalPlaybackState, setGlobalPlayListener } from "@/lib/player-store";
 
 type APlayerInstance = import("aplayer").default;
+
+type PanelDragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startedAt: number;
+  moved: boolean;
+  blocked: boolean;
+};
+
+const PANEL_DISMISS_DISTANCE = 64;
+const PANEL_DISMISS_FLICK_DISTANCE = 24;
+const PANEL_DISMISS_FLICK_VELOCITY = 0.55;
+
+function focusedBlogVideoFrame(): HTMLIFrameElement | null {
+  const active = document.activeElement;
+  return active instanceof HTMLIFrameElement && active.matches(".blog-video iframe") ? active : null;
+}
+
+function pauseYouTubeFrame(frame: HTMLIFrameElement): void {
+  try {
+    const targetOrigin = new URL(frame.src).origin;
+    frame.contentWindow?.postMessage(
+      JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
+      targetOrigin,
+    );
+  } catch {
+    // iframe 已卸载或 URL 无效时无需影响音乐播放。
+  }
+}
 
 /**
  * 全局音乐播放器（右下角悬浮球 + 底部控制面板）。
@@ -34,13 +71,20 @@ export function GlobalMusicPlayer({
   const [hasTracks, setHasTracks] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
+  const [panelDragOffset, setPanelDragOffset] = useState(0);
+  const [panelDragging, setPanelDragging] = useState(false);
+  const [collapseHintVisible, setCollapseHintVisible] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef(metingApi);
   const playerRef = useRef<APlayerInstance | null>(null);
   const currentTrackRef = useRef<MusicTrack | null>(null);
+  const panelDragRef = useRef<PanelDragState | null>(null);
+  const suppressPanelClickUntilRef = useRef(0);
+  const collapseHintTimerRef = useRef<number | null>(null);
+  const activeVideoFrameRef = useRef<HTMLIFrameElement | null>(null);
   // 默认歌单未就绪前的页面点选先入队，默认列表加载完成后再追加，保证其始终位于队列前部。
   const readyRef = useRef(false);
-  const pendingRef = useRef<Array<{ tracks: MusicTrack[]; cardId?: string | null }>>([]);
+  const pendingRef = useRef<Array<{ tracks: MusicTrack[]; cardId?: string | null; trackKey?: string | null }>>([]);
   // 当前正在播放的触发卡片 id + 播放列表各 index 归属的卡片 id（用于面板内切歌时回显）
   const currentCardIdRef = useRef<string | null>(null);
   const ownerMapRef = useRef(new Map<number, string | null>());
@@ -53,6 +97,33 @@ export function GlobalMusicPlayer({
   useEffect(() => {
     apiRef.current = metingApi;
   }, [metingApi]);
+
+  useEffect(
+    () => () => {
+      if (collapseHintTimerRef.current !== null) window.clearTimeout(collapseHintTimerRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let captureTimer: number | null = null;
+    const captureFocusedVideo = () => {
+      if (captureTimer !== null) window.clearTimeout(captureTimer);
+      captureTimer = window.setTimeout(() => {
+        captureTimer = null;
+        const frame = focusedBlogVideoFrame();
+        if (frame) activeVideoFrameRef.current = frame;
+      }, 0);
+    };
+    // 点击跨域 iframe 时事件不会冒泡到父页面，但父窗口会失焦，借此记录刚交互的视频。
+    window.addEventListener("blur", captureFocusedVideo);
+    document.addEventListener("focusin", captureFocusedVideo, true);
+    return () => {
+      window.removeEventListener("blur", captureFocusedVideo);
+      document.removeEventListener("focusin", captureFocusedVideo, true);
+      if (captureTimer !== null) window.clearTimeout(captureTimer);
+    };
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -69,6 +140,124 @@ export function GlobalMusicPlayer({
 
     function trackKey(track: { key?: string; url: string; name: string; artist?: string }): string {
       return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist ?? ""}`;
+    }
+
+    function pauseCompetingMedia(player: APlayerInstance): void {
+      // 同源原生媒体可以直接暂停；APlayer 的 audio 未挂到 DOM，但仍显式排除以便后续实现变化。
+      document.querySelectorAll<HTMLMediaElement>("audio, video").forEach((media) => {
+        if (media !== player.audio && !media.paused) media.pause();
+      });
+
+      document.querySelectorAll<HTMLIFrameElement>('.blog-video iframe[data-video-platform="youtube"]').forEach(pauseYouTubeFrame);
+
+      const activeFrame = activeVideoFrameRef.current;
+      if (!activeFrame?.isConnected) {
+        activeVideoFrameRef.current = null;
+        return;
+      }
+      if (activeFrame.dataset.videoPlatform === "bilibili") {
+        // Bilibili 外链 iframe 没有父页面可调用的暂停 API；仅重载刚交互的实例来停止其媒体，
+        // 不刷新其他未播放的视频，也不影响当前文章位置。
+        activeFrame.src = activeFrame.src;
+      }
+      activeVideoFrameRef.current = null;
+    }
+
+    function decoratePlayerChrome(player: APlayerInstance): void {
+      const host = hostRef.current;
+      const track = player.list.audios[player.list.index];
+      if (!host || !track) return;
+
+      const title = host.querySelector<HTMLElement>(".aplayer-title");
+      const author = host.querySelector<HTMLElement>(".aplayer-author");
+      if (title) title.textContent = track.name;
+      if (author) author.textContent = track.artist?.trim() || "未知歌手";
+
+      const music = host.querySelector<HTMLElement>(".aplayer-music");
+      const time = host.querySelector<HTMLElement>(".aplayer-time-inner");
+      if (music && title && time) {
+        time.childNodes.forEach((node) => {
+          if (node.nodeType === 3 && node.textContent?.includes("/")) node.textContent = "/";
+        });
+        let heading = music.querySelector<HTMLElement>(".global-player-track-heading");
+        if (!heading) {
+          heading = document.createElement("span");
+          heading.className = "global-player-track-heading";
+          music.insertBefore(heading, title);
+        }
+        if (title.parentElement !== heading) heading.append(title);
+        if (time.parentElement !== heading) heading.append(time);
+      }
+
+      const list = host.querySelector<HTMLElement>(".aplayer-list");
+      const randomOrder = player.options.order === "random";
+      const listOpen = Boolean(list && !list.classList.contains("aplayer-list-hide"));
+      host.classList.toggle("is-random-order", randomOrder);
+      host.classList.toggle("is-list-open", listOpen);
+      host.classList.toggle("is-playing", !player.paused);
+
+      const controls: Array<[string, string]> = [
+        [".aplayer-icon-back", "上一首"],
+        [".aplayer-icon-play", player.paused ? "播放" : "暂停"],
+        [".aplayer-icon-forward", "下一首"],
+        [".aplayer-icon-volume-down", "音量"],
+        [".aplayer-icon-order", randomOrder ? "随机播放已开启" : "开启随机播放"],
+        [".aplayer-icon-loop", "循环模式"],
+        [".aplayer-icon-menu", listOpen ? "收起待播放列表" : "展开待播放列表"],
+        [".aplayer-icon-lrc", "显示或隐藏歌词"],
+      ];
+      controls.forEach(([selector, label]) => {
+        const control = host.querySelector<HTMLElement>(selector);
+        if (!control) return;
+        control.setAttribute("aria-label", label);
+        control.setAttribute("title", label);
+        if (control.tagName !== "BUTTON") {
+          control.setAttribute("role", "button");
+          control.tabIndex = 0;
+          if (control.dataset.keyboardControl !== "1") {
+            control.dataset.keyboardControl = "1";
+            control.addEventListener("keydown", (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              control.click();
+            });
+          }
+        }
+        if ((selector === ".aplayer-icon-order" || selector === ".aplayer-icon-menu") && control.dataset.chromeSync !== "1") {
+          control.dataset.chromeSync = "1";
+          control.addEventListener("click", () => queueMicrotask(() => decoratePlayerChrome(player)));
+        }
+      });
+
+      const orderControl = host.querySelector<HTMLElement>(".aplayer-icon-order");
+      const menuControl = host.querySelector<HTMLElement>(".aplayer-icon-menu");
+      orderControl?.setAttribute("aria-pressed", String(randomOrder));
+      menuControl?.setAttribute("aria-expanded", String(listOpen));
+
+      host.querySelectorAll<HTMLLIElement>(".aplayer-list ol li").forEach((item, index) => {
+        if (index === player.list.index) item.setAttribute("aria-current", "true");
+        else item.removeAttribute("aria-current");
+      });
+    }
+
+    function decoratePlayerList(player: APlayerInstance): void {
+      const items = hostRef.current?.querySelectorAll<HTMLLIElement>(".aplayer-list ol li");
+      if (!items) return;
+      items.forEach((item, index) => {
+        const track = player.list.audios[index];
+        if (!track) return;
+        let cover = item.querySelector<HTMLElement>(".global-player-list-cover");
+        if (!cover) {
+          cover = document.createElement("span");
+          cover.className = "global-player-list-cover";
+          cover.setAttribute("aria-hidden", "true");
+          item.prepend(cover);
+        }
+        cover.textContent = track.cover ? "" : "♫";
+        cover.style.backgroundImage = track.cover ? `url("${track.cover.replaceAll('"', "%22")}")` : "none";
+        item.dataset.trackKey = trackKey(track);
+      });
+      decoratePlayerChrome(player);
     }
 
     function emitPlayerState(player: APlayerInstance, playing: boolean, cardId: string | null, index = player.list.index): void {
@@ -102,12 +291,13 @@ export function GlobalMusicPlayer({
       }
       if (uniqueTracks.length > 0) {
         player.list.add(uniqueTracks);
+        decoratePlayerList(player);
         setHasTracks(true);
         if (!currentTrackRef.current) updateCurrentTrack(uniqueTracks[0]);
       }
     }
 
-    function appendAndPlay(tracks: MusicTrack[], cardId: string | null) {
+    function appendAndPlay(tracks: MusicTrack[], cardId: string | null, preferredTrackKey: string | null = null) {
       const player = playerRef.current;
       if (!player || tracks.length === 0) return;
       currentCardIdRef.current = cardId;
@@ -119,17 +309,20 @@ export function GlobalMusicPlayer({
         const existingIndex = trackIndex.get(key);
         if (existingIndex !== undefined) {
           ownerMap.set(existingIndex, cardId);
-          if (targetIndex === null) targetIndex = existingIndex;
+          if (preferredTrackKey && key === preferredTrackKey) targetIndex = existingIndex;
+          else if (targetIndex === null) targetIndex = existingIndex;
           continue;
         }
         const index = player.list.audios.length + uniqueTracks.length;
         trackIndex.set(key, index);
         ownerMap.set(index, cardId);
         uniqueTracks.push(track);
-        if (targetIndex === null) targetIndex = index;
+        if (preferredTrackKey && key === preferredTrackKey) targetIndex = index;
+        else if (targetIndex === null) targetIndex = index;
       }
       if (uniqueTracks.length > 0) {
         player.list.add(uniqueTracks);
+        decoratePlayerList(player);
         setHasTracks(true);
       }
       if (targetIndex === null) return;
@@ -144,11 +337,14 @@ export function GlobalMusicPlayer({
       emitPlayerState(player, true, cardId, targetIndex);
     }
 
-    function toggleOrAppendAndPlay(tracks: MusicTrack[], cardId: string | null) {
+    function toggleOrAppendAndPlay(tracks: MusicTrack[], cardId: string | null, preferredTrackKey: string | null = null) {
       const player = playerRef.current;
       if (!player || tracks.length === 0) return;
       // 同一张文章音乐卡片再次点击时只切换暂停/继续，不重新切回第一首。
-      if (cardId !== null && currentCardIdRef.current === cardId) {
+      const currentAudio = player.list.index >= 0 ? player.list.audios[player.list.index] : null;
+      const currentKey = currentAudio ? trackKey(currentAudio) : null;
+      const shouldToggle = cardId !== null && currentCardIdRef.current === cardId && (!preferredTrackKey || currentKey === preferredTrackKey);
+      if (shouldToggle) {
         if (player.paused) {
           player.play();
           setHasTracks(true);
@@ -159,7 +355,7 @@ export function GlobalMusicPlayer({
         }
         return;
       }
-      appendAndPlay(tracks, cardId);
+      appendAndPlay(tracks, cardId, preferredTrackKey);
     }
 
     async function boot() {
@@ -181,11 +377,18 @@ export function GlobalMusicPlayer({
         });
         playerRef.current = player;
         player.on("play", () => {
+          pauseCompetingMedia(player);
           setPlaying(true);
+          decoratePlayerChrome(player);
           emitPlayerState(player, true, currentCardIdRef.current);
         });
         player.on("pause", () => {
+          window.setTimeout(() => {
+            const frame = focusedBlogVideoFrame();
+            if (frame) activeVideoFrameRef.current = frame;
+          }, 0);
           setPlaying(false);
+          decoratePlayerChrome(player);
           emitPlayerState(player, false, currentCardIdRef.current);
         });
         player.on("ended", () => {
@@ -202,6 +405,8 @@ export function GlobalMusicPlayer({
           const cardId = index === null ? null : (ownerMap.get(index) ?? null);
           currentCardIdRef.current = cardId;
           emitPlayerState(player, !player.paused, cardId, index ?? player.list.index);
+          // APlayer 在触发 listswitch 后才更新标题、歌手和高亮，放到微任务中统一修正展示。
+          queueMicrotask(() => decoratePlayerChrome(player));
         });
 
         // 默认歌单：后台设置 default_music，加载失败静默（不影响页面点选音乐）。
@@ -221,18 +426,18 @@ export function GlobalMusicPlayer({
         if (disposed) return;
       }
       readyRef.current = true;
-      for (const batch of pendingRef.current) appendAndPlay(batch.tracks, batch.cardId ?? null);
+      for (const batch of pendingRef.current) appendAndPlay(batch.tracks, batch.cardId ?? null, batch.trackKey ?? null);
       pendingRef.current = [];
     }
 
     void boot();
 
-    unlisten = setGlobalPlayListener(({ tracks, cardId }) => {
+    unlisten = setGlobalPlayListener(({ tracks, cardId, trackKey: preferredTrackKey }) => {
       if (!readyRef.current) {
-        pendingRef.current.push({ tracks, cardId });
+        pendingRef.current.push({ tracks, cardId, trackKey: preferredTrackKey });
         return;
       }
-      toggleOrAppendAndPlay(tracks, cardId ?? null);
+      toggleOrAppendAndPlay(tracks, cardId ?? null, preferredTrackKey ?? null);
     });
 
     return () => {
@@ -255,8 +460,90 @@ export function GlobalMusicPlayer({
 
   function minimizePlayer(): void {
     // 最小化只收起面板，不暂停或清空播放列表；音乐应继续在后台播放。
+    if (collapseHintTimerRef.current !== null) window.clearTimeout(collapseHintTimerRef.current);
+    collapseHintTimerRef.current = null;
+    setCollapseHintVisible(false);
+    panelDragRef.current = null;
+    setPanelDragging(false);
+    setPanelDragOffset(0);
     setOpen(false);
   }
+
+  function revealCollapseHint(): void {
+    if (playerPosition === "bottom") return;
+    setCollapseHintVisible(true);
+    if (collapseHintTimerRef.current !== null) window.clearTimeout(collapseHintTimerRef.current);
+    collapseHintTimerRef.current = window.setTimeout(() => {
+      collapseHintTimerRef.current = null;
+      setCollapseHintVisible(false);
+    }, 2000);
+  }
+
+  function startPanelDrag(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (!panelOpen || playerPosition === "bottom" || !event.isPrimary || event.button !== 0) return;
+    revealCollapseHint();
+    const target = event.target instanceof Element ? event.target : null;
+    // 歌曲列表继续保持原生纵向滚动；控制卡片和顶部把手负责下滑收起。
+    if (!target?.closest(".aplayer-body, .global-player-collapse")) return;
+    panelDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startedAt: performance.now(),
+      moved: false,
+      blocked: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function movePanelDrag(event: ReactPointerEvent<HTMLDivElement>): void {
+    const drag = panelDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || drag.blocked) return;
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (!drag.moved && Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.max(10, Math.abs(deltaY) * 1.15)) {
+      drag.blocked = true;
+      return;
+    }
+    if (deltaY <= 4) return;
+    drag.moved = true;
+    setPanelDragging(true);
+    setPanelDragOffset(Math.min(deltaY, 260));
+    event.preventDefault();
+  }
+
+  function finishPanelDrag(event: ReactPointerEvent<HTMLDivElement>): void {
+    const drag = panelDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const distance = Math.max(0, event.clientY - drag.startY);
+    const elapsed = Math.max(1, performance.now() - drag.startedAt);
+    const velocity = distance / elapsed;
+    const shouldDismiss =
+      !drag.blocked &&
+      (distance >= PANEL_DISMISS_DISTANCE ||
+        (distance >= PANEL_DISMISS_FLICK_DISTANCE && velocity >= PANEL_DISMISS_FLICK_VELOCITY));
+
+    if (drag.moved) suppressPanelClickUntilRef.current = Date.now() + 350;
+    panelDragRef.current = null;
+    setPanelDragging(false);
+    if (shouldDismiss) minimizePlayer();
+    else setPanelDragOffset(0);
+  }
+
+  function cancelPanelDrag(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (panelDragRef.current?.pointerId !== event.pointerId) return;
+    panelDragRef.current = null;
+    setPanelDragging(false);
+    setPanelDragOffset(0);
+  }
+
+  function suppressClickAfterPanelDrag(event: ReactMouseEvent<HTMLDivElement>): void {
+    if (Date.now() >= suppressPanelClickUntilRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const panelStyle = { "--player-drag-y": `${panelDragOffset}px` } as CSSProperties;
 
   return (
     <>
@@ -284,12 +571,20 @@ export function GlobalMusicPlayer({
       )}
 
       {/* 底部面板：常驻 DOM，闭合时移出屏幕 */}
-      <div className={`global-player-panel ${panelOpen ? "is-open" : ""}`} role="region" aria-label="音乐播放器">
+      <div
+        className={`global-player-panel ${panelOpen ? "is-open" : ""} ${panelDragging ? "is-dragging" : ""} ${collapseHintVisible ? "show-collapse" : ""}`}
+        style={panelStyle}
+        role="region"
+        aria-label="音乐播放器"
+        onPointerDown={startPanelDrag}
+        onPointerMove={movePanelDrag}
+        onPointerUp={finishPanelDrag}
+        onPointerCancel={cancelPanelDrag}
+        onClickCapture={suppressClickAfterPanelDrag}
+      >
         {open && playerPosition !== "bottom" && (
           <button type="button" className="global-player-collapse" aria-label="最小化播放器" title="最小化播放器" onClick={minimizePlayer}>
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
+            <span className="global-player-collapse-handle" aria-hidden="true" />
           </button>
         )}
         <div className="global-player-host">

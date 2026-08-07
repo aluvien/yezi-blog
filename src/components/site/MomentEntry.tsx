@@ -62,7 +62,7 @@ export function MomentEntry({
   if (editing) {
     return (
       <article id={`moment-${moment.id}`} className="moment-entry min-w-0">
-        <MomentForm compact moment={moment} onSuccess={() => setEditing(false)} onCancel={() => setEditing(false)} />
+        <MomentForm compact moment={moment} uploadEndpoint="/api/moments/upload" onSuccess={() => setEditing(false)} onCancel={() => setEditing(false)} />
       </article>
     );
   }

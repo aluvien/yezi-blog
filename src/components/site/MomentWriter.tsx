@@ -25,7 +25,7 @@ export function MomentWriter({ count, isAuthorized }: { count: number; isAuthori
       </div>
       {open && isAuthorized && (
         <div className="mt-4 rounded-2xl border border-divider bg-paper p-4 shadow-sm">
-          <MomentForm compact onSuccess={() => setOpen(false)} />
+          <MomentForm compact uploadEndpoint="/api/moments/upload" onSuccess={() => setOpen(false)} />
         </div>
       )}
     </div>

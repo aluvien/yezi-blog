@@ -5,6 +5,8 @@ export interface GlobalPlayPayload {
   tracks: MusicTrack[];
   /** 触发卡片标识：全局播放器回显"正在播放"状态给对应卡片用 */
   cardId?: string | null;
+  /** 列表卡片指定要播放的曲目标识；缺省时播放本次列表的第一首 */
+  trackKey?: string | null;
 }
 
 export interface GlobalPlaybackState {

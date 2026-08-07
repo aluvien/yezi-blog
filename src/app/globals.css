@@ -2057,6 +2057,7 @@ textarea.comment-field {
     width: 34px;
     height: 34px;
   }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2120,6 +2121,43 @@ textarea.comment-field {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 6%, var(--soft));
 }
+.music-trigger-swipe-stage {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-self: stretch;
+  align-items: center;
+  overflow: hidden;
+  contain: paint;
+  isolation: isolate;
+  touch-action: pan-y;
+  transform: translateZ(0);
+}
+.music-trigger-swipe-stage.is-dragging {
+  cursor: grabbing;
+}
+.music-trigger-swipe-slide {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 100%;
+  align-items: center;
+  gap: 12px;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+.music-trigger-swipe-slide[data-track-slot="current"] {
+  z-index: 1;
+}
+.music-trigger-swipe-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 .music-trigger-cover {
   position: relative;
   width: 44px;
@@ -2136,7 +2174,9 @@ textarea.comment-field {
   margin: 0;
   border-radius: 0;
   object-fit: cover;
+  backface-visibility: hidden;
   cursor: default;
+  transform: translateZ(0);
 }
 .music-trigger-cover.is-fallback::after {
   position: absolute;
@@ -2341,6 +2381,13 @@ textarea.comment-field {
   left: auto;
 }
 
+@media (max-width: 699px) {
+  /* 与 34px 返回顶部按钮保持同一水平中轴：68 + 17 = 61 + 24。 */
+  .global-player-float {
+    bottom: calc(61px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* 底部控制面板：常驻 DOM，闭合时移出屏幕（保留布局，播放不中断） */
 .global-player-panel {
   position: fixed;
@@ -2471,6 +2518,780 @@ textarea.comment-field {
 [data-theme="dark"] .global-player-panel .aplayer .aplayer-notice {
   background-color: var(--divider-strong);
   color: var(--foreground);
+}
+
+/* 全局播放器列表：复用正文音乐卡片的主题 token 和圆角卡片语言。 */
+.global-player-panel .aplayer {
+  margin: 0;
+  border-radius: 11px;
+  background: var(--paper);
+  color: var(--foreground);
+  box-shadow: none;
+}
+.global-player-panel .aplayer .aplayer-body {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  margin: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  background: var(--soft);
+}
+.global-player-panel .aplayer .aplayer-pic,
+.global-player-panel .aplayer.aplayer-withlrc .aplayer-pic {
+  float: none;
+  width: 44px !important;
+  height: 44px !important;
+  flex: 0 0 44px;
+  margin: 0;
+  border-radius: 8px;
+}
+.global-player-panel .aplayer .aplayer-pic .aplayer-button {
+  opacity: 1;
+  border: 0;
+  background: var(--accent);
+  box-shadow: none;
+}
+.global-player-panel .aplayer .aplayer-pic .aplayer-play,
+.global-player-panel .aplayer .aplayer-pic .aplayer-pause {
+  width: 30px;
+  height: 30px;
+  margin: 0 -15px -15px 0;
+}
+.global-player-panel .aplayer .aplayer-pic .aplayer-play svg {
+  top: 5px;
+  left: 5px;
+  width: 20px;
+  height: 20px;
+}
+.global-player-panel .aplayer .aplayer-pic .aplayer-pause svg {
+  top: 7px;
+  left: 7px;
+  width: 16px;
+  height: 16px;
+}
+.global-player-panel .aplayer .aplayer-info,
+.global-player-panel .aplayer .aplayer-list {
+  background: var(--paper);
+}
+.global-player-panel .aplayer .aplayer-body {
+  background: var(--soft);
+}
+.global-player-panel .aplayer .aplayer-info {
+  display: flex !important;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  height: auto !important;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music {
+  min-width: 0;
+  flex: 1;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: auto;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-title,
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-author {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-title {
+  font-size: 14px;
+  line-height: 1.4;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-author {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller,
+.global-player-panel .aplayer .aplayer-lrc {
+  display: none !important;
+}
+.global-player-panel .aplayer .aplayer-pic {
+  background-position: center;
+  background-size: cover;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-title {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-author {
+  color: var(--muted);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time {
+  color: var(--muted);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon path {
+  fill: var(--muted);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon:hover path {
+  fill: var(--accent);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar {
+  height: 3px;
+  overflow: visible;
+  border-radius: 999px;
+  background: var(--divider);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-loaded {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--divider-strong);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-played {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent) !important;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-played .aplayer-thumb {
+  background: var(--accent);
+}
+.global-player-panel .aplayer .aplayer-list {
+  max-height: min(36vh, 330px);
+  border-top: 1px solid var(--divider);
+  overflow-y: auto;
+}
+.global-player-panel .aplayer .aplayer-list ol {
+  padding: 5px 8px 8px;
+}
+.global-player-panel .aplayer .aplayer-list ol li {
+  display: flex;
+  height: 42px;
+  box-sizing: border-box;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--foreground);
+  line-height: 1.2;
+}
+.global-player-panel .aplayer .aplayer-list ol li:first-child {
+  border-top: 1px solid transparent;
+}
+.global-player-panel .aplayer .aplayer-list ol li:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--divider));
+  background: color-mix(in srgb, var(--accent) 6%, var(--soft));
+}
+.global-player-panel .aplayer .aplayer-list ol li.aplayer-list-light {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--divider)) !important;
+  background: color-mix(in srgb, var(--accent) 10%, var(--soft)) !important;
+}
+.global-player-panel .aplayer .aplayer-list ol li .aplayer-list-cur {
+  top: 7px;
+  left: 4px;
+  width: 3px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent) !important;
+}
+.global-player-panel .aplayer .aplayer-list ol li .global-player-list-cover {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background-color: color-mix(in srgb, var(--accent) 10%, var(--soft));
+  background-position: center;
+  background-size: cover;
+  color: var(--muted);
+  font-size: 14px;
+}
+.global-player-panel .aplayer .aplayer-list ol li .aplayer-list-index {
+  width: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+.global-player-panel .aplayer .aplayer-list ol li .aplayer-list-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-player-panel .aplayer .aplayer-list ol li .aplayer-list-author {
+  max-width: 28%;
+  flex: 0 1 28%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-player-panel .aplayer .aplayer-list ol::-webkit-scrollbar {
+  width: 6px;
+}
+.global-player-panel .aplayer .aplayer-list ol::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-color: var(--divider-strong);
+}
+
+@media (max-width: 640px) {
+  .global-player-panel {
+    width: calc(100vw - 12px);
+  }
+
+  .global-player-panel .aplayer .aplayer-list ol {
+    padding: 4px 6px 7px;
+  }
+
+  .global-player-panel .aplayer .aplayer-list ol li {
+    gap: 7px;
+    margin: 3px 0;
+    padding: 6px 8px;
+  }
+
+  .global-player-panel .aplayer .aplayer-list ol li .global-player-list-cover {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .global-player-panel .aplayer .aplayer-list ol li .aplayer-list-author {
+    max-width: 25%;
+    flex-basis: 25%;
+  }
+}
+
+/* 播放器控制区：底部贴边，封面只展示；播放、时间、歌词和播放信息按钮集中在右侧。 */
+.global-player-panel.is-open {
+  transform: translate(-50%, var(--player-drag-y, 0px));
+}
+.global-player-panel.is-dragging {
+  transition: none;
+}
+.global-player-host {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+}
+.global-player-panel .aplayer,
+.global-player-panel .aplayer .aplayer-list {
+  transition: none;
+}
+.global-player-panel .aplayer .aplayer-body {
+  min-height: 0;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 8px 8px 6px;
+  padding: 11px 12px 10px;
+}
+.global-player-panel .aplayer .aplayer-pic,
+.global-player-panel .aplayer.aplayer-withlrc .aplayer-pic {
+  width: 58px !important;
+  height: 58px !important;
+  flex-basis: 58px;
+  border-radius: 9px;
+  pointer-events: none;
+  transition: none;
+}
+.global-player-panel .aplayer .aplayer-pic .aplayer-button {
+  display: none !important;
+}
+.global-player-panel .aplayer .aplayer-info {
+  display: grid !important;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-items: stretch;
+  gap: 3px;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: auto !important;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: auto;
+  color: var(--foreground);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-title,
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-author {
+  margin: 0;
+  color: var(--foreground);
+  line-height: 1.35;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-title {
+  font-size: 14px;
+  font-weight: 650;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-author {
+  font-size: 12px;
+  font-weight: 400;
+}
+.global-player-panel .aplayer .aplayer-lrc:not(.aplayer-lrc-hide) {
+  display: block !important;
+}
+.global-player-panel .aplayer .aplayer-lrc.aplayer-lrc-hide {
+  display: none !important;
+}
+.global-player-panel .aplayer .aplayer-lrc {
+  position: relative;
+  height: 16px;
+  margin: 1px 0 3px;
+  text-align: left;
+  pointer-events: none;
+}
+.global-player-panel .aplayer .aplayer-lrc::before,
+.global-player-panel .aplayer .aplayer-lrc::after {
+  display: none;
+}
+.global-player-panel .aplayer .aplayer-lrc .aplayer-lrc-contents {
+  width: 100%;
+  text-align: left;
+}
+.global-player-panel .aplayer .aplayer-lrc .aplayer-lrc-contents:empty::before {
+  color: var(--muted);
+  content: "暂无歌词";
+  font-size: 12px;
+}
+.global-player-panel .aplayer .aplayer-lrc p,
+.global-player-panel .aplayer .aplayer-lrc p.aplayer-lrc-current {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px !important;
+  height: 16px !important;
+  min-height: 16px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-player-panel .aplayer .aplayer-lrc p.aplayer-lrc-current {
+  color: var(--accent-strong);
+  opacity: 1;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller {
+  position: static;
+  display: flex !important;
+  min-width: 0;
+  width: 100%;
+  flex-direction: column;
+  gap: 5px;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap {
+  width: 100%;
+  flex: none;
+  margin: 0;
+  padding: 5px 0;
+  touch-action: none;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-loaded,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-played {
+  height: 3px;
+  border-radius: 999px;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-played .aplayer-thumb {
+  transform: scale(0.72);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time {
+  position: static;
+  display: flex;
+  width: 100%;
+  height: 30px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--foreground);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time-inner {
+  min-width: 72px;
+  margin-right: auto;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  opacity: 1;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon path {
+  fill: var(--foreground);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-back,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-forward {
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+  background: var(--accent);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play svg {
+  width: 15px;
+  height: 15px;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play path {
+  fill: #fff;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--soft));
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play:hover {
+  background: var(--accent-strong);
+}
+.global-player-panel .aplayer:not(.aplayer-withlist) .aplayer-icon-order,
+.global-player-panel .aplayer:not(.aplayer-withlist) .aplayer-icon-menu,
+.global-player-panel .aplayer.aplayer-mobile .aplayer-icon-volume-down {
+  display: none !important;
+}
+.global-player-panel .aplayer .aplayer-list {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.global-player-panel .aplayer .aplayer-list ol {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .global-player-panel .aplayer .aplayer-list ol li:hover,
+  .global-player-panel .aplayer .aplayer-list ol li:active {
+    border-color: transparent !important;
+    background: var(--soft) !important;
+  }
+
+  .global-player-panel .aplayer .aplayer-list ol li.aplayer-list-light,
+  .global-player-panel .aplayer .aplayer-list ol li.aplayer-list-light:hover,
+  .global-player-panel .aplayer .aplayer-list ol li.aplayer-list-light:active {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--divider)) !important;
+    background: color-mix(in srgb, var(--accent) 10%, var(--soft)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .global-player-panel {
+    width: 100vw;
+  }
+
+  .global-player-host {
+    border-right: 0;
+    border-left: 0;
+  }
+
+  .global-player-panel .aplayer .aplayer-body {
+    margin: 7px 7px 5px;
+    padding: 10px;
+  }
+
+  .global-player-panel .aplayer .aplayer-pic,
+  .global-player-panel .aplayer.aplayer-withlrc .aplayer-pic {
+    width: 54px !important;
+    height: 54px !important;
+    flex-basis: 54px;
+  }
+
+  .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time {
+    gap: 3px;
+  }
+
+  .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time-inner {
+    min-width: 68px;
+  }
+
+  .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon {
+    width: 22px;
+    height: 22px;
+    flex-basis: 22px;
+  }
+
+  .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+}
+
+/* 播放器顶部改成与正文音乐卡片一致的单层结构：封面｜歌曲信息｜时间/模式｜播放。 */
+.global-player-panel .aplayer .aplayer-body {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 34px 44px 34px;
+  grid-template-rows: 29px 29px;
+  column-gap: 10px;
+  row-gap: 0;
+  align-items: center;
+  margin: 0;
+  padding: 12px 14px 11px;
+  border: 0;
+  border-bottom: 1px solid var(--divider);
+  border-radius: 0;
+  background: var(--paper);
+  touch-action: none;
+}
+.global-player-panel .aplayer .aplayer-pic,
+.global-player-panel .aplayer.aplayer-withlrc .aplayer-pic {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+.global-player-panel .aplayer .aplayer-info,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time {
+  display: contents !important;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  display: grid !important;
+  min-width: 0;
+  grid-template-rows: 29px 29px;
+  align-items: center;
+  gap: 0;
+}
+.global-player-track-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0;
+  overflow: hidden;
+}
+.global-player-panel .aplayer .aplayer-info .global-player-track-heading .aplayer-title {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-music .aplayer-author {
+  min-width: 0;
+  align-self: center;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-player-panel .aplayer .aplayer-lrc {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  align-self: center;
+  margin: 0;
+}
+.global-player-panel .aplayer .aplayer-lrc p,
+.global-player-panel .aplayer .aplayer-lrc p.aplayer-lrc-current {
+  font-size: 13px;
+}
+.aplayer-host.is-playing .aplayer-music .aplayer-author {
+  display: none !important;
+}
+.global-player-panel .aplayer.aplayer-host:not(.is-playing) .aplayer-lrc {
+  display: none !important;
+}
+.global-player-panel .aplayer.aplayer-host.is-playing .aplayer-lrc:not(.aplayer-lrc-hide) {
+  display: block !important;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap {
+  display: none;
+}
+.global-player-panel .aplayer .global-player-track-heading .aplayer-time-inner {
+  display: inline;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+.global-player-panel .aplayer .global-player-track-heading .aplayer-time-inner::before {
+  content: "·";
+  margin: 0 2px;
+  color: var(--faint);
+}
+.aplayer-host:not(.is-playing) .global-player-track-heading .aplayer-time-inner {
+  display: none;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-back,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-forward,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-volume-wrap,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-loop,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-lrc {
+  display: none !important;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-order,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-menu {
+  display: inline-flex;
+  grid-row: 1 / 3;
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 3%, var(--soft));
+  color: var(--muted);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-order {
+  grid-column: 3;
+  justify-self: center;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-menu {
+  grid-column: 5;
+  justify-self: center;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play {
+  display: inline-flex;
+  grid-column: 4;
+  grid-row: 1 / 3;
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  align-self: center;
+  justify-self: end;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play svg {
+  width: 18px;
+  height: 18px;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-order svg,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-menu svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: auto;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-menu svg {
+  transform: translateX(1px);
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-order:hover,
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-menu:hover {
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--divider));
+  background: color-mix(in srgb, var(--accent) 8%, var(--soft));
+}
+.aplayer-host.is-random-order .aplayer-icon-order,
+.aplayer-host.is-list-open .aplayer-icon-menu {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--divider)) !important;
+  background: color-mix(in srgb, var(--accent) 12%, var(--soft)) !important;
+}
+.aplayer-host.is-random-order .aplayer-icon-order path,
+.aplayer-host.is-list-open .aplayer-icon-menu path {
+  fill: var(--accent) !important;
+}
+.global-player-panel .aplayer .aplayer-list {
+  border-top: 0;
+}
+
+@media (max-width: 640px) {
+  .global-player-panel .aplayer .aplayer-body {
+    grid-template-columns: 52px minmax(0, 1fr) 32px 40px 32px;
+    grid-template-rows: 27px 27px;
+    column-gap: 9px;
+    margin: 0;
+    padding: 10px 11px 9px;
+  }
+
+  .global-player-panel .aplayer .global-player-track-heading .aplayer-time-inner {
+    font-size: 11px;
+  }
+
+  .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-order,
+  .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-menu {
+    width: 32px;
+    height: 32px;
+    flex-basis: auto;
+  }
+
+  .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play {
+    width: 40px;
+    height: 40px;
+    flex-basis: auto;
+  }
+}
+
+/* 顶部把手既是明确的最小化入口，也是向下拖动手势的视觉提示。 */
+.global-player-collapse {
+  top: -10px;
+  right: auto;
+  left: 50%;
+  width: 58px;
+  height: 20px;
+  padding: 0;
+  transform: translateX(-50%);
+  border-color: color-mix(in srgb, var(--foreground) 8%, var(--divider));
+  background: var(--paper);
+  box-shadow: 0 -1px 0 rgb(255 255 255 / 25%), 0 4px 12px rgb(0 0 0 / 8%);
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.global-player-collapse-handle {
+  display: block;
+  width: 24px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 30%, var(--divider));
+  transition: width 160ms ease, background-color 160ms ease;
+}
+.global-player-collapse:hover .global-player-collapse-handle,
+.global-player-panel.is-dragging .global-player-collapse-handle {
+  width: 30px;
+  background: var(--accent);
+}
+.global-player-panel.show-collapse .global-player-collapse,
+.global-player-panel.is-dragging .global-player-collapse,
+.global-player-collapse:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 当前歌曲只用底色和轻边框提示，封面左侧不再增加装饰竖杠。 */
+.global-player-panel .aplayer .aplayer-list ol li .aplayer-list-cur {
+  display: none !important;
 }
 
 /* =========================================================

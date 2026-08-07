@@ -38,6 +38,7 @@ declare module "aplayer" {
     pause(): void;
     paused: boolean;
     audio: HTMLAudioElement;
+    options: APlayerOptions;
     list: APlayerList;
     on(event: string, handler: (arg?: APlayerEventPayload) => void): void;
   }

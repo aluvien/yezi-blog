@@ -19,7 +19,7 @@ function initialImages(moment?: Moment): string[] {
   }
 }
 
-export default function MomentForm({ moment, onSuccess, onCancel, compact }: { moment?: Moment; onSuccess?: () => void; onCancel?: () => void; compact?: boolean }) {
+export default function MomentForm({ moment, onSuccess, onCancel, compact, uploadEndpoint = "/api/admin/upload" }: { moment?: Moment; onSuccess?: () => void; onCancel?: () => void; compact?: boolean; uploadEndpoint?: string }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [content, setContent] = useState(moment?.content ?? "");
@@ -37,7 +37,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact }: { m
     try {
       const available = Math.max(0, MAX_IMAGES - images.length);
       for (const file of Array.from(files).slice(0, available)) {
-        const path = await uploadImage(file, original);
+        const path = await uploadImage(file, original, uploadEndpoint);
         setImages((prev) => (prev.length >= MAX_IMAGES ? prev : [...prev, path]));
       }
     } catch (e) {
