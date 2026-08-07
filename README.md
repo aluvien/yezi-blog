@@ -6,6 +6,32 @@
 - 后台：`/admin` 管理文章草稿与发布、分类、附件、想法、作品，以及评论审核、撤回和作者回复；站点设置可修改页头、页脚和 Logo
 - SEO：全站 metadata、Open Graph、`sitemap.xml`、`robots.txt`、`rss.xml`
 
+## 界面截图
+
+截图使用本地生产模式生成，覆盖前台桌面端、前台手机端和后台手机端。后台截图中的仪表盘卡片、分类/标签管理、文章元信息、评论审核和站点设置均来自本地演示库。
+
+### 前台桌面端
+
+| 首页 | 文章详情 | 作品集 |
+| --- | --- | --- |
+| ![前台首页桌面端](docs/screenshots/frontend-home-desktop.jpg) | ![文章详情桌面端](docs/screenshots/frontend-article-desktop.jpg) | ![作品集桌面端](docs/screenshots/frontend-works-desktop.jpg) |
+
+### 前台手机端
+
+| 首页 | 文章详情 | 想法 | 作品集 |
+| --- | --- | --- | --- |
+| ![前台首页手机端](docs/screenshots/frontend-home-mobile.jpg) | ![文章详情手机端](docs/screenshots/frontend-article-mobile.jpg) | ![想法手机端](docs/screenshots/frontend-moments-mobile.jpg) | ![作品集手机端](docs/screenshots/frontend-works-mobile.jpg) |
+
+### 后台手机端
+
+| 仪表盘 | 文章管理 | 想法管理 | 作品管理 |
+| --- | --- | --- | --- |
+| ![后台仪表盘手机端](docs/screenshots/admin-dashboard-mobile.jpg) | ![后台文章管理手机端](docs/screenshots/admin-posts-mobile.jpg) | ![后台想法管理手机端](docs/screenshots/admin-moments-mobile.jpg) | ![后台作品管理手机端](docs/screenshots/admin-works-mobile.jpg) |
+
+| 评论管理 | 分类与标签 | 站点设置 |
+| --- | --- | --- |
+| ![后台评论管理手机端](docs/screenshots/admin-comments-mobile.jpg) | ![后台分类与标签手机端](docs/screenshots/admin-taxonomy-mobile.jpg) | ![后台站点设置手机端](docs/screenshots/admin-settings-mobile.jpg) |
+
 ## 技术栈
 
 Next.js 16（App Router）· React 19 · TypeScript · Tailwind CSS v4 · better-sqlite3 · marked
@@ -69,9 +95,12 @@ POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 
 ```bash
 npm run seed
+npm run demo:taxonomy
 ```
 
-插入 2 篇文章、3 条想法、2 个作品和几条评论。脚本会先检查表是否为空，非空则直接跳过，不会污染已有数据。
+`npm run seed` 会插入 2 篇文章、3 条想法、2 个作品和几条评论；它会先检查表是否为空，非空则直接跳过，不会污染已有数据。
+
+`npm run demo:taxonomy` 会幂等地补充技术实践、阅读笔记、音乐与影像等分类，并为演示文章写入 Next.js、Markdown、音乐、摄影等标签。它不会删除或覆盖想法、作品、评论和音乐设置，重复执行也不会生成重复分类。README 截图使用的本地数据包括 6 篇文章、4 条想法、2 个作品、5 条评论、5 个分类和 15 个标签；`data/` 与上传文件目录被 `.gitignore` 忽略，实际部署时请在目标环境单独初始化和持久化数据库。
 
 ## 生产部署
 
