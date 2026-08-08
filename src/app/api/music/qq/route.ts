@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getClientIp, hashIp } from "@/lib/request";
 import {
-  findArray,
   findRecord,
   findString,
   getRecordString,
@@ -129,13 +128,53 @@ function playbackUrl(raw: unknown): string {
   return normalizeQQAudio(findString(data, ["url", "purl", "playUrl", "play_url"]));
 }
 
+function isPlaylistSong(value: JsonRecord): boolean {
+  return Boolean(getRecordString(value, ["songmid", "mid", "songMid", "songid", "songId"]));
+}
+
+/**
+ * 歌单详情在不同 qq-music-api 版本中的结构并不完全一致：
+ * `data.songlist`、`data.cdlist[0].songlist` 以及更深一层的 `result` 都出现过。
+ * 不能直接用 findArray，因为它可能先把 cdlist 当成歌曲列表返回，随后所有项目
+ * 都没有 songmid，最终播放器就会得到空数组并显示 No audio。
+ */
+function findPlaylistSongs(value: unknown, depth = 0): JsonRecord[] {
+  if (depth > 8 || !value) return [];
+  if (Array.isArray(value)) {
+    const songs = value.flatMap((item) => {
+      const record = asRecord(item);
+      return record && isPlaylistSong(record) ? [record] : [];
+    });
+    if (songs.length > 0) return songs;
+    for (const item of value) {
+      const nested = findPlaylistSongs(item, depth + 1);
+      if (nested.length > 0) return nested;
+    }
+    return [];
+  }
+
+  const record = asRecord(value);
+  if (!record) return [];
+
+  // 先查明确定义的歌曲字段，再查歌单/结果包裹字段，避免在同一响应里误选到
+  // 歌单摘要对象或歌手、专辑子对象。
+  for (const key of ["songlist", "songList", "songs", "tracks", "tracklist", "trackList"]) {
+    const nested = findPlaylistSongs(record[key], depth + 1);
+    if (nested.length > 0) return nested;
+  }
+  for (const key of ["cdlist", "cdList", "playlist", "data", "result", "response"]) {
+    const nested = findPlaylistSongs(record[key], depth + 1);
+    if (nested.length > 0) return nested;
+  }
+  for (const child of Object.values(record)) {
+    const nested = findPlaylistSongs(child, depth + 1);
+    if (nested.length > 0) return nested;
+  }
+  return [];
+}
+
 function playlistSongs(raw: unknown): JsonRecord[] {
-  const data = unwrapData(raw);
-  const list = findArray(data, ["songlist", "songList", "songs", "list"]);
-  return list.flatMap((item) => {
-    const song = asRecord(item);
-    return song ? [song] : [];
-  });
+  return findPlaylistSongs(unwrapData(raw));
 }
 
 type ResolvedPlaylistTrack = ReturnType<typeof trackInfo> & { url: string; lrc: string };

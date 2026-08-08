@@ -1,6 +1,6 @@
 import { marked, type Renderer, type Tokens } from "marked";
 import sanitizeHtml from "sanitize-html";
-import { musicContainerHtml, parseMusicBlock } from "@/lib/music";
+import { musicContainerHtml, parseLegacyMetingHtml, parseMusicBlock, type MusicServer } from "@/lib/music";
 import { parseVideoBlock, videoContainerHtml } from "@/lib/video";
 
 // 输出端白名单兜底：即使 renderer 层出现回归，也不放行任意标签/属性。
@@ -65,6 +65,8 @@ export function renderMarkdown(content: string): string {
   let counter = 0;
 
   renderer.html = function (this: Renderer, { text }: Tokens.HTML | Tokens.Tag) {
+    const legacyMusic = parseLegacyMetingHtml(text);
+    if (legacyMusic) return musicContainerHtml(legacyMusic);
     // 文章只允许 Markdown，不允许作者直接注入任意 HTML/脚本。
     return escapeHtml(text);
   };
@@ -102,12 +104,21 @@ export function renderMarkdown(content: string): string {
   // 非 music/video 语言走 marked 默认渲染，保持原有代码块样式不变。
   const defaultCode = renderer.code.bind(renderer);
   renderer.code = function (token: Tokens.Code) {
-    if (token.lang && token.lang.trim() === "music") {
-      return parseMusicBlock(token.text)
+    // 兼容旧文章把 meting-js 标签放进 ```html / ```xml 代码块的写法。
+    const legacyMusic = parseLegacyMetingHtml(token.text);
+    if (legacyMusic) return musicContainerHtml(legacyMusic);
+    const language = token.lang?.trim().toLowerCase() ?? "";
+    const legacyServer: MusicServer | undefined = language === "netease" || language === "netease-cloud-music" || language === "163"
+      ? "netease"
+      : language === "qq" || language === "qqmusic"
+        ? "qq"
+        : undefined;
+    if (language === "music" || language === "meting" || language === "aplayer" || legacyServer) {
+      return parseMusicBlock(token.text, legacyServer)
         .map((spec) => musicContainerHtml(spec))
-        .join("\n");
+        .join("\n") || defaultCode(token);
     }
-    if (token.lang && token.lang.trim() === "video") {
+    if (language === "video") {
       return parseVideoBlock(token.text)
         .map((spec) => videoContainerHtml(spec))
         .join("\n");

@@ -88,11 +88,64 @@ export function parseMusicSpec(input: string): MusicSpec | null {
   };
 }
 
+function queryParameter(url: URL, key: string): string {
+  const direct = url.searchParams.get(key)?.trim();
+  if (direct) return direct;
+  const hashQuery = url.hash.match(/[?&]([^#]*)$/)?.[1];
+  if (!hashQuery) return "";
+  return new URLSearchParams(hashQuery).get(key)?.trim() || "";
+}
+
+/** 兼容旧文章中直接粘贴的网易云/QQ 音乐分享链接。 */
+export function parseLegacyMusicUrl(input: string, preferredServer?: MusicServer): MusicSpec | null {
+  const raw = input.trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    const path = `${url.pathname}${url.hash}`.toLowerCase();
+    if (host === "music.163.com" || host.endsWith(".music.163.com")) {
+      const type = path.includes("playlist") ? "playlist" : path.includes("album") ? "album" : "song";
+      const id = queryParameter(url, "id");
+      return id && /^\d+$/.test(id) ? parseMusicSpec(`netease:${id}:${type}`) : null;
+    }
+    if (host === "y.qq.com" || host.endsWith(".qq.com")) {
+      const type = path.includes("playlist") || path.includes("detail") && path.includes("playlist") ? "playlist" : "song";
+      const id = queryParameter(url, type === "playlist" ? "disstid" : "songmid") || queryParameter(url, "id");
+      if (!id) return null;
+      const server = preferredServer === "qqvip" ? "qqvip" : "qq";
+      return parseMusicSpec(`${server}:${id}:${type}`);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** 兼容旧版 Meting.js 写法：<meting-js server="..." type="..." id="...">。 */
+export function parseLegacyMetingHtml(input: string): MusicSpec | null {
+  const match = input.trim().match(/^<meting-js\b([\s\S]*?)(?:\/>|>[\s\S]*?<\/meting-js>)$/i);
+  if (!match) return null;
+  const attributes: Record<string, string> = {};
+  for (const attribute of match[1].matchAll(/([\w:-]+)\s*=\s*["']([^"']*)["']/g)) {
+    attributes[attribute[1].toLowerCase()] = attribute[2].trim();
+  }
+  const server = (attributes.server || "netease").toLowerCase() as MusicServer;
+  const auto = attributes.auto ? parseLegacyMusicUrl(attributes.auto, server) : null;
+  if (auto) return auto;
+  const id = attributes.id || attributes.songmid || attributes.disstid;
+  const type = attributes.type || (attributes.disstid ? "playlist" : "song");
+  return id ? parseMusicSpec(`${server}:${id}:${type}`) : null;
+}
+
 /** 文章 music 代码块内文本：每行一个规格，空行/无效行忽略。 */
-export function parseMusicBlock(text: string): MusicSpec[] {
+export function parseMusicBlock(text: string, fallbackServer?: MusicServer): MusicSpec[] {
   const specs: MusicSpec[] = [];
   for (const line of text.split("\n")) {
-    const spec = parseMusicSpec(line);
+    const value = line.trim();
+    const spec = parseMusicSpec(value)
+      || parseLegacyMusicUrl(value, fallbackServer)
+      || (fallbackServer && /^\d+$/.test(value) ? parseMusicSpec(`${fallbackServer}:${value}:song`) : null);
     if (spec) specs.push(spec);
   }
   return specs;
@@ -196,6 +249,23 @@ function normalizeCoverUrl(value: string): string {
 }
 
 /**
+ * 优先通过本站服务端代理请求 Meting，避免旧文章的网易云播放器受到浏览器
+ * CORS、混合内容或外部接口网络策略影响；代理失败时保留原来的直连兜底。
+ */
+async function requestMetingTracks(metingApi: string, spec: MusicSpec): Promise<Response> {
+  try {
+    const proxy = await fetch(
+      `/api/music/meting?server=${encodeURIComponent(spec.server)}&id=${encodeURIComponent(spec.id)}&type=${encodeURIComponent(spec.type)}`,
+      { signal: AbortSignal.timeout(15_000), cache: "no-store" },
+    );
+    if (proxy.ok) return proxy;
+  } catch {
+    // 代理不可用时继续尝试原来的 Meting 地址。
+  }
+  return fetch(buildMetingUrl(metingApi, spec), { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+}
+
+/**
  * 调 Meting API 拉取曲目并归一化为 MusicTrack[]。
  * 前端触发卡片与全局播放器的默认歌单都走这里，避免各自重复实现。
  */
@@ -240,7 +310,7 @@ export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Prom
       key: `qqvip:${spec.id}`,
     }];
   }
-  const res = await fetch(buildMetingUrl(metingApi, spec), { signal: AbortSignal.timeout(15000) });
+  const res = await requestMetingTracks(metingApi, spec);
   if (!res.ok) throw new Error(`meting ${res.status}`);
   // 不同 Meting 实现可能返回数组或单个对象，封面字段也可能叫 cover、pic、image 或 album.pic。
   const raw = (await res.json()) as unknown;

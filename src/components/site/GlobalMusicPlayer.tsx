@@ -69,6 +69,7 @@ export function GlobalMusicPlayer({
 }) {
   const [open, setOpen] = useState(false);
   const [hasTracks, setHasTracks] = useState(false);
+  const [defaultMusicError, setDefaultMusicError] = useState("");
   const [playing, setPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
   const [panelDragOffset, setPanelDragOffset] = useState(0);
@@ -420,8 +421,9 @@ export function GlobalMusicPlayer({
             const tracks = await fetchMusicTracks(apiRef.current, defaultSpec);
             if (disposed) return;
             addUniqueTracks(tracks, null);
-          } catch {
-            // noop
+            setDefaultMusicError("");
+          } catch (error) {
+            if (!disposed) setDefaultMusicError(error instanceof Error ? error.message : "默认歌单加载失败");
           }
         }
       } catch {
@@ -613,7 +615,13 @@ export function GlobalMusicPlayer({
           </button>
         )}
         <div className="global-player-host">
-          <div ref={hostRef} className="aplayer-host" />
+          <div ref={hostRef} className={`aplayer-host ${defaultMusicError && !hasTracks ? "hidden" : ""}`} />
+          {defaultMusicError && !hasTracks && (
+            <div className="px-4 py-4 text-sm text-muted" role="alert">
+              <p className="font-medium text-foreground">默认歌单暂时无法播放</p>
+              <p className="mt-1 text-xs leading-5">{defaultMusicError}</p>
+            </div>
+          )}
         </div>
       </div>
     </>
