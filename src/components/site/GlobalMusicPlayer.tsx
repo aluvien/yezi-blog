@@ -8,7 +8,13 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { fetchMusicTracks, parseMusicSpec, type MusicTrack } from "@/lib/music";
+import {
+  fetchMusicTracks,
+  fetchQQFallbackTrack,
+  parseMusicSpec,
+  QQ_FALLBACK_DURATION_LIMIT,
+  type MusicTrack,
+} from "@/lib/music";
 import { emitGlobalPlaybackState, setGlobalPlayListener } from "@/lib/player-store";
 
 type APlayerInstance = import("aplayer").default;
@@ -133,6 +139,8 @@ export function GlobalMusicPlayer({
     const ownerMap = ownerMapRef.current;
     const trackIndex = trackIndexRef.current;
     const trackMap = new Map<string, MusicTrack>();
+    const fallbackInFlight = new Set<string>();
+    const fallbackFailed = new Set<string>();
 
     function updateCurrentTrack(track: MusicTrack | null): void {
       currentTrackRef.current = track;
@@ -273,18 +281,97 @@ export function GlobalMusicPlayer({
       });
     }
 
+    /**
+     * Stop APlayer's built-in two-second error skip while QQ is resolving a
+     * replacement, then put the replacement back at the same list index. The
+     * temporary empty URL is intentional: calling list.switch() emits
+     * `listswitch`, which clears APlayer's internal skip timer.
+     */
+    async function replaceWithQQFallback(player: APlayerInstance, index: number, source: MusicTrack): Promise<void> {
+      const key = trackKey(source);
+      if (!source.qqFallback || fallbackInFlight.has(key) || fallbackFailed.has(key)) return;
+      fallbackInFlight.add(key);
+      const wasPlaying = !player.paused;
+      const placeholder: MusicTrack = { ...source, url: "", qqFallback: undefined };
+      player.list.audios[index] = placeholder;
+      if (player.list.index === index) {
+        try {
+          player.list.switch(index);
+          player.pause();
+          player.audio.removeAttribute("src");
+          player.audio.load();
+        } catch {
+          // APlayer can be in the middle of an audio error transition; the
+          // replacement request can still proceed and restore the list item.
+        }
+      }
+
+      try {
+        const replacement = await fetchQQFallbackTrack(source);
+        if (!replacement) {
+          fallbackFailed.add(key);
+          player.list.audios[index] = source;
+          if (player.list.index === index) {
+            decoratePlayerList(player);
+            if (wasPlaying && player.list.audios.length > 1) {
+              player.skipForward();
+              player.play();
+            } else {
+              player.pause();
+            }
+          }
+          return;
+        }
+
+        const resolved: MusicTrack = {
+          ...replacement,
+          // Stable identity keeps the article card and owner mapping attached
+          // to the original NetEase item after its URL changes to QQ.
+          key: source.key || replacement.key || key,
+        };
+        trackMap.set(key, resolved);
+        player.list.audios[index] = resolved;
+        if (player.list.index === index) {
+          try {
+            player.list.switch(index);
+          } catch {
+            // The list item is already replaced; a later user click can retry.
+          }
+          decoratePlayerList(player);
+          if (wasPlaying) player.play();
+          else player.pause();
+          emitPlayerState(player, wasPlaying, currentCardIdRef.current, index);
+        } else {
+          decoratePlayerList(player);
+        }
+      } finally {
+        fallbackInFlight.delete(key);
+      }
+    }
+
+    function maybeReplaceCurrentTrack(player: APlayerInstance): void {
+      const index = player.list.index;
+      const track = player.list.audios[index] as MusicTrack | undefined;
+      if (!track?.qqFallback) return;
+      void replaceWithQQFallback(player, index, track);
+    }
+
     function addUniqueTracks(tracks: MusicTrack[], owner: string | null): void {
       const player = playerRef.current;
       if (!player || tracks.length === 0) return;
       const uniqueTracks: MusicTrack[] = [];
       for (const track of tracks) {
         const key = trackKey(track);
-        trackMap.set(key, track);
         const existingIndex = trackIndex.get(key);
         if (existingIndex !== undefined) {
+          const existingTrack = player.list.audios[existingIndex] as MusicTrack | undefined;
+          // Once a NetEase item has been replaced, a later card scan may still
+          // send the original metadata. Keep the resolved QQ display/source.
+          if (!existingTrack || existingTrack.qqFallback || !track.qqFallback) trackMap.set(key, track);
           ownerMap.set(existingIndex, owner);
           continue;
         }
+        trackMap.set(key, track);
         const index = player.list.audios.length + uniqueTracks.length;
         trackIndex.set(key, index);
         ownerMap.set(index, owner);
@@ -306,14 +393,16 @@ export function GlobalMusicPlayer({
       const uniqueTracks: MusicTrack[] = [];
       for (const track of tracks) {
         const key = trackKey(track);
-        trackMap.set(key, track);
         const existingIndex = trackIndex.get(key);
         if (existingIndex !== undefined) {
+          const existingTrack = player.list.audios[existingIndex] as MusicTrack | undefined;
+          if (!existingTrack || existingTrack.qqFallback || !track.qqFallback) trackMap.set(key, track);
           ownerMap.set(existingIndex, cardId);
           if (preferredTrackKey && key === preferredTrackKey) targetIndex = existingIndex;
           else if (targetIndex === null) targetIndex = existingIndex;
           continue;
         }
+        trackMap.set(key, track);
         const index = player.list.audios.length + uniqueTracks.length;
         trackIndex.set(key, index);
         ownerMap.set(index, cardId);
@@ -382,6 +471,23 @@ export function GlobalMusicPlayer({
           theme: accent,
         });
         playerRef.current = player;
+        // A Meting response often omits duration. APlayer gets the real
+        // duration from the audio metadata, so this catches short previews
+        // without preloading every item in a large playlist.
+        player.on("durationchange", () => {
+          const track = player.list.audios[player.list.index] as MusicTrack | undefined;
+          const duration = Number(player.audio.duration);
+          if (!track || !Number.isFinite(duration) || duration <= 0) return;
+          track.duration = duration;
+          const normalized = trackMap.get(trackKey(track));
+          if (normalized) normalized.duration = duration;
+          if (duration < QQ_FALLBACK_DURATION_LIMIT) maybeReplaceCurrentTrack(player);
+        });
+        // APlayer normally skips after two seconds on an error. The fallback
+        // handler takes over for NetEase items so a VIP QQ source can be used.
+        player.on("error", () => {
+          maybeReplaceCurrentTrack(player);
+        });
         player.on("play", () => {
           pauseCompetingMedia(player);
           setPlaying(true);

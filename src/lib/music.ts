@@ -13,6 +13,8 @@
  */
 
 export const DEFAULT_METING_API = "https://api.injahow.cn/meting/";
+/** 网易云试听/失效源低于此时长时，尝试用已登录的 QQ 音乐源替代。 */
+export const QQ_FALLBACK_DURATION_LIMIT = 50;
 
 export const MUSIC_SERVERS = ["netease", "qq", "kugou", "kuwo", "xiami", "baidu", "qqvip"] as const;
 export type MusicServer = (typeof MUSIC_SERVERS)[number];
@@ -216,6 +218,14 @@ export interface MusicTrack {
   url: string;
   cover: string;
   lrc: string;
+  /** 接口或浏览器音频元数据给出的秒数。 */
+  duration?: number;
+  /** 只给网易云曲目挂载，播放器出错或过短时按此信息搜索 QQ。 */
+  qqFallback?: {
+    server: "netease";
+    title: string;
+    artist: string;
+  };
   /** 跨页面/跨请求保持稳定，用于避免同一首歌重复加入全局列表。 */
   key?: string;
 }
@@ -231,6 +241,9 @@ interface MetingTrack {
   pic?: unknown;
   image?: unknown;
   lrc?: unknown;
+  duration?: unknown;
+  dt?: unknown;
+  interval?: unknown;
   album?: { pic?: unknown; picUrl?: unknown };
 }
 
@@ -248,6 +261,33 @@ function normalizeCoverUrl(value: string): string {
   return value;
 }
 
+function durationSeconds(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    let numeric: number;
+    if (typeof value === "number") {
+      numeric = value;
+    } else if (typeof value === "string") {
+      const raw = value.trim();
+      const clock = raw.match(/^(\d+):([0-5]\d)$/);
+      if (clock) {
+        numeric = Number(clock[1]) * 60 + Number(clock[2]);
+      } else if (/^\d+(?:\.\d+)?$/.test(raw)) {
+        numeric = Number(raw);
+      } else {
+        continue;
+      }
+    } else {
+      continue;
+    }
+    if (!Number.isFinite(numeric) || numeric <= 0) continue;
+    // Meting-compatible services commonly return milliseconds, while some
+    // QQ/legacy responses return seconds. Keep both forms readable.
+    const seconds = numeric > 10_000 ? numeric / 1_000 : numeric;
+    if (Number.isFinite(seconds) && seconds > 0) return seconds;
+  }
+  return undefined;
+}
+
 /**
  * 优先通过本站服务端代理请求 Meting，避免旧文章的网易云播放器受到浏览器
  * CORS、混合内容或外部接口网络策略影响；代理失败时保留原来的直连兜底。
@@ -263,6 +303,62 @@ async function requestMetingTracks(metingApi: string, spec: MusicSpec): Promise<
     // 代理不可用时继续尝试原来的 Meting 地址。
   }
   return fetch(buildMetingUrl(metingApi, spec), { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+}
+
+/**
+ * 通过本站服务端 QQ 适配器按歌名和歌手找可播放替代源。
+ * QQ 登录 Cookie 永远不进入浏览器；失败时返回 null，让原曲目继续保留。
+ */
+export async function fetchQQFallbackTrack(track: MusicTrack): Promise<MusicTrack | null> {
+  const query = track.qqFallback;
+  if (!query) return null;
+  try {
+    const params = new URLSearchParams({ title: query.title, artist: query.artist });
+    const response = await fetch(`/api/music/qq-fallback?${params.toString()}`, {
+      signal: AbortSignal.timeout(15_000),
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as Partial<MusicTrack>;
+    const url = firstScalar(payload.url);
+    if (!url) return null;
+    return {
+      name: firstScalar(payload.name) || track.name,
+      artist: firstScalar(payload.artist) || track.artist,
+      url,
+      cover: normalizeCoverUrl(firstScalar(payload.cover)) || track.cover,
+      lrc: firstScalar(payload.lrc),
+      // Keep the original key so the card's active state and player ownership
+      // remain attached to the same article/idea even after source replacement.
+      key: track.key || `netease:${track.name}\u0000${track.artist}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveNetEaseFallbackTracks(tracks: MusicTrack[]): Promise<MusicTrack[]> {
+  const candidates = tracks.flatMap((track, index) => (
+    track.qqFallback && (
+      !track.url.trim()
+      || track.duration !== undefined && track.duration > 0 && track.duration < QQ_FALLBACK_DURATION_LIMIT
+    )
+      ? [{ index, track }]
+      : []
+  ));
+  if (candidates.length === 0) return tracks;
+
+  const resolved = [...tracks];
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < candidates.length) {
+      const candidate = candidates[cursor++];
+      const replacement = await fetchQQFallbackTrack(candidate.track);
+      if (replacement) resolved[candidate.index] = replacement;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, candidates.length) }, () => worker()));
+  return resolved;
 }
 
 /**
@@ -320,22 +416,33 @@ export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Prom
       ? [raw as MetingTrack]
       : [];
   const tracks = data
-    .filter((track) => typeof track.url === "string" && track.url.trim().length > 0)
+    .filter((track) => {
+      const url = firstScalar(track.url);
+      const identity = firstScalar(track.name, track.id, track.songid, track.mid);
+      return Boolean(url) || (spec.server === "netease" && Boolean(identity));
+    })
     .map((track) => {
       const name = firstScalar(track.name) || "未知曲目";
       const artist = firstScalar(track.artist);
       const trackId = firstScalar(track.id, track.songid, track.mid);
+      const duration = durationSeconds(track.duration, track.dt, track.interval);
       return {
         name,
         artist,
-        url: (track.url as string).trim(),
+        url: firstScalar(track.url),
         cover: normalizeCoverUrl(firstScalar(track.cover, track.pic, track.image, track.album?.pic, track.album?.picUrl)),
         lrc: firstScalar(track.lrc),
+        ...(duration === undefined ? {} : { duration }),
+        ...(spec.server === "netease" ? { qqFallback: { server: "netease" as const, title: name, artist } } : {}),
         key: trackId ? `${spec.server}:${trackId}` : `${spec.server}:${name}\u0000${artist}`,
       };
     });
-  if (!spec.shuffle || tracks.length < 2) return tracks;
-  return shuffleTracks(tracks);
+  const resolvedTracks = spec.server === "netease"
+    ? await resolveNetEaseFallbackTracks(tracks)
+    : tracks;
+  const playableTracks = resolvedTracks.filter((track) => track.url.trim().length > 0);
+  if (!spec.shuffle || playableTracks.length < 2) return playableTracks;
+  return shuffleTracks(playableTracks);
 }
 
 function shuffleTracks<T>(tracks: T[]): T[] {

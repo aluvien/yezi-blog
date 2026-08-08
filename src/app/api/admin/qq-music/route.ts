@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
 import {
   findArray,
-  findRecord,
   findString,
   getRecordString,
+  normalizeQQSearchTracks,
   normalizeQQCover,
   qqMusicRequest,
   readUin,
-  singerNames,
   type JsonRecord,
   unwrapData,
 } from "@/lib/qq-music-api";
@@ -36,30 +35,6 @@ function qrImage(value: unknown): string {
   if (raw.startsWith("data:image/") || raw.startsWith("http://") || raw.startsWith("https://")) return raw;
   // The sidecar currently returns a bare Base64 PNG. Make it browser-displayable.
   return /^[a-zA-Z0-9+/=\s]+$/.test(raw) ? `data:image/png;base64,${raw.replace(/\s/g, "")}` : "";
-}
-
-function normalizeSearch(raw: unknown) {
-  const data = unwrapData(raw);
-  const songRoot = findRecord(data, ["song", "songs"]);
-  const list = findArray(songRoot ?? data, ["list", "songList", "songs"]);
-  return list.flatMap((item) => {
-    const song = asRecord(item);
-    if (!song) return [];
-    const mid = getRecordString(song, ["songmid", "mid", "songMid"]);
-    if (!/^[A-Za-z0-9_-]{4,80}$/.test(mid)) return [];
-    const album = asRecord(song.album);
-    const albumMid = album ? getRecordString(album, ["mid", "albummid", "albumMid"]) : "";
-    const cover = normalizeQQCover(
-      getRecordString(song, ["cover", "pic", "image"]) || (album ? getRecordString(album, ["pic", "cover", "image"]) : ""),
-    ) || (albumMid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : "");
-    return [{
-      mid,
-      name: getRecordString(song, ["songname", "name", "title"]) || "未知歌曲",
-      artist: singerNames(song.singer ?? song.singers) || getRecordString(song, ["singername", "artist", "author"]),
-      album: album ? getRecordString(album, ["name", "title", "albumName"]) : getRecordString(song, ["albumname", "albumName"]),
-      cover,
-    }];
-  }).slice(0, 30);
 }
 
 function normalizePlaylists(raw: unknown) {
@@ -119,7 +94,7 @@ export async function GET(request: Request) {
       const key = (url.searchParams.get("q") ?? "").trim().slice(0, 80);
       if (!key) return noCache({ error: "请输入歌曲或歌手" }, 400);
       const raw = await qqMusicRequest("/getSearchByKey", { query: { key, limit: "30" } });
-      return noCache({ tracks: normalizeSearch(raw) });
+      return noCache({ tracks: normalizeQQSearchTracks(raw) });
     }
     if (op === "playlists") {
       const session = getQQMusicSession();

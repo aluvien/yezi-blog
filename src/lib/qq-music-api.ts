@@ -166,3 +166,44 @@ export function getRecordString(record: JsonRecord, keys: string[]): string {
   }
   return "";
 }
+
+export type QQSearchTrack = {
+  mid: string;
+  name: string;
+  artist: string;
+  album: string;
+  cover: string;
+};
+
+/**
+ * Normalize the search response shared by the admin picker and public QQ
+ * fallback route. The sidecar has used both `data.song.list` and a flatter
+ * `data.list` envelope across releases.
+ */
+export function normalizeQQSearchTracks(raw: unknown): QQSearchTrack[] {
+  const data = unwrapData(raw);
+  const songRoot = findRecord(data, ["song", "songs"]);
+  const list = findArray(songRoot ?? data, ["list", "songList", "songs"]);
+  return list.flatMap((item) => {
+    const song = isRecord(item) ? item : null;
+    if (!song) return [];
+    const mid = getRecordString(song, ["songmid", "mid", "songMid"]);
+    if (!/^[A-Za-z0-9_-]{4,80}$/.test(mid)) return [];
+    const album = isRecord(song.album) ? song.album : null;
+    const albumMid = album ? getRecordString(album, ["mid", "albummid", "albumMid"]) : "";
+    const cover = normalizeQQCover(
+      getRecordString(song, ["cover", "pic", "image", "picurl", "picUrl"])
+        || (album ? getRecordString(album, ["pic", "cover", "image", "picurl", "picUrl"]) : ""),
+    ) || (albumMid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : "");
+    return [{
+      mid,
+      name: getRecordString(song, ["songname", "name", "title"]) || "未知歌曲",
+      artist: singerNames(song.singer ?? song.singers ?? song.singerInfo)
+        || getRecordString(song, ["singername", "singerName", "artist", "author"]),
+      album: album
+        ? getRecordString(album, ["name", "title", "albumName"])
+        : getRecordString(song, ["albumname", "albumName"]),
+      cover,
+    }];
+  }).slice(0, 30);
+}
