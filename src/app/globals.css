@@ -2968,6 +2968,8 @@ textarea.comment-field {
 }
 .global-player-panel .aplayer:not(.aplayer-withlist) .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play {
   grid-column: 3;
+  /* 单曲控制区留出一点右侧呼吸感，避免播放键贴边显得突兀。 */
+  transform: translateX(-8px);
 }
 .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play svg {
   width: 15px;
