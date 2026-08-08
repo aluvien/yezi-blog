@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- QQ cover URLs are third-party and dynamic. */
 
 import { useState } from "react";
-import { MUSIC_SERVERS, MUSIC_TYPES, parseMusicSpec } from "@/lib/music";
+import { createQQMusicSpec, MUSIC_SERVERS, MUSIC_TYPES, parseMusicSpec } from "@/lib/music";
 
 type QQTrack = { mid: string; name: string; artist: string; album: string; cover: string };
 
@@ -103,7 +103,7 @@ export function MusicInsertDialog({ onClose }: { onClose: (spec: string | null) 
           </div>
           <div className="mt-3 max-h-64 space-y-1 overflow-y-auto pr-1">
             {tracks.map((track) => (
-              <button key={track.mid} type="button" onClick={() => onClose(`qqvip:${track.mid}:song`)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-neutral-100">
+              <button key={track.mid} type="button" onClick={() => onClose(createQQMusicSpec(track.mid, track))} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-neutral-100">
                 {track.cover ? <img src={track.cover} alt="" className="h-10 w-10 rounded-md bg-neutral-100 object-cover" /> : <span className="h-10 w-10 rounded-md bg-neutral-100" />}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-neutral-800">{track.name}</span>

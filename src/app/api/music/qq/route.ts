@@ -79,15 +79,20 @@ function trackInfo(raw: unknown, mid: string) {
     ?? {};
   const album = asRecord(song.album);
   const albumMid = (album ? getRecordString(album, ["mid", "albummid", "albumMid"]) : "")
-    || getRecordString(song, ["albummid", "albumMid"]);
+    || getRecordString(song, ["albummid", "albumMid"])
+    || findString(data, ["albummid", "albumMid"]);
   const cover = normalizeQQCover(
     getRecordString(song, ["cover", "pic", "image", "picurl", "picUrl"])
-      || (album ? getRecordString(album, ["pic", "cover", "image", "picurl", "picUrl"]) : ""),
+      || (album ? getRecordString(album, ["pic", "cover", "image", "picurl", "picUrl"]) : "")
+      || findString(data, ["cover", "pic", "image", "picurl", "picUrl"]),
   ) || (albumMid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : "");
   return {
-    name: getRecordString(song, ["name", "songname", "songName", "title"]) || "QQ 音乐",
+    name: getRecordString(song, ["name", "songname", "songName", "title"])
+      || findString(data, ["songname", "songName", "name", "title"])
+      || "QQ 音乐",
     artist: singerNames(song.singer ?? song.singers ?? song.singerInfo)
-      || getRecordString(song, ["singername", "singerName", "artist", "author"]),
+      || getRecordString(song, ["singername", "singerName", "artist", "author"])
+      || findString(data, ["singername", "singerName", "artist", "author"]),
     cover,
     key: `qqvip:${mid}`,
   };

@@ -25,10 +25,45 @@ export interface MusicSpec {
   id: string;
   type: MusicType;
   shuffle?: boolean;
+  /** QQ 登录搜索时随引用保存的展示快照，保证首屏无需再等详情接口。 */
+  title?: string;
+  artist?: string;
+  cover?: string;
 }
 
 const SERVER_SET = new Set<string>(MUSIC_SERVERS);
 const TYPE_SET = new Set<string>(MUSIC_TYPES);
+
+function stringMetadata(value: unknown, maxLength: number): string {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function qqMusicMetadata(mode: string | undefined): Pick<MusicSpec, "title" | "artist" | "cover"> | null {
+  if (!mode?.startsWith("meta-")) return null;
+  try {
+    const raw = JSON.parse(decodeURIComponent(mode.slice("meta-".length))) as Record<string, unknown>;
+    const title = stringMetadata(raw.title, 180);
+    const artist = stringMetadata(raw.artist, 180);
+    const candidateCover = stringMetadata(raw.cover, 1_500);
+    const cover = /^https:\/\//i.test(candidateCover) ? candidateCover : "";
+    return title || artist || cover ? { title, artist, cover } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 供 QQ 搜索选择器生成带展示快照的引用规格。 */
+export function createQQMusicSpec(mid: string, metadata: Pick<MusicSpec, "title" | "artist" | "cover">): string {
+  const safeMid = mid.trim();
+  if (!/^[A-Za-z0-9_-]{4,80}$/.test(safeMid)) return "";
+  const requestedCover = stringMetadata(metadata.cover, 1_500);
+  const snapshot = {
+    title: stringMetadata(metadata.title, 180),
+    artist: stringMetadata(metadata.artist, 180),
+    cover: /^https:\/\//i.test(requestedCover) ? requestedCover : "",
+  };
+  return `qqvip:${safeMid}:song:meta-${encodeURIComponent(JSON.stringify(snapshot))}`;
+}
 
 /** 解析 `server:id:type[:random]` 规格，无效返回 null。type 缺省为 song。 */
 export function parseMusicSpec(input: string): MusicSpec | null {
@@ -42,8 +77,15 @@ export function parseMusicSpec(input: string): MusicSpec | null {
   // URL is resolved by our server-side adapter with the owner's login state.
   if (server === "qqvip" ? !/^[A-Za-z0-9_-]{4,80}$/.test(id) : !/^\d+$/.test(id)) return null;
   if (!TYPE_SET.has(type)) return null;
-  if (mode && mode !== "random" && mode !== "shuffle") return null;
-  return { server: server as MusicServer, id, type: type as MusicType, shuffle: Boolean(mode) };
+  const metadata = server === "qqvip" ? qqMusicMetadata(mode) : null;
+  if (mode && mode !== "random" && mode !== "shuffle" && !metadata) return null;
+  return {
+    server: server as MusicServer,
+    id,
+    type: type as MusicType,
+    shuffle: mode === "random" || mode === "shuffle",
+    ...(metadata ?? {}),
+  };
 }
 
 /** 文章 music 代码块内文本：每行一个规格，空行/无效行忽略。 */
@@ -99,7 +141,19 @@ export function buildMetingUrl(base: string, spec: MusicSpec): string {
 
 /** 服务端渲染：输出带 data-* 的播放器容器，供前端 MusicInitializer 初始化。 */
 export function musicContainerHtml(spec: MusicSpec): string {
-  return `<div class="blog-music" data-server="${spec.server}" data-id="${spec.id}" data-type="${spec.type}" data-shuffle="${spec.shuffle ? "1" : "0"}"></div>`;
+  const escapeAttribute = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character] ?? character);
+  const title = spec.title?.trim() ?? "";
+  const artist = spec.artist?.trim() ?? "";
+  const cover = spec.cover?.trim() ?? "";
+  const snapshotAttributes = title || artist || cover
+    ? ` data-music-name="${escapeAttribute(title)}" data-music-artist="${escapeAttribute(artist)}" data-music-cover="${escapeAttribute(cover)}"`
+    : "";
+  const fallback = spec.server === "qqvip" && title
+    ? `<div class="music-trigger music-trigger-static"><span class="music-trigger-swipe-stage"><span class="music-trigger-swipe-slide" data-track-slot="current"><span class="music-trigger-cover${cover ? "" : " is-fallback"}">${cover ? `<img src="${escapeAttribute(cover)}" alt="">` : ""}</span><span class="music-trigger-info"><span class="music-trigger-name">${escapeAttribute(title)}</span><span class="music-trigger-artist"><span class="music-trigger-artist-name">${escapeAttribute(artist)}</span></span></span></span></span><span class="music-trigger-play" aria-hidden="true"></span></div>`
+    : "";
+  return `<div class="blog-music" data-server="${spec.server}" data-id="${spec.id}" data-type="${spec.type}" data-shuffle="${spec.shuffle ? "1" : "0"}${snapshotAttributes}>${fallback}</div>`;
 }
 
 /** 归一化后的可播放曲目（与 APlayer 的 APlayerAudio 字段一致）。 */

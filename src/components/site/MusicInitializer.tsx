@@ -414,7 +414,15 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       const type = el.dataset.type;
       if (!server || !id || !type) return;
       el.dataset.init = "1";
-      const spec = { server, id, type, shuffle: el.dataset.shuffle === "1" } as MusicSpec;
+      const spec = {
+        server,
+        id,
+        type,
+        shuffle: el.dataset.shuffle === "1",
+        title: el.dataset.musicName?.trim() || "",
+        artist: el.dataset.musicArtist?.trim() || "",
+        cover: el.dataset.musicCover?.trim() || "",
+      } as MusicSpec;
 
       const card = document.createElement("div");
       card.className = "music-trigger";
@@ -444,12 +452,35 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       el.replaceChildren(card);
 
       let tracks: MusicTrack[] = [];
+      // QQ 搜索引用已携带展示快照。首屏先使用它渲染，播放 URL 则继续在后台加载；
+      // 因此访客不需要点击卡片，也不受详情接口偶发波动影响。
+      if (spec.title) {
+        const current = card.querySelector<HTMLElement>('[data-track-slot="current"]');
+        if (current) {
+          renderTrackSlide(current, {
+            name: spec.title,
+            artist: spec.artist || "",
+            cover: spec.cover || "",
+            url: "",
+            lrc: "",
+            key: "snapshot:" + spec.id,
+          });
+        }
+      }
       try {
         tracks = await fetchMusicTracks(apiRef.current, spec);
       } catch {
         card.classList.add("is-error");
         card.querySelector(".music-trigger-name")!.textContent = "音乐暂不可用（版权或接口异常）";
         return;
+      }
+      if (spec.server === "qqvip" && tracks[0] && spec.title) {
+        tracks[0] = {
+          ...tracks[0],
+          name: spec.title,
+          artist: spec.artist || tracks[0].artist,
+          cover: spec.cover || tracks[0].cover,
+        };
       }
       if (tracks.length === 0) {
         card.classList.add("is-error");

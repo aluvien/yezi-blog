@@ -9,6 +9,7 @@ import { MetricIcon, type MetricIconType } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
 import { LikeButton } from "@/components/site/LikeButton";
 import { splitMomentContent } from "@/lib/music";
+import { MusicEmbed } from "@/components/site/MusicEmbed";
 import { useMomentView } from "@/components/site/MomentViewTracker";
 import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 
@@ -55,7 +56,7 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
           seg.kind === "text" ? (
             <p key={index}>{seg.value}</p>
           ) : (
-            <div key={index} className="blog-music" data-server={seg.value.server} data-id={seg.value.id} data-type={seg.value.type} data-shuffle={seg.value.shuffle ? "1" : "0"} />
+            <MusicEmbed key={index} spec={seg.value} />
           ),
         )}
         {images.length > 0 && <MomentImages images={images} />}

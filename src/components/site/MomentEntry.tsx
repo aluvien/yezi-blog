@@ -6,6 +6,7 @@ import { parseMomentImages } from "@/lib/moments";
 import { formatDateOnly } from "@/lib/format";
 import { site } from "@/lib/site";
 import { splitMomentContent } from "@/lib/music";
+import { MusicEmbed } from "@/components/site/MusicEmbed";
 import { MomentCommentToggle } from "@/components/site/MomentCommentToggle";
 import { MetricIcon } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
@@ -111,14 +112,7 @@ export function MomentEntry({
               {seg.value}
             </p>
           ) : (
-            <div
-              key={index}
-              className="blog-music"
-              data-server={seg.value.server}
-              data-id={seg.value.id}
-              data-type={seg.value.type}
-              data-shuffle={seg.value.shuffle ? "1" : "0"}
-            />
+            <MusicEmbed key={index} spec={seg.value} />
           ),
         )}
         <MomentImages images={images} />

@@ -14,7 +14,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     a: ["href", "title", "target", "rel"],
     img: ["src", "alt", "title"],
     code: ["class"],
-    div: ["class", "data-server", "data-id", "data-type", "data-shuffle"],
+    div: ["class", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover"],
     iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
     span: ["class"],
     th: ["align"],
