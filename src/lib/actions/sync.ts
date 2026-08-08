@@ -16,7 +16,22 @@ export type GithubDeployStatus = {
   error?: string;
 };
 
+export type GithubVersionStatus = {
+  status: "up-to-date" | "outdated" | "dirty" | "unavailable";
+  localCommit?: string;
+  remoteCommit?: string;
+  error?: string;
+};
+
 type CommandResult = { stdout: string; stderr: string };
+
+type GithubVersionCache = {
+  expiresAt: number;
+  result: GithubVersionStatus;
+};
+
+const GITHUB_VERSION_CACHE_MS = 30_000;
+let githubVersionCache: GithubVersionCache | null = null;
 
 function runCommand(command: string, args: string[], cwd: string, timeout: number, env?: NodeJS.ProcessEnv): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
@@ -54,12 +69,47 @@ function deploymentEnv(): NodeJS.ProcessEnv {
     }
   }
 
+  // GitHub 同步固定直连，避免宝塔、终端或旧环境变量把 Git 请求转发到
+  // 不可用的代理，导致同步和版本检查出现“有时成功、有时失败”。
+  for (const key of [
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "npm_config_proxy",
+    "npm_config_https_proxy",
+  ]) {
+    delete env[key];
+  }
+
   return {
     ...env,
     // 同步按钮不能等待 Git 询问账号密码，否则 Server Action 会一直挂起。
     GIT_TERMINAL_PROMPT: "0",
     PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2",
   };
+}
+
+function deploymentProjectDir(): string {
+  return path.resolve(
+    process.env.DEPLOY_PROJECT_DIR?.trim()
+      || (process.env.NODE_ENV === "production" ? "/www/wwwroot/yezi.me" : process.cwd()),
+  );
+}
+
+function shortCommit(commit: string): string {
+  return commit.slice(0, 7);
+}
+
+function cacheGithubVersionStatus(result: GithubVersionStatus): GithubVersionStatus {
+  githubVersionCache = { expiresAt: Date.now() + GITHUB_VERSION_CACHE_MS, result };
+  return result;
+}
+
+function invalidateGithubVersionCache(): void {
+  githubVersionCache = null;
 }
 
 async function findPm2Name(projectDir: string): Promise<string | null> {
@@ -149,10 +199,11 @@ function getDatabasePath(projectDir: string): string {
 /** 在服务端直接拉取 GitHub main 并部署，不再依赖外部 hook。 */
 export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> {
   await requireAdmin();
+  invalidateGithubVersionCache();
   let releaseLock: (() => void) | null = null;
 
   try {
-    const projectDir = path.resolve(process.env.DEPLOY_PROJECT_DIR?.trim() || "/www/wwwroot/yezi.me");
+    const projectDir = deploymentProjectDir();
     if (!fs.existsSync(path.join(projectDir, "package.json"))) return { ok: false, error: `部署目录无效：${projectDir}` };
     releaseLock = acquireDeploymentLock(projectDir);
 
@@ -198,7 +249,7 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
 /** 查询 detached PM2 重启脚本写入的最终状态，供设置页确认重启是否完成。 */
 export async function getGithubDeployStatusAction(): Promise<GithubDeployStatus> {
   await requireAdmin();
-  const projectDir = path.resolve(process.env.DEPLOY_PROJECT_DIR?.trim() || "/www/wwwroot/yezi.me");
+  const projectDir = deploymentProjectDir();
   const statusFile = path.join(projectDir, "data", "deploy-status.json");
   try {
     const value = JSON.parse(fs.readFileSync(statusFile, "utf8")) as Partial<GithubDeployStatus>;
@@ -209,4 +260,67 @@ export async function getGithubDeployStatusAction(): Promise<GithubDeployStatus>
     // 状态文件还未生成或正在被重启脚本替换。
   }
   return { status: "unknown" };
+}
+
+/**
+ * 检查服务器当前提交是否与 GitHub origin/main 一致。
+ * 只执行只读 Git 命令，不会拉取代码、构建项目或修改数据库。
+ */
+export async function getGithubVersionStatusAction(): Promise<GithubVersionStatus> {
+  await requireAdmin();
+
+  if (githubVersionCache && githubVersionCache.expiresAt > Date.now()) {
+    return githubVersionCache.result;
+  }
+
+  const projectDir = deploymentProjectDir();
+  const env = deploymentEnv();
+
+  try {
+    const root = await runCommand("git", ["rev-parse", "--show-toplevel"], projectDir, 5_000, env);
+    if (path.resolve(root.stdout.trim()) !== projectDir) {
+      return cacheGithubVersionStatus({
+        status: "unavailable",
+        error: "部署目录不是 Git 仓库根目录",
+      });
+    }
+
+    const branch = await runCommand("git", ["branch", "--show-current"], projectDir, 5_000, env);
+    if (branch.stdout.trim() !== "main") {
+      return cacheGithubVersionStatus({
+        status: "unavailable",
+        error: `服务器当前分支不是 main${branch.stdout.trim() ? `（${branch.stdout.trim()}）` : ""}`,
+      });
+    }
+
+    const local = await runCommand("git", ["rev-parse", "HEAD"], projectDir, 5_000, env);
+    const localCommit = local.stdout.trim().split(/\s+/)[0] || "";
+    if (!/^[0-9a-f]{40}$/i.test(localCommit)) throw new Error("无法读取服务器当前提交");
+
+    const changes = await runCommand("git", ["status", "--porcelain=v1", "--untracked-files=no"], projectDir, 5_000, env);
+    if (changes.stdout.trim()) {
+      return cacheGithubVersionStatus({
+        status: "dirty",
+        localCommit: shortCommit(localCommit),
+        error: "服务器存在未提交的源码改动，同步前需要先处理这些改动",
+      });
+    }
+
+    const remote = await runCommand("git", ["ls-remote", "origin", "refs/heads/main"], projectDir, 8_000, env);
+    const remoteCommit = remote.stdout.trim().split(/\s+/)[0] || "";
+    if (!/^[0-9a-f]{40}$/i.test(remoteCommit)) throw new Error("GitHub 没有返回 origin/main 的有效提交");
+
+    return cacheGithubVersionStatus({
+      status: localCommit === remoteCommit ? "up-to-date" : "outdated",
+      localCommit: shortCommit(localCommit),
+      remoteCommit: shortCommit(remoteCommit),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "未知错误";
+    console.warn(`[github-version-check] ${detail}`);
+    return cacheGithubVersionStatus({
+      status: "unavailable",
+      error: "暂时无法连接 GitHub 检查最新版本，请稍后重试",
+    });
+  }
 }
