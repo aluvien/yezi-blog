@@ -206,7 +206,7 @@ export function musicContainerHtml(spec: MusicSpec): string {
   const fallback = spec.server === "qqvip" && title
     ? `<div class="music-trigger music-trigger-static"><span class="music-trigger-swipe-stage"><span class="music-trigger-swipe-slide" data-track-slot="current"><span class="music-trigger-cover${cover ? "" : " is-fallback"}">${cover ? `<img src="${escapeAttribute(cover)}" alt="">` : ""}</span><span class="music-trigger-info"><span class="music-trigger-name">${escapeAttribute(title)}</span><span class="music-trigger-artist"><span class="music-trigger-artist-name">${escapeAttribute(artist)}</span></span></span></span></span><span class="music-trigger-play" aria-hidden="true"></span></div>`
     : "";
-  return `<div class="blog-music" data-server="${spec.server}" data-id="${spec.id}" data-type="${spec.type}" data-shuffle="${spec.shuffle ? "1" : "0"}${snapshotAttributes}>${fallback}</div>`;
+  return `<div class="blog-music" data-server="${spec.server}" data-id="${spec.id}" data-type="${spec.type}" data-shuffle="${spec.shuffle ? "1" : "0"}"${snapshotAttributes}>${fallback}</div>`;
 }
 
 /** 归一化后的可播放曲目（与 APlayer 的 APlayerAudio 字段一致）。 */
