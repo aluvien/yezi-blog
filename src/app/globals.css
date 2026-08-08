@@ -2905,6 +2905,10 @@ textarea.comment-field {
   padding: 5px 0;
   touch-action: none;
 }
+.global-player-panel .aplayer:not(.aplayer-withlist) .aplayer-body {
+  /* 单曲没有“随机 / 列表”两个配角按钮时，不保留空列；播放键贴齐最右侧。 */
+  grid-template-columns: 58px minmax(0, 1fr) 44px;
+}
 .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar,
 .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-loaded,
 .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-played {
@@ -2961,6 +2965,9 @@ textarea.comment-field {
   height: 30px;
   flex-basis: 30px;
   background: var(--accent);
+}
+.global-player-panel .aplayer:not(.aplayer-withlist) .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play {
+  grid-column: 3;
 }
 .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play svg {
   width: 15px;
