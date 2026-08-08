@@ -1,14 +1,14 @@
 import { renderPwaIcon } from "@/lib/pwa-icon";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 export async function GET() {
   const icon = await renderPwaIcon(512);
   return new Response(new Uint8Array(icon), {
     headers: {
       "Content-Type": "image/png",
-      "Cache-Control": "no-store",
+      "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
     },
   });
 }

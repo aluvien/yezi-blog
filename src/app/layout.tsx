@@ -1,36 +1,39 @@
 import type { Metadata, Viewport } from "next";
 import { site } from "@/lib/site";
-import { getSiteSettings } from "@/lib/db";
+import { getCachedSiteSettings } from "@/lib/server-data";
 import { normalizeDarkMode, normalizeLayoutTheme, normalizePalette } from "@/lib/theme";
 import "./globals.css";
 import "aplayer/dist/APlayer.min.css";
 
-export const metadata: Metadata = {
-  metadataBase: new URL(site.url),
-  title: {
-    default: site.name,
-    template: `%s · ${site.name}`,
-  },
-  description: site.description,
-  icons: {
-    icon: "/pwa-icon/192",
-    apple: "/pwa-icon/192",
-  },
-  openGraph: {
-    type: "website",
-    siteName: site.name,
-    title: site.name,
-    description: site.description,
-    locale: "zh_CN",
-  },
-  robots: { index: true, follow: true },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = getCachedSiteSettings();
+  const siteName = settings.site_name?.trim() || site.name;
+  const description = settings.site_subtitle?.trim() || site.description;
+  return {
+    metadataBase: new URL(site.url),
+    title: {
+      default: siteName,
+      template: `%s · ${siteName}`,
+    },
+    description,
+    icons: {
+      icon: "/pwa-icon/192",
+      apple: "/pwa-icon/192",
+    },
+    openGraph: {
+      type: "website",
+      siteName,
+      title: siteName,
+      description,
+      locale: "zh_CN",
+    },
+    robots: { index: true, follow: true },
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: [
     { media: "(max-width: 699px)", color: "#ffffff" },
     { media: "(min-width: 700px)", color: "#f7f7f9" },
@@ -43,7 +46,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const siteSettings = getSiteSettings();
+  const siteSettings = getCachedSiteSettings();
   const palette = normalizePalette(siteSettings.theme);
   const layoutTheme = normalizeLayoutTheme(siteSettings.layout_theme);
   const darkMode = normalizeDarkMode(siteSettings.dark_mode);
@@ -66,8 +69,6 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {children}
-        {/* 禁用手机双指缩放：viewport meta 对 iOS Safari 无效，需拦截手势事件 */}
-        <script dangerouslySetInnerHTML={{ __html: "document.addEventListener('gesturestart',function(e){e.preventDefault()},{passive:false});document.addEventListener('touchmove',function(e){if(e.touches.length>1)e.preventDefault()},{passive:false});" }} />
       </body>
     </html>
   );

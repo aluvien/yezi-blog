@@ -12,9 +12,10 @@ function md5(value: string): string {
  */
 export function getAuthorAvatar(siteSettings: Record<string, string>): string | null {
   const custom = siteSettings.author_avatar?.trim();
-  if (custom) return custom;
+  if (custom && (custom.startsWith("/uploads/") || /^https:\/\//i.test(custom))) return custom;
   const email = siteSettings.author_email?.trim();
   if (!email) return null;
   const mirror = (siteSettings.gravatar_mirror?.trim() || DEFAULT_GRAVATAR_MIRROR).replace(/\/+$/, "");
+  if (!/^https:\/\//i.test(mirror)) return DEFAULT_GRAVATAR_MIRROR + `/avatar/${md5(email.toLowerCase())}?d=identicon&s=160`;
   return `${mirror}/avatar/${md5(email.toLowerCase())}?d=identicon&s=160`;
 }

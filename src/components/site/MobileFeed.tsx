@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import type { ContentMetrics, Moment, Post } from "@/lib/db";
+import type { ContentMetrics, Moment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
 import { formatDateOnly } from "@/lib/format";
-import { stripMarkdown } from "@/lib/markdown";
+import type { PostSummary } from "@/lib/mobile-feed";
 import { MetricIcon, type MetricIconType } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
 import { LikeButton } from "@/components/site/LikeButton";
@@ -15,7 +15,7 @@ import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 
 export type FeedItem =
   | { type: "moment"; value: Moment; commentCount: number; metrics: ContentMetrics; initialLiked: boolean }
-  | { type: "post"; value: Post; commentCount: number; metrics: ContentMetrics; initialLiked: boolean };
+  | { type: "post"; value: PostSummary; commentCount: number; metrics: ContentMetrics; initialLiked: boolean };
 
 function Metric({ type, value, href }: { type: MetricIconType; value: number; href?: string }) {
   const content = <><MetricIcon type={type} /><span>{value}</span></>;
@@ -72,8 +72,8 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
   );
 }
 
-function MobilePost({ post, commentCount, metrics, initialLiked, canEdit }: { post: Post; commentCount: number; metrics: ContentMetrics; initialLiked: boolean; canEdit: boolean }) {
-  const excerpt = stripMarkdown(post.content, 120);
+function MobilePost({ post, commentCount, metrics, initialLiked, canEdit }: { post: PostSummary; commentCount: number; metrics: ContentMetrics; initialLiked: boolean; canEdit: boolean }) {
+  const excerpt = post.excerpt;
   return (
     <ArticleEditZone
       href={`/admin/posts/${post.id}/edit`}

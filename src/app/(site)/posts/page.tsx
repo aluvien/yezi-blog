@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { countApprovedCommentsBulk, countPublishedPosts, getSiteSettings, listPosts } from "@/lib/db";
+import { countApprovedCommentsBulk, countPublishedPosts, listPosts } from "@/lib/db";
 import { PostEntry } from "@/components/site/PostEntry";
 import { getSession } from "@/lib/auth";
+import { getCachedSiteSettings } from "@/lib/server-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
   const shown = listPosts({ limit: current * PAGE_SIZE });
   const hasMore = total > shown.length;
   // 后台开关：控制"查看更多文章"按钮是否显示
-  const showMore = getSiteSettings().show_more_posts !== "0";
+  const showMore = getCachedSiteSettings().show_more_posts !== "0";
   const isAuthorized = !!(await getSession());
   const commentCounts = countApprovedCommentsBulk("post", shown.map((post) => post.id));
 

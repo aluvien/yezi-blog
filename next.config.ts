@@ -63,13 +63,20 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // 带哈希的静态资源长缓存（后定义覆盖上面的 no-cache）
-        source: "/_next/static/(.*)",
+        source: "/uploads/(.*)",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
       {
-        source: "/uploads/(.*)",
-        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+        source: "/fonts/(.*)",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }],
+      },
+      {
+        source: "/pwa-icon/(.*)",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      },
+      {
+        source: "/(rss.xml|manifest.webmanifest|sitemap.xml)",
+        headers: [{ key: "Cache-Control", value: "public, max-age=300, stale-while-revalidate=3600" }],
       },
     ];
   },

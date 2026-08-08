@@ -20,7 +20,7 @@ export function RelatedPosts({ posts }: { posts: Post[] }) {
           >
             {post.cover && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={post.cover} alt="" className="h-10 w-14 shrink-0 rounded object-cover" />
+              <img src={post.cover} alt="" loading="lazy" className="h-10 w-14 shrink-0 rounded object-cover" />
             )}
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-medium leading-snug text-foreground transition-colors group-hover:text-accent line-clamp-2">

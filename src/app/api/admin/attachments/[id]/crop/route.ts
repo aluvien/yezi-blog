@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import fs from "fs";
+import { promises as fsPromises } from "node:fs";
 import path from "path";
 import sharp from "sharp";
 import { requireAdminApi } from "@/lib/auth";
@@ -27,29 +27,42 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch {
     return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
   }
-  const x = Math.max(0, Math.round(body.x ?? 0));
-  const y = Math.max(0, Math.round(body.y ?? 0));
-  const width = Math.max(1, Math.round(body.width ?? 0));
-  const height = Math.max(1, Math.round(body.height ?? 0));
-  if (width <= 0 || height <= 0) {
+  const values = [body.x, body.y, body.width, body.height];
+  if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
     return NextResponse.json({ error: "裁切区域无效" }, { status: 400 });
   }
+  const x = Math.max(0, Math.round(body.x as number));
+  const y = Math.max(0, Math.round(body.y as number));
+  const width = Math.round(body.width as number);
+  const height = Math.round(body.height as number);
+  if (width <= 0 || height <= 0) return NextResponse.json({ error: "裁切区域无效" }, { status: 400 });
 
   const absPath = uploadAbsolutePath(attachment.path);
-  if (!absPath || !fs.existsSync(absPath)) return NextResponse.json({ error: "源文件不存在" }, { status: 404 });
+  if (!absPath) return NextResponse.json({ error: "源文件不存在" }, { status: 404 });
 
   try {
-    const buf = fs.readFileSync(absPath);
-    const cropped = await sharp(buf)
+    await fsPromises.access(absPath);
+  } catch {
+    return NextResponse.json({ error: "源文件不存在" }, { status: 404 });
+  }
+
+  try {
+    const metadata = await sharp(absPath).metadata();
+    const imageWidth = metadata.width ?? 0;
+    const imageHeight = metadata.height ?? 0;
+    if (!imageWidth || !imageHeight || x + width > imageWidth || y + height > imageHeight) {
+      return NextResponse.json({ error: "裁切区域超出图片范围" }, { status: 400 });
+    }
+    const cropped = await sharp(absPath)
       .extract({ left: x, top: y, width, height })
       .webp({ quality: 85 })
       .toBuffer();
     const ym = new Date().toISOString().slice(0, 7).replace("-", "");
     const name = `${crypto.randomBytes(8).toString("hex")}.webp`;
     const dir = path.join(getUploadDir(), ym);
-    fs.mkdirSync(dir, { recursive: true });
+    await fsPromises.mkdir(dir, { recursive: true });
     const relativePath = `/uploads/${ym}/${name}`;
-    fs.writeFileSync(path.join(dir, name), cropped);
+    await fsPromises.writeFile(path.join(dir, name), cropped, { mode: 0o640 });
     const newAttachment = createAttachment({
       post_id: attachment.post_id,
       path: relativePath,

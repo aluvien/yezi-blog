@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getContentMetrics, getPostBySlug, getSiteSettings, listRelatedPosts, countApprovedComments, hasLiked } from "@/lib/db";
+import { getContentMetrics, listRelatedPosts, countApprovedComments, hasLiked } from "@/lib/db";
 import { formatDateOnly } from "@/lib/format";
 import { renderMarkdown, stripMarkdown, extractHeadings } from "@/lib/markdown";
 import { getSiteAuthor } from "@/lib/site";
@@ -17,6 +17,7 @@ import { parsePostTags } from "@/lib/post-tags";
 import { BackToTopButton } from "@/components/site/BackToTopButton";
 import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 import { getSession } from "@/lib/auth";
+import { getCachedPostBySlug, getCachedSiteSettings } from "@/lib/server-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +26,9 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const post = getPostBySlug(slug);
+  const post = getCachedPostBySlug(slug);
   if (!post) return { title: "文章不存在" };
-  const authorName = getSiteAuthor(getSiteSettings());
+  const authorName = getSiteAuthor(getCachedSiteSettings());
   const description = stripMarkdown(post.content, 120);
   return {
     title: post.title,
@@ -46,13 +47,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PostPage({ params }: Props) {
   const { slug } = await params;
-  const post = getPostBySlug(slug);
+  const post = getCachedPostBySlug(slug);
   if (!post) notFound();
 
   const html = renderMarkdown(post.content);
   const headings = extractHeadings(post.content);
   const relatedPosts = listRelatedPosts(post.id, 3);
-  const siteSettings = getSiteSettings();
+  const siteSettings = getCachedSiteSettings();
   const authorName = getSiteAuthor(siteSettings);
   const commentCount = countApprovedComments("post", post.id);
   const tags = parsePostTags(post.tags);

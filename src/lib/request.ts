@@ -3,14 +3,12 @@ import { headers } from "next/headers";
 
 /**
  * 获取客户端地址。
- * Nginx 示例会写入 X-Real-IP；只有明确配置 TRUST_PROXY=true 时才读取
- * 可被多级代理追加的 X-Forwarded-For，避免直连时被客户端伪造。
+ * 只有明确配置 TRUST_PROXY=true 时才读取代理头，避免直连时被客户端伪造。
  */
 export function getClientIp(request: Request): string {
-  const realIp = request.headers.get("x-real-ip")?.split(",")[0]?.trim();
-  if (realIp) return realIp.slice(0, 100);
-
   if (process.env.TRUST_PROXY === "true") {
+    const realIp = request.headers.get("x-real-ip")?.split(",")[0]?.trim();
+    if (realIp) return realIp.slice(0, 100);
     const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
     if (forwarded) return forwarded.slice(0, 100);
   }
@@ -40,9 +38,10 @@ function hashVisitorKey(ip: string, userAgent: string): string {
  */
 export async function getVisitorKeyFromRequest(): Promise<string> {
   const headersList = await headers();
-  let ip = headersList.get("x-real-ip")?.split(",")[0]?.trim() ?? "";
-  if (!ip && process.env.TRUST_PROXY === "true") {
-    ip = headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
+  let ip = "";
+  if (process.env.TRUST_PROXY === "true") {
+    ip = headersList.get("x-real-ip")?.split(",")[0]?.trim() ?? "";
+    if (!ip) ip = headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
   }
   if (!ip) ip = "unknown";
   ip = ip.slice(0, 100);

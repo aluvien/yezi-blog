@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
-import { countApprovedCommentsBulk, getContentMetricsBulk, getSiteSettings, hasLikedBulk, listMoments, listPosts } from "@/lib/db";
+import { countApprovedCommentsBulk, getContentMetricsBulk, hasLikedBulk } from "@/lib/db";
 import { getSiteAuthor, site } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
 import { getVisitorKeyFromRequest } from "@/lib/request";
 import { MobileFeed, type FeedItem } from "@/components/site/MobileFeed";
 import { getSession } from "@/lib/auth";
+import { stripMarkdown } from "@/lib/markdown";
+import { toPostSummary } from "@/lib/mobile-feed";
+import { getCachedMoments, getCachedPublishedPosts, getCachedSiteSettings } from "@/lib/server-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,9 +18,9 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const posts = listPosts();
-  const moments = listMoments();
-  const siteSettings = getSiteSettings();
+  const posts = getCachedPublishedPosts();
+  const moments = getCachedMoments();
+  const siteSettings = getCachedSiteSettings();
   const authorName = getSiteAuthor(siteSettings);
   const authorAvatar = getAuthorAvatar(siteSettings) || undefined;
   const isAuthorized = !!(await getSession());
@@ -41,7 +44,7 @@ export default async function Home() {
     })),
     ...posts.map((post) => ({
       type: "post" as const,
-      value: post,
+      value: toPostSummary(post, stripMarkdown(post.content, 120)),
       commentCount: postCommentCounts.get(post.id) ?? 0,
       metrics: postMetrics.get(post.id) ?? emptyMetrics,
       initialLiked: postLiked.get(post.id) ?? false,

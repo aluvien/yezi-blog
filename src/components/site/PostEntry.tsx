@@ -43,6 +43,7 @@ export function PostEntry({ post, commentCount = 0, canEdit = false }: { post: P
             <img
               src={post.cover}
               alt=""
+              loading="lazy"
               className="h-22 w-28 shrink-0 rounded-xl object-cover sm:w-32"
             />
           )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { syncLatestGithubAction } from "@/lib/actions/sync";
+import { getGithubDeployStatusAction, syncLatestGithubAction } from "@/lib/actions/sync";
 
 export default function SyncGithubButton() {
   const [pending, startTransition] = useTransition();
@@ -11,7 +11,29 @@ export default function SyncGithubButton() {
     setStatus(null);
     startTransition(async () => {
       const result = await syncLatestGithubAction();
-      setStatus(result.ok ? { kind: "success", text: result.message } : { kind: "error", text: result.error });
+      if (!result.ok) {
+        setStatus({ kind: "error", text: result.error });
+        return;
+      }
+      setStatus({ kind: "success", text: `${result.message} 正在确认重启状态…` });
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        let deploy: Awaited<ReturnType<typeof getGithubDeployStatusAction>>;
+        try {
+          deploy = await getGithubDeployStatusAction();
+        } catch {
+          continue;
+        }
+        if (deploy.status === "success") {
+          setStatus({ kind: "success", text: "同步、构建和 PM2 重启均已成功。" });
+          return;
+        }
+        if (deploy.status === "failed") {
+          setStatus({ kind: "error", text: `代码已构建，但 PM2 重启失败：${deploy.error || "未知错误"}` });
+          return;
+        }
+      }
+      setStatus({ kind: "success", text: "代码已同步并完成构建，PM2 正在重启，请稍后刷新页面确认。" });
     });
   }
 

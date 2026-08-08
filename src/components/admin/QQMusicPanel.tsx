@@ -39,8 +39,14 @@ export default function QQMusicPanel() {
   useEffect(() => {
     if (!qr) return;
     let stopped = false;
+    const expiresAt = Date.now() + 2 * 60 * 1000;
     const poll = async () => {
       if (pollingRef.current || stopped) return;
+      if (Date.now() >= expiresAt) {
+        setQr(null);
+        setMessage("二维码已过期，请重新生成后扫码。");
+        return;
+      }
       pollingRef.current = true;
       try {
         const result = await api<{ state?: string; uin?: string; message?: string }>("/api/admin/qq-music", {

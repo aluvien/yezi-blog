@@ -430,15 +430,22 @@ export function GlobalMusicPlayer({
       pendingRef.current = [];
     }
 
-    void boot();
+    let bootPromise: Promise<void> | null = null;
+    const ensureBoot = (): void => {
+      if (bootPromise) return;
+      bootPromise = boot();
+    };
 
     unlisten = setGlobalPlayListener(({ tracks, cardId, trackKey: preferredTrackKey }) => {
+      ensureBoot();
       if (!readyRef.current) {
         pendingRef.current.push({ tracks, cardId, trackKey: preferredTrackKey });
         return;
       }
       toggleOrAppendAndPlay(tracks, cardId ?? null, preferredTrackKey ?? null);
     });
+    // 没有默认歌单时延迟加载 APlayer，访客没有点击音乐就不需要下载播放器。
+    if (parseMusicSpec(defaultMusic)) ensureBoot();
 
     return () => {
       disposed = true;
@@ -449,6 +456,8 @@ export function GlobalMusicPlayer({
         /* noop */
       }
       playerRef.current = null;
+      readyRef.current = false;
+      pendingRef.current = [];
       ownerMap.clear();
       trackIndex.clear();
       trackMap.clear();
@@ -567,7 +576,11 @@ export function GlobalMusicPlayer({
           onClick={() => setOpen((value) => !value)}
         >
           {currentTrack?.cover ? (
-            <img className="global-player-float-cover" src={currentTrack.cover} alt="" />
+            <>
+              {/* QQ/网易云封面是运行时外部 URL，无法交给 Next Image 的本地静态追踪。 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="global-player-float-cover" src={currentTrack.cover} alt="" />
+            </>
           ) : (
             <span className="global-player-float-fallback" aria-hidden="true">
               <svg className="global-player-float-icon" viewBox="0 0 24 24" fill="currentColor">

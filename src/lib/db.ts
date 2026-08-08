@@ -24,6 +24,7 @@ function createDb(): Database.Database {
     try {
       const db = new Database(DB_PATH, { timeout: 5000 });
       db.pragma("journal_mode = WAL");
+      db.pragma("foreign_keys = ON");
       db.exec(`
     CREATE TABLE IF NOT EXISTS posts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +75,7 @@ function createDb(): Database.Database {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_comments_target ON comments (target_type, target_id, status);
+    CREATE INDEX IF NOT EXISTS idx_comments_target_time ON comments (target_type, target_id, status, created_at ASC);
     CREATE INDEX IF NOT EXISTS idx_comments_ip_time ON comments (ip, created_at);
     CREATE INDEX IF NOT EXISTS idx_attachments_post ON attachments (post_id, created_at DESC);
     CREATE TABLE IF NOT EXISTS sessions (
@@ -137,16 +139,7 @@ function createDb(): Database.Database {
       ensureColumn("comments", "ip_address", "TEXT NOT NULL DEFAULT ''");
       db.prepare("UPDATE moments SET updated_at = created_at WHERE updated_at IS NULL").run();
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_status_time ON posts (status, created_at DESC)");
-
-      // 想法浏览按 30 天去重，文章浏览保持 180 天；点赞记录也保留 180 天。
-      db.prepare("DELETE FROM content_interactions WHERE target_type = 'moment' AND kind = 'view' AND created_at < ?").run(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
-      db.prepare("DELETE FROM content_interactions WHERE target_type = 'post' AND kind = 'view' AND created_at < ?").run(new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString());
-      db.prepare("DELETE FROM content_interactions WHERE kind = 'like' AND created_at < ?").run(new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString());
-
-      // 会话与登录失败记录同样只留短暂有效期：过期 session 删除；
-      // login_attempts 保留 24 小时（远超 15 分钟限流/封禁窗口），随后清掉不再需要的历史失败记录。
-      db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
-      db.prepare("DELETE FROM login_attempts WHERE first_failed_at < ?").run(Date.now() - 24 * 60 * 60 * 1000);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_posts_category ON posts (category COLLATE NOCASE)");
 
       // 旧版本明文存储评论 IP，这里幂等迁移为 sha256 哈希（哈希固定 64 位 hex）。
       const staleIps = db
@@ -289,6 +282,10 @@ function now(): string {
   return new Date().toISOString();
 }
 
+function hashSessionToken(token: string): string {
+  return hashIp(token);
+}
+
 // ---------- slug ----------
 
 export function slugify(title: string): string {
@@ -337,19 +334,44 @@ export function listPosts(options?: { limit?: number; offset?: number }): Post[]
 export function listPostsByTag(tag: string): Post[] {
   const needle = tag.trim().toLocaleLowerCase();
   if (!needle) return [];
-  return listPosts().filter((post) => parsePostTags(post.tags).some((item) => item.toLocaleLowerCase() === needle));
+  // 标签保存在 JSON 文本中，无法直接使用普通索引；先只取 tags 找到匹配 id，
+  // 再读取命中的文章正文，避免标签页为每篇文章加载完整 Markdown。
+  const rows = db.prepare("SELECT id, tags FROM posts WHERE status = 'published'").all() as Array<{ id: number; tags: string }>;
+  const ids = rows
+    .filter((row) => parsePostTags(row.tags).some((item) => item.toLocaleLowerCase() === needle))
+    .map((row) => row.id);
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => "?").join(",");
+  return db.prepare(`SELECT * FROM posts WHERE status = 'published' AND id IN (${placeholders}) ORDER BY created_at DESC`).all(...ids) as Post[];
 }
 
-// 分类筛选同标签：内存过滤，数据量大后应改为 posts.category 索引查询（category 列可加索引）。
+// 分类筛选直接走索引，避免读取所有文章正文后再在内存过滤。
 export function listPostsByCategory(category: string): Post[] {
-  const needle = category.trim().toLocaleLowerCase();
+  const needle = category.trim();
   if (!needle) return [];
-  return listPosts().filter((post) => post.category.trim().toLocaleLowerCase() === needle);
+  return db.prepare("SELECT * FROM posts WHERE status = 'published' AND category = ? COLLATE NOCASE ORDER BY created_at DESC").all(needle) as Post[];
 }
 
 /** 后台用：包含草稿与已发布文章。 */
-export function listAllPosts(): Post[] {
-  return db.prepare("SELECT * FROM posts ORDER BY created_at DESC").all() as Post[];
+export function listAllPosts(options?: { limit?: number; offset?: number }): Post[] {
+  const { limit, offset } = options ?? {};
+  let sql = "SELECT * FROM posts ORDER BY created_at DESC";
+  const params: Array<number> = [];
+  if (Number.isInteger(limit) && (limit as number) > 0) {
+    sql += " LIMIT ?";
+    params.push(limit as number);
+    if (Number.isInteger(offset) && (offset as number) > 0) {
+      sql += " OFFSET ?";
+      params.push(offset as number);
+    }
+  }
+  return db.prepare(sql).all(...params) as Post[];
+}
+
+/** 后台仪表盘用：按时间读取少量文章，避免把所有正文加载进内存。 */
+export function listRecentPosts(limit = 5): Post[] {
+  const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit)));
+  return listAllPosts({ limit: safeLimit });
 }
 
 export function getPost(id: number): Post | undefined {
@@ -411,10 +433,14 @@ export function updatePost(
 }
 
 export function deletePost(id: number): void {
-  db.prepare("UPDATE attachments SET post_id = NULL WHERE post_id = ?").run(id);
-  db.prepare("DELETE FROM comments WHERE target_type = 'post' AND target_id = ?").run(id);
-  deleteContentInteractions("post", id);
-  db.prepare("DELETE FROM posts WHERE id = ?").run(id);
+  const transaction = db.transaction(() => {
+    db.prepare("UPDATE attachments SET post_id = NULL WHERE post_id = ?").run(id);
+    db.prepare("DELETE FROM comments WHERE target_type = 'post' AND target_id = ?").run(id);
+    db.prepare("DELETE FROM content_interactions WHERE target_type = 'post' AND target_id = ?").run(id);
+    db.prepare("DELETE FROM content_metrics WHERE target_type = 'post' AND target_id = ?").run(id);
+    db.prepare("DELETE FROM posts WHERE id = ?").run(id);
+  });
+  transaction();
 }
 
 // ---------- attachments ----------
@@ -541,7 +567,8 @@ export function createCategory(name: string): Category | undefined {
   const info = db
     .prepare("INSERT OR IGNORE INTO categories (name, slug, created_at) VALUES (?, ?, ?)")
     .run(normalized, slug, now());
-  return db.prepare("SELECT * FROM categories WHERE id = ? OR name = ?").get(Number(info.lastInsertRowid), normalized) as Category | undefined;
+  if (info.changes > 0) return db.prepare("SELECT * FROM categories WHERE id = ?").get(Number(info.lastInsertRowid)) as Category | undefined;
+  return db.prepare("SELECT * FROM categories WHERE name = ?").get(normalized) as Category | undefined;
 }
 
 export function updateCategory(id: number, name: string): Category | undefined {
@@ -575,8 +602,12 @@ function ensureUniqueCategorySlug(name: string, excludeId?: number): string {
 export function deleteCategory(id: number): void {
   const category = db.prepare("SELECT name FROM categories WHERE id = ?").get(id) as { name: string } | undefined;
   if (!category) return;
-  db.prepare("UPDATE posts SET category = '' WHERE category = ?").run(category.name);
-  db.prepare("DELETE FROM categories WHERE id = ?").run(id);
+  const transaction = db.transaction(() => {
+    const timestamp = now();
+    db.prepare("UPDATE posts SET category = '', updated_at = ? WHERE category = ?").run(timestamp, category.name);
+    db.prepare("DELETE FROM categories WHERE id = ?").run(id);
+  });
+  transaction();
 }
 
 // ---------- content metrics ----------
@@ -613,44 +644,45 @@ export function recordContentInteraction(
 ): ContentMetrics {
   const key = visitorKey.trim().slice(0, 128);
   if (!key) return getContentMetrics(targetType, targetId);
-  if (kind === "view") {
-    const viewWindowMs = (targetType === "moment" ? 30 : 180) * 24 * 60 * 60 * 1000;
-    const existing = db
-      .prepare("SELECT created_at FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'view' AND visitor_key = ?")
-      .get(targetType, targetId, key) as { created_at: string } | undefined;
-    const createdAt = existing ? Date.parse(existing.created_at) : Number.NaN;
-    if (existing && Number.isFinite(createdAt) && Date.now() - createdAt < viewWindowMs) {
-      return getContentMetrics(targetType, targetId);
+  const transaction = db.transaction(() => {
+    if (kind === "view") {
+      const viewWindowMs = (targetType === "moment" ? 30 : 180) * 24 * 60 * 60 * 1000;
+      const existing = db
+        .prepare("SELECT created_at FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'view' AND visitor_key = ?")
+        .get(targetType, targetId, key) as { created_at: string } | undefined;
+      const createdAt = existing ? Date.parse(existing.created_at) : Number.NaN;
+      if (existing && Number.isFinite(createdAt) && Date.now() - createdAt < viewWindowMs) return;
+      if (existing) {
+        db.prepare("DELETE FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'view' AND visitor_key = ?").run(targetType, targetId, key);
+      }
     }
-    if (existing) {
-      db.prepare("DELETE FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'view' AND visitor_key = ?").run(targetType, targetId, key);
+    const inserted = db
+      .prepare("INSERT OR IGNORE INTO content_interactions (target_type, target_id, kind, visitor_key, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(targetType, targetId, kind, key, now());
+    if (inserted.changes > 0) {
+      db.prepare(
+        `INSERT INTO content_metrics (target_type, target_id, ${kind}s)
+         VALUES (?, ?, 1)
+         ON CONFLICT(target_type, target_id) DO UPDATE SET ${kind}s = ${kind}s + 1`,
+      ).run(targetType, targetId);
     }
-  }
-  const inserted = db
-    .prepare("INSERT OR IGNORE INTO content_interactions (target_type, target_id, kind, visitor_key, created_at) VALUES (?, ?, ?, ?, ?)")
-    .run(targetType, targetId, kind, key, now());
-  if (inserted.changes > 0) {
-    db.prepare(
-      `INSERT INTO content_metrics (target_type, target_id, ${kind}s)
-       VALUES (?, ?, 1)
-       ON CONFLICT(target_type, target_id) DO UPDATE SET ${kind}s = ${kind}s + 1`,
-    ).run(targetType, targetId);
-  }
+  });
+  transaction();
   return getContentMetrics(targetType, targetId);
 }
 
 export function toggleContentLike(targetType: ContentTarget, targetId: number, visitorKey: string): ContentMetrics & { liked: boolean } {
   const key = visitorKey.trim().slice(0, 128);
   if (!key) return { ...getContentMetrics(targetType, targetId), liked: false };
-  const existing = db
-    .prepare("SELECT 1 FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'like' AND visitor_key = ?")
-    .get(targetType, targetId, key);
-  if (existing) {
-    // 已点赞 -> 取消：删除互动记录并 likes -1
-    db.prepare("DELETE FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'like' AND visitor_key = ?").run(targetType, targetId, key);
-    db.prepare("UPDATE content_metrics SET likes = MAX(0, likes - 1) WHERE target_type = ? AND target_id = ?").run(targetType, targetId);
-  } else {
-    // 未点赞 -> 点赞：插入记录并 likes +1
+  const transaction = db.transaction(() => {
+    const existing = db
+      .prepare("SELECT 1 FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'like' AND visitor_key = ?")
+      .get(targetType, targetId, key);
+    if (existing) {
+      db.prepare("DELETE FROM content_interactions WHERE target_type = ? AND target_id = ? AND kind = 'like' AND visitor_key = ?").run(targetType, targetId, key);
+      db.prepare("UPDATE content_metrics SET likes = MAX(0, likes - 1) WHERE target_type = ? AND target_id = ?").run(targetType, targetId);
+      return false;
+    }
     const inserted = db
       .prepare("INSERT OR IGNORE INTO content_interactions (target_type, target_id, kind, visitor_key, created_at) VALUES (?, ?, 'like', ?, ?)")
       .run(targetType, targetId, key, now());
@@ -660,9 +692,12 @@ export function toggleContentLike(targetType: ContentTarget, targetId: number, v
          VALUES (?, ?, 1)
          ON CONFLICT(target_type, target_id) DO UPDATE SET likes = likes + 1`,
       ).run(targetType, targetId);
+      return true;
     }
-  }
-  return { ...getContentMetrics(targetType, targetId), liked: !existing };
+    return false;
+  });
+  const liked = transaction() as boolean;
+  return { ...getContentMetrics(targetType, targetId), liked };
 }
 
 export function hasLiked(targetType: ContentTarget, targetId: number, visitorKey: string): boolean {
@@ -735,9 +770,13 @@ export function updateMoment(id: number, data: { content: string; images?: strin
 }
 
 export function deleteMoment(id: number): void {
-  db.prepare("DELETE FROM comments WHERE target_type = 'moment' AND target_id = ?").run(id);
-  deleteContentInteractions("moment", id);
-  db.prepare("DELETE FROM moments WHERE id = ?").run(id);
+  const transaction = db.transaction(() => {
+    db.prepare("DELETE FROM comments WHERE target_type = 'moment' AND target_id = ?").run(id);
+    db.prepare("DELETE FROM content_interactions WHERE target_type = 'moment' AND target_id = ?").run(id);
+    db.prepare("DELETE FROM content_metrics WHERE target_type = 'moment' AND target_id = ?").run(id);
+    db.prepare("DELETE FROM moments WHERE id = ?").run(id);
+  });
+  transaction();
 }
 
 export function countMoments(): number {
@@ -809,14 +848,33 @@ export function countAttachments(): number {
 /** 聚合所有文章已用标签及计数（后台 PostForm 建议/展示用）。 */
 export function listAllTags(): Array<{ tag: string; count: number }> {
   const counts = new Map<string, number>();
-  for (const post of listAllPosts()) {
-    for (const tag of parsePostTags(post.tags)) {
+  const rows = db.prepare("SELECT tags FROM posts").all() as Array<{ tags: string }>;
+  for (const row of rows) {
+    for (const tag of parsePostTags(row.tags)) {
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
   }
   return [...counts.entries()]
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "zh-CN"));
+}
+
+/** 后台仪表盘用：按最近文章出现顺序取标签，避免读取文章正文。 */
+export function listRecentTags(limit = 5): string[] {
+  const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit)));
+  const rows = db.prepare("SELECT created_at, tags FROM posts ORDER BY created_at DESC").all() as Array<{ created_at: string; tags: string }>;
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    for (const tag of parsePostTags(row.tags)) {
+      const key = tag.toLocaleLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(tag);
+      if (result.length >= safeLimit) return result;
+    }
+  }
+  return result;
 }
 
 function canonicalTagName(value: string): string {
@@ -877,8 +935,9 @@ export function deleteTag(tag: string): boolean {
 /** 已发布文章的标签聚合（按计数降序，最多 limit 个），供前台侧栏与移动菜单共用。 */
 export function listPublishedTags(limit = 12): Array<{ tag: string; count: number }> {
   const counts = new Map<string, number>();
-  for (const post of listPosts()) {
-    for (const tag of parsePostTags(post.tags)) {
+  const rows = db.prepare("SELECT tags FROM posts WHERE status = 'published'").all() as Array<{ tags: string }>;
+  for (const row of rows) {
+    for (const tag of parsePostTags(row.tags)) {
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
   }
@@ -891,7 +950,10 @@ export function listPublishedTags(limit = 12): Array<{ tag: string; count: numbe
 // ---------- comments ----------
 
 /** 后台审核列表：pending 优先，组内按时间倒序，附带评论对象标签 */
-export function listCommentsForAdmin(): CommentWithTarget[] {
+export function listCommentsForAdmin(limit?: number): CommentWithTarget[] {
+  const safeLimit = limit === undefined ? null : Math.min(100, Math.max(1, Math.trunc(limit)));
+  const limitSql = safeLimit === null ? "" : " LIMIT ?";
+  const params = safeLimit === null ? [] : [safeLimit];
   return db
     .prepare(
       `SELECT c.*,
@@ -904,9 +966,31 @@ export function listCommentsForAdmin(): CommentWithTarget[] {
           ELSE NULL
         END AS target_slug
        FROM comments c
-       ORDER BY CASE c.status WHEN 'pending' THEN 0 ELSE 1 END, c.created_at DESC`,
+       ORDER BY CASE c.status WHEN 'pending' THEN 0 ELSE 1 END, c.created_at DESC${limitSql}`,
     )
-    .all() as CommentWithTarget[];
+    .all(...params) as CommentWithTarget[];
+}
+
+/** 前台侧栏用：只取已审核的最近评论，避免读取后台待审核数据与全部评论正文。 */
+export function listLatestApprovedComments(limit = 8): CommentWithTarget[] {
+  const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit)));
+  return db
+    .prepare(
+      `SELECT c.*,
+        CASE c.target_type
+          WHEN 'post' THEN (SELECT title FROM posts WHERE id = c.target_id)
+          ELSE substr((SELECT content FROM moments WHERE id = c.target_id), 1, 50)
+        END AS target_label,
+        CASE c.target_type
+          WHEN 'post' THEN (SELECT slug FROM posts WHERE id = c.target_id)
+          ELSE NULL
+        END AS target_slug
+       FROM comments c
+       WHERE c.status = 'approved'
+       ORDER BY c.created_at DESC
+       LIMIT ?`,
+    )
+    .all(safeLimit) as CommentWithTarget[];
 }
 
 /** 前台用：某对象下已通过的评论，时间正序 */
@@ -1005,15 +1089,27 @@ export function commentTargetExists(targetType: "post" | "moment", targetId: num
 // ---------- sessions ----------
 
 export function createSession(token: string, expiresAt: number): void {
-  db.prepare("INSERT INTO sessions (id, created_at, expires_at) VALUES (?, ?, ?)").run(token, now(), expiresAt);
+  const hashedToken = hashSessionToken(token);
+  db.prepare("INSERT INTO sessions (id, created_at, expires_at) VALUES (?, ?, ?)").run(hashedToken, now(), expiresAt);
 }
 
 export function getSessionByToken(token: string): Session | undefined {
-  return db.prepare("SELECT * FROM sessions WHERE id = ?").get(token) as Session | undefined;
+  const hashedToken = hashSessionToken(token);
+  const hashed = db.prepare("SELECT * FROM sessions WHERE id = ?").get(hashedToken) as Session | undefined;
+  if (hashed) return hashed;
+  // 兼容升级前已经存在的明文会话；首次使用时立即迁移为哈希存储。
+  const legacy = db.prepare("SELECT * FROM sessions WHERE id = ?").get(token) as Session | undefined;
+  if (!legacy) return undefined;
+  const migrate = db.transaction(() => {
+    db.prepare("DELETE FROM sessions WHERE id = ?").run(token);
+    db.prepare("INSERT OR REPLACE INTO sessions (id, created_at, expires_at) VALUES (?, ?, ?)").run(hashedToken, legacy.created_at, legacy.expires_at);
+  });
+  migrate();
+  return { ...legacy, id: hashedToken };
 }
 
 export function deleteSession(token: string): void {
-  db.prepare("DELETE FROM sessions WHERE id = ?").run(token);
+  db.prepare("DELETE FROM sessions WHERE id IN (?, ?)").run(token, hashSessionToken(token));
 }
 
 export function deleteExpiredSessions(): void {
