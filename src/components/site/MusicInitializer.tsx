@@ -180,7 +180,12 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       const data = cardMusicState.get(card);
       if (!lyricEl || !data) return;
       const isCurrentCard = Boolean(card.dataset.cardId) && state.cardId === card.dataset.cardId;
-      const isPlaying = isCurrentCard && state.playing;
+      const matchesCurrentTrack = Boolean(state.trackKey && hasTrackKey(state.trackKey, data.tracks));
+      // `cardId` only identifies which card owns the play/pause animation.
+      // A song selected from the expanded global list can have no card owner
+      // (for example, a default playlist item), but the inline card should
+      // still show lyrics whenever its track key matches the current song.
+      const isPlaying = state.playing && (isCurrentCard || matchesCurrentTrack);
       const track = hasTrackKey(state.trackKey, data.tracks)
         ? data.tracks.find((item) => trackKey(item) === state.trackKey)
         : data.tracks[data.activeIndex] ?? data.tracks[0];
