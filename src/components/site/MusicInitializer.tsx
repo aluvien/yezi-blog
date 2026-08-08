@@ -139,12 +139,13 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       return { stage, current, preview };
     }
 
-    async function loadLyrics(card: HTMLElement, track: MusicTrack, data: CardMusicState): Promise<void> {
-      const key = trackKey(track);
-      if (!track.lrc || data.loading.has(key) || data.lyrics.has(key)) return;
+    async function loadLyrics(card: HTMLElement, track: MusicTrack, data: CardMusicState, sourceOverride?: string): Promise<void> {
+      const source = sourceOverride?.trim() || track.lrc.trim();
+      const key = `${trackKey(track)}\u0000${source}`;
+      if (!source || data.loading.has(key) || data.lyrics.has(key)) return;
       data.loading.add(key);
       try {
-        const response = await fetch(track.lrc, { signal: AbortSignal.timeout(10000) });
+        const response = await fetch(source, { signal: AbortSignal.timeout(10000) });
         if (response.ok) data.lyrics.set(key, parseLrc(await response.text()));
         else data.lyrics.set(key, []);
       } catch {
@@ -153,6 +154,10 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
         data.loading.delete(key);
         syncCardLyric(card, getGlobalPlaybackState());
       }
+    }
+
+    function lyricCacheKey(track: MusicTrack, source: string): string {
+      return `${trackKey(track)}\u0000${source}`;
     }
 
     function setLyricText(lyricEl: HTMLElement, text: string, visible: boolean): void {
@@ -184,11 +189,16 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
         setLyricText(lyricEl, "", false);
         return;
       }
-      const key = trackKey(track);
+      const isCurrentTrack = Boolean(state.trackKey && trackKey(track) === state.trackKey);
+      // The global player may have replaced a short/failed NetEase source with
+      // QQ while the article card still owns the original track object. Use
+      // the player's actual lyric URL so both views show the same lyric.
+      const source = isCurrentTrack && state.lrc ? state.lrc : track.lrc;
+      const key = lyricCacheKey(track, source);
       const lines = data.lyrics.get(key);
       if (!lines) {
-        setLyricText(lyricEl, track.lrc ? "歌词加载中…" : "暂无歌词", true);
-        void loadLyrics(card, track, data);
+        setLyricText(lyricEl, source ? "歌词加载中…" : "暂无歌词", true);
+        void loadLyrics(card, track, data, source);
         return;
       }
       setLyricText(lyricEl, lines.length > 0 ? (lyricAt(lines, state.currentTime) || "♪") : "暂无歌词", true);

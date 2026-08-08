@@ -426,12 +426,16 @@ export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Prom
       const artist = firstScalar(track.artist);
       const trackId = firstScalar(track.id, track.songid, track.mid);
       const duration = durationSeconds(track.duration, track.dt, track.interval);
+      const lyricSource = firstScalar(track.lrc);
+      const lyricUrl = trackId
+        ? `/api/music/meting?resource=lrc&server=${encodeURIComponent(spec.server)}&id=${encodeURIComponent(trackId)}`
+        : lyricSource;
       return {
         name,
         artist,
         url: firstScalar(track.url),
         cover: normalizeCoverUrl(firstScalar(track.cover, track.pic, track.image, track.album?.pic, track.album?.picUrl)),
-        lrc: firstScalar(track.lrc),
+        lrc: lyricUrl,
         ...(duration === undefined ? {} : { duration }),
         ...(spec.server === "netease" ? { qqFallback: { server: "netease" as const, title: name, artist } } : {}),
         key: trackId ? `${spec.server}:${trackId}` : `${spec.server}:${name}\u0000${artist}`,

@@ -31,6 +31,7 @@ type PanelDragState = {
 const PANEL_DISMISS_DISTANCE = 64;
 const PANEL_DISMISS_FLICK_DISTANCE = 24;
 const PANEL_DISMISS_FLICK_VELOCITY = 0.55;
+const ZERO_DURATION_FALLBACK_DELAY = 6_000;
 
 function focusedBlogVideoFrame(): HTMLIFrameElement | null {
   const active = document.activeElement;
@@ -141,6 +142,7 @@ export function GlobalMusicPlayer({
     const trackMap = new Map<string, MusicTrack>();
     const fallbackInFlight = new Set<string>();
     const fallbackFailed = new Set<string>();
+    let zeroDurationTimer: number | null = null;
 
     function updateCurrentTrack(track: MusicTrack | null): void {
       currentTrackRef.current = track;
@@ -149,6 +151,11 @@ export function GlobalMusicPlayer({
 
     function trackKey(track: { key?: string; url: string; name: string; artist?: string }): string {
       return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist ?? ""}`;
+    }
+
+    function clearZeroDurationTimer(): void {
+      if (zeroDurationTimer !== null) window.clearTimeout(zeroDurationTimer);
+      zeroDurationTimer = null;
     }
 
     function pauseCompetingMedia(player: APlayerInstance): void {
@@ -278,6 +285,7 @@ export function GlobalMusicPlayer({
         cardId,
         trackKey: track ? trackKey(track) : null,
         currentTime: Number.isFinite(player.audio.currentTime) ? player.audio.currentTime : 0,
+        lrc: normalizedTrack?.lrc || (track?.lrc ?? null),
       });
     }
 
@@ -290,6 +298,7 @@ export function GlobalMusicPlayer({
     async function replaceWithQQFallback(player: APlayerInstance, index: number, source: MusicTrack): Promise<void> {
       const key = trackKey(source);
       if (!source.qqFallback || fallbackInFlight.has(key) || fallbackFailed.has(key)) return;
+      clearZeroDurationTimer();
       fallbackInFlight.add(key);
       const wasPlaying = !player.paused;
       const placeholder: MusicTrack = { ...source, url: "", qqFallback: undefined };
@@ -347,6 +356,27 @@ export function GlobalMusicPlayer({
       } finally {
         fallbackInFlight.delete(key);
       }
+    }
+
+    function scheduleZeroDurationFallback(player: APlayerInstance): void {
+      clearZeroDurationTimer();
+      const index = player.list.index;
+      const track = player.list.audios[index] as MusicTrack | undefined;
+      if (!track?.qqFallback) return;
+      const key = trackKey(track);
+      zeroDurationTimer = window.setTimeout(() => {
+        zeroDurationTimer = null;
+        const current = player.list.audios[player.list.index] as MusicTrack | undefined;
+        const duration = Number(player.audio.duration);
+        if (
+          player.list.index === index
+          && current
+          && trackKey(current) === key
+          && (!Number.isFinite(duration) || duration <= 0)
+        ) {
+          maybeReplaceCurrentTrack(player);
+        }
+      }, ZERO_DURATION_FALLBACK_DELAY);
     }
 
     function maybeReplaceCurrentTrack(player: APlayerInstance): void {
@@ -478,10 +508,17 @@ export function GlobalMusicPlayer({
           const track = player.list.audios[player.list.index] as MusicTrack | undefined;
           const duration = Number(player.audio.duration);
           if (!track || !Number.isFinite(duration) || duration <= 0) return;
+          clearZeroDurationTimer();
           track.duration = duration;
           const normalized = trackMap.get(trackKey(track));
           if (normalized) normalized.duration = duration;
           if (duration < QQ_FALLBACK_DURATION_LIMIT) maybeReplaceCurrentTrack(player);
+        });
+        player.on("loadstart", () => {
+          scheduleZeroDurationFallback(player);
+        });
+        player.on("canplay", () => {
+          if (Number.isFinite(player.audio.duration) && player.audio.duration > 0) clearZeroDurationTimer();
         });
         // APlayer normally skips after two seconds on an error. The fallback
         // handler takes over for NetEase items so a VIP QQ source can be used.
@@ -514,11 +551,15 @@ export function GlobalMusicPlayer({
         // 面板内手动切歌：按当前 index 找到归属卡片，回显"正在播放"
         player.on("listswitch", (event) => {
           const index = typeof event?.index === "number" ? event.index : null;
+          clearZeroDurationTimer();
           const cardId = index === null ? null : (ownerMap.get(index) ?? null);
           currentCardIdRef.current = cardId;
           emitPlayerState(player, !player.paused, cardId, index ?? player.list.index);
           // APlayer 在触发 listswitch 后才更新标题、歌手和高亮，放到微任务中统一修正展示。
-          queueMicrotask(() => decoratePlayerChrome(player));
+          queueMicrotask(() => {
+            decoratePlayerChrome(player);
+            scheduleZeroDurationFallback(player);
+          });
         });
 
         // 默认歌单：后台设置 default_music，加载失败静默（不影响页面点选音乐）。
@@ -567,13 +608,14 @@ export function GlobalMusicPlayer({
         /* noop */
       }
       playerRef.current = null;
+      clearZeroDurationTimer();
       readyRef.current = false;
       pendingRef.current = [];
       ownerMap.clear();
       trackIndex.clear();
       trackMap.clear();
       currentTrackRef.current = null;
-      emitGlobalPlaybackState({ playing: false, cardId: null, trackKey: null, currentTime: 0 });
+      emitGlobalPlaybackState({ playing: false, cardId: null, trackKey: null, currentTime: 0, lrc: null });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

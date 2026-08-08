@@ -17,6 +17,8 @@ export interface GlobalPlaybackState {
   trackKey: string | null;
   /** 当前播放进度（秒），用于文章音乐卡片同步歌词。 */
   currentTime: number;
+  /** 全局播放器实际使用的歌词地址；QQ 替代源时可能与文章原曲不同。 */
+  lrc: string | null;
 }
 
 type PlayListener = (payload: GlobalPlayPayload) => void;
@@ -27,7 +29,7 @@ type StateListener = (state: GlobalPlaybackState) => void;
 // 播放状态经 emitGlobalPlaybackState 回传，卡片据此切换播放态图标。
 let playListener: PlayListener | null = null;
 let stateListener: StateListener | null = null;
-let state: GlobalPlaybackState = { playing: false, cardId: null, trackKey: null, currentTime: 0 };
+let state: GlobalPlaybackState = { playing: false, cardId: null, trackKey: null, currentTime: 0, lrc: null };
 
 /** 全局播放器挂载时注册"追加并播放"监听；返回取消函数。 */
 export function setGlobalPlayListener(fn: PlayListener): () => void {
