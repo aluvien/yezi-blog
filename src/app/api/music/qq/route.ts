@@ -98,6 +98,31 @@ function trackInfo(raw: unknown, mid: string) {
   };
 }
 
+/**
+ * qq-music-api 的 batchGetSongInfo 在部分部署中会成功返回但不携带详情。
+ * QQ 的公开单曲详情接口不需要登录 Cookie，作为“仅补展示信息”的后备；
+ * 播放地址仍始终由已登录的本地 sidecar 获取。
+ */
+async function publicTrackInfo(mid: string): Promise<ReturnType<typeof trackInfo> | null> {
+  try {
+    const endpoint = new URL("https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg");
+    endpoint.searchParams.set("songmid", mid);
+    endpoint.searchParams.set("format", "json");
+    const response = await fetch(endpoint, {
+      headers: { referer: "https://y.qq.com/" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) return null;
+    const raw = await response.json() as unknown;
+    const root = asRecord(raw);
+    const first = root && Array.isArray(root.data) ? asRecord(root.data[0]) : null;
+    return first ? trackInfo({ data: first }, mid) : null;
+  } catch {
+    return null;
+  }
+}
+
 function playbackUrl(raw: unknown): string {
   const data = unwrapData(raw);
   return normalizeQQAudio(findString(data, ["url", "purl", "playUrl", "play_url"]));
@@ -124,7 +149,19 @@ export async function GET(request: Request) {
     ]);
     const audio = playbackUrl(playRaw);
     if (!audio) return jsonError("暂时无法获取这首歌的播放地址，请确认 QQ 音乐登录状态和会员权限", 422);
-    return NextResponse.json({ ...trackInfo(infoRaw, mid), url: audio, lrc: `/api/music/qq?mid=${encodeURIComponent(mid)}&type=lyric` }, {
+    const primaryInfo = trackInfo(infoRaw, mid);
+    const fallbackInfo = (!primaryInfo.artist || !primaryInfo.cover || primaryInfo.name === "QQ 音乐")
+      ? await publicTrackInfo(mid)
+      : null;
+    const info = fallbackInfo
+      ? {
+          name: fallbackInfo.name === "QQ 音乐" ? primaryInfo.name : fallbackInfo.name,
+          artist: fallbackInfo.artist || primaryInfo.artist,
+          cover: fallbackInfo.cover || primaryInfo.cover,
+          key: primaryInfo.key,
+        }
+      : primaryInfo;
+    return NextResponse.json({ ...info, url: audio, lrc: `/api/music/qq?mid=${encodeURIComponent(mid)}&type=lyric` }, {
       headers: { "cache-control": "private, max-age=120" },
     });
   } catch (error) {
