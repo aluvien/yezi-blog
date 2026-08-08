@@ -64,11 +64,16 @@ function normalizeSearch(raw: unknown) {
 
 async function status() {
   // `qq-music-api` v2.4's getCookie/setCookie routes do not share the QR login
-  // state. Probe a public endpoint for availability and read our own durable,
-  // server-only session instead.
-  await qqMusicRequest("/getHotkey", { useSession: false });
+  // state. The durable session is the source of truth for login state. Its
+  // health probe is deliberately best-effort: an upstream hiccup must not turn
+  // a valid local login into a 502 / “server internal error” in the admin UI.
   const session = getQQMusicSession();
-  return { available: true, loggedIn: Boolean(session), uin: session?.uin ?? null };
+  try {
+    await qqMusicRequest("/getHotkey", { useSession: false });
+    return { available: true, loggedIn: Boolean(session), uin: session?.uin ?? null };
+  } catch {
+    return { available: false, loggedIn: Boolean(session), uin: session?.uin ?? null };
+  }
 }
 
 export async function GET(request: Request) {

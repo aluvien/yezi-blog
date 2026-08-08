@@ -88,7 +88,7 @@ export default function QQMusicPanel() {
         <div>
           <p className="text-sm font-medium text-neutral-800">QQ 音乐账号</p>
           <p className="mt-1 text-xs leading-5 text-neutral-500">
-            扫码后的 Cookie 仅保存在服务器的 QQ Music API 中，不会存入网站数据库或下发给访客。
+            扫码后的 Cookie 仅保存在服务器受保护的会话文件中，不会存入网站数据库或下发给访客。
           </p>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-xs ${status?.loggedIn ? "bg-emerald-100 text-emerald-700" : "bg-neutral-200 text-neutral-600"}`}>
