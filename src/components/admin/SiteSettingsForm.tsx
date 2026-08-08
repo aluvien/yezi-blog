@@ -60,8 +60,9 @@ export default function SiteSettingsForm({ initialValues }: Props) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-6">
-      <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+    <form onSubmit={submit} className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-12">
+      <section className="rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-neutral-800">站点信息</h2>
           <p className="mt-1 text-xs text-neutral-500">设置网站名称、副标题和页脚显示内容。</p>
@@ -82,17 +83,19 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+      <section className="rounded-2xl bg-white p-5 shadow-sm xl:col-span-7 xl:row-span-2 sm:p-6">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-neutral-800">个人资料与品牌</h2>
           <p className="mt-1 text-xs text-neutral-500">这些内容会显示在前台页头、想法、文章和作者卡片中。</p>
         </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-4">
         <div className="rounded-xl border-2 border-accent/25 bg-accent/5 p-4">
           <label className="mb-1 block text-sm font-semibold text-neutral-800">前台作者名称</label>
           <input value={values.author_name} onChange={(event) => update("author_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2" placeholder="例如：Yezi" />
           <p className="mt-1.5 text-xs text-neutral-500">会显示在首页、想法、文章页、评论和作者卡片中；留空时使用默认名称 Yezi。</p>
         </div>
-        <div className="mt-5">
+        <div>
           <ImageUpload value={values.site_logo || null} onChange={(path) => update("site_logo", path ?? "")} label="站点 Logo（可选）" contain />
           <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
             <input
@@ -105,7 +108,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           </label>
         </div>
 
-        <div className="mt-5 space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+        </div>
+        <div className="space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
           <p className="text-sm font-medium text-neutral-700">头像与 Gravatar</p>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -128,9 +132,10 @@ export default function SiteSettingsForm({ initialValues }: Props) {
             隐藏头像图片边框
           </label>
         </div>
+        </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+      <section className="rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-neutral-800">社交与关于</h2>
           <p className="mt-1 text-xs text-neutral-500">配置个人链接和关于页的 Markdown 内容。</p>
@@ -146,20 +151,21 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
         </div>
       </section>
+      </div>
 
-      <section className="space-y-5 rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+      <section className="space-y-5 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+        <div>
         <div>
           <h2 className="text-base font-semibold text-neutral-800">音乐设置</h2>
           <p className="mt-1 text-xs text-neutral-500">配置音乐接口、默认歌单和前台播放器入口。</p>
         </div>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
         <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">音乐 API 地址（留空用默认）</label>
         <input value={values.meting_api} onChange={(event) => update("meting_api", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="https://api.injahow.cn/meting/" />
         <p className="mt-1 text-xs text-neutral-400">用于文章/想法内嵌音乐。默认公共接口可能不稳定，建议自建 Meting API 或换镜像。</p>
         </div>
-
-        <QQMusicPanel />
-
         <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">默认音乐列表（形如 netease:数字:playlist，留空不预置）</label>
         <input value={values.default_music} onChange={(event) => update("default_music", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="netease:7785232779:playlist" />
@@ -174,6 +180,9 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           随机播放默认歌单
         </label>
         </div>
+        </div>
+
+        <QQMusicPanel />
 
         <div className="grid gap-4 md:grid-cols-2">
         <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
@@ -204,7 +213,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
       </section>
 
-      <fieldset className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+      <div className="grid gap-5 xl:grid-cols-12">
+      <fieldset className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-8 sm:p-5">
         <legend className="px-1 text-sm font-medium text-neutral-700">外观主题</legend>
         <div>
           <p className="text-sm text-neutral-600">前台版式主题（不改变现有内容与数据）</p>
@@ -279,7 +289,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
       </fieldset>
 
-      <fieldset className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+      <fieldset className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-4 xl:self-start sm:p-5">
         <legend className="px-1 text-sm font-medium text-neutral-700">文章与列表显示</legend>
         <div className="grid gap-3 md:grid-cols-3">
           <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700">
@@ -296,6 +306,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           </label>
         </div>
       </fieldset>
+      </div>
 
       <div className="flex flex-wrap items-center gap-4">
         <button type="submit" disabled={pending} className="rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>
