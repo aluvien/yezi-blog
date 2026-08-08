@@ -2,8 +2,8 @@
 
 个人博客：文章、想法（类朋友圈短内容）、作品集与评论。前后台一体，数据存放在本地 SQLite（`better-sqlite3`），无外部服务依赖。
 
-- 前台：首页内容流、文章详情（Markdown 排版）、想法、作品、关于、评论（无感防垃圾、审核后展示、作者回复）
-- 后台：`/admin` 管理文章草稿与发布、分类、附件、想法、作品，以及评论审核、撤回和作者回复；站点设置可修改页头、页脚和 Logo
+- 前台：首页内容流、文章详情（Markdown 排版）、想法、作品、关于、评论（无感防垃圾、审核后展示、作者回复）、全站音乐播放器
+- 后台：`/admin` 管理文章草稿与发布、分类、附件、想法、作品，以及评论审核、撤回和作者回复；站点设置可修改页头、页脚、Logo 与音乐播放器；可接入自建 QQ Music API 扫码登录并搜索选歌
 - SEO：全站 metadata、Open Graph、`sitemap.xml`、`robots.txt`、`rss.xml`
 
 ## 界面截图
@@ -65,6 +65,50 @@ npm run dev                        # http://localhost:3030
 | `TRUST_PROXY` | 是否信任 `X-Forwarded-For` 的首个地址；仅在代理已覆盖客户端请求头时开启 | `false` |
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 
+## 音乐功能
+
+文章和想法都可以嵌入音乐；前台由一个全站播放器统一接管，因此从文章或想法切换页面时不会中断播放。后台“设置 → 音乐设置”可以设置默认歌单、随机播放与播放器位置。
+
+### 在文章和想法中插入
+
+文章使用独立的 `music` Markdown 代码块，一行一首或一个歌单：
+
+````md
+```music
+netease:7785232779:playlist
+qq:数字歌曲ID:song
+```
+````
+
+想法正文中使用独占行标记：
+
+```text
+!music netease:123456789:song
+```
+
+常规格式为 `平台:ID:类型[:random]`：
+
+| 字段 | 可选值 / 说明 |
+| --- | --- |
+| 平台 | `netease`、`qq`、`kugou`、`kuwo`、`xiami`、`baidu` |
+| 类型 | `song`、`playlist`、`album`、`search` |
+| `random` | 可选；打乱歌单顺序 |
+
+后台文章和想法编辑器的“+ 音乐”按钮也支持手动填写上述格式。
+
+### QQ 音乐扫码登录、搜索与播放
+
+项目可选接入 [sansenjian/qq-music-api](https://github.com/sansenjian/qq-music-api)，用于使用自己的 QQ 音乐账号扫码登录、在后台搜索歌曲，并由本站服务端获取播放地址。
+
+接入后：
+
+1. 在“设置 → 音乐设置”点击“扫码登录 QQ 音乐”。
+2. 用手机 QQ 扫码并确认；登录 Cookie 只保留在服务器本机的 QQ Music API 服务中，网站数据库和访客浏览器均不会保存或收到 Cookie。
+3. 在文章或想法编辑器点击“+ 音乐 → QQ 音乐搜索”，选择歌曲即可插入。
+4. 插入的格式为 `qqvip:歌曲MID:song`。前台播放时由本站 `/api/music/qq` 服务端接口临时解析播放地址，并带有限频保护。
+
+`qqvip` 当前仅支持单曲。请仅使用自己拥有合法播放权限的账号，并留意 QQ 音乐的服务规则；第三方接口或上游登录机制变化后，可能需要重新扫码登录。
+
 ## App API
 
 已预留版本化公开接口，基础地址为 `/api/v1`。接口只返回已发布文章、公开想法、作品和已审核评论，不暴露邮箱、IP 或后台字段。
@@ -120,6 +164,43 @@ pm2 save && pm2 startup         # 开机自启
 的绝对路径，并确保服务器 Git 已配置 GitHub 访问凭证。
 
 Nginx 反向代理示例见 `deploy/nginx.conf.example`（含 `client_max_body_size` 上传大小限制）。上线后记得把 `NEXT_PUBLIC_SITE_URL` 改为正式域名并重新 build。
+
+### 可选：部署 QQ Music API（宝塔 / PM2）
+
+QQ Music API 应作为博客之外的本机服务运行，**不要**放在博客 Git 工作目录中，避免博客同步代码时影响它的依赖或登录态。以下示例适用于宝塔面板已安装 Node.js 22 和 PM2 的服务器：
+
+```bash
+mkdir -p /www/wwwroot/services
+cd /www/wwwroot/services
+git clone https://github.com/sansenjian/qq-music-api.git
+cd qq-music-api
+npm ci
+npm run build
+
+PORT=3200 PM2_HOME=/root/.pm2 pm2 start npm \
+  --name qq-music-api \
+  --cwd /www/wwwroot/services/qq-music-api \
+  -- run start
+PM2_HOME=/root/.pm2 pm2 save
+```
+
+确认服务可用：
+
+```bash
+curl http://127.0.0.1:3200/getHotkey
+```
+
+博客默认连接 `http://127.0.0.1:3200`，无需额外配置；若服务端口不同，在博客 `.env.local` 中设置：
+
+```bash
+QQ_MUSIC_API_URL=http://127.0.0.1:3201
+```
+
+安全要求：
+
+- 不要在宝塔防火墙开放 `3200`，也不要为这个 API 单独绑定公网域名。
+- 只让博客服务通过 `127.0.0.1` 调用 QQ Music API；扫码、Cookie 查询和搜索接口均由博客后台管理员权限保护。
+- 更新此服务时只在它自己的目录执行 `git pull --ff-only`、`npm ci`、`npm run build`、`pm2 restart qq-music-api --update-env`；不要把 QQ Cookie 或其配置文件提交到博客仓库。
 
 ### 方式二：Docker（standalone 输出）
 

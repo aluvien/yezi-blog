@@ -621,7 +621,8 @@ body {
 
 .moment-entry-head {
   display: flex;
-  align-items: flex-start;
+  /* 头像与“名称 + 时间”这个两行信息块按中线对齐。 */
+  align-items: center;
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -802,7 +803,8 @@ body {
 
 .mobile-feed-memo-head {
   display: flex;
-  align-items: flex-start;
+  /* 手机版首页与想法列表保持相同的头像/作者信息对齐。 */
+  align-items: center;
   gap: 10px;
   margin-bottom: 10px;
 }
