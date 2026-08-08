@@ -168,8 +168,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
         <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">默认音乐列表（形如 netease:数字:playlist，留空不预置）</label>
-        <input value={values.default_music} onChange={(event) => update("default_music", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="netease:7785232779:playlist" />
-        <p className="mt-1 text-xs text-neutral-400">格式 <code>server:id:type</code>（server: netease/qq/kugou/kuwo/xiami/baidu；type: song/playlist/album/search）。QQ 登录搜索的单曲会自动插入为 <code>qqvip:歌曲MID:song</code>；也可在末尾加 <code>:random</code>。全站加载后作为全局播放器的基础列表，页面点选的音乐追加其后。</p>
+        <input value={values.default_music} onChange={(event) => update("default_music", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="netease:7785232779:playlist 或 qqvip:歌单ID:playlist" />
+        <p className="mt-1 text-xs text-neutral-400">格式 <code>server:id:type</code>（server: netease/qq/kugou/kuwo/xiami/baidu；type: song/playlist/album/search）。QQ 登录搜索的单曲为 <code>qqvip:歌曲MID:song</code>；选择“我的 QQ 歌单”后会自动填入 <code>qqvip:歌单ID:playlist</code>；也可在末尾加 <code>:random</code>。全站加载后作为全局播放器的基础列表，页面点选的音乐追加其后。</p>
         <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-500">
           <input
             type="checkbox"
@@ -182,7 +182,10 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
         </div>
 
-        <QQMusicPanel />
+        <QQMusicPanel
+          defaultMusic={values.default_music}
+          onDefaultMusicChange={(value) => update("default_music", value)}
+        />
 
         <div className="grid gap-4 md:grid-cols-2">
         <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700">

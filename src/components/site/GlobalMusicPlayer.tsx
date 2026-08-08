@@ -363,6 +363,11 @@ export function GlobalMusicPlayer({
         const mod = await import("aplayer");
         if (disposed || !hostRef.current) return;
         const APlayer = mod.default;
+        const parsedDefaultSpec = parseMusicSpec(defaultMusic);
+        const defaultSpec = parsedDefaultSpec
+          ? { ...parsedDefaultSpec, shuffle: parsedDefaultSpec.shuffle || defaultMusicShuffle }
+          : null;
+        const defaultRandom = Boolean(defaultSpec && defaultSpec.type !== "song" && defaultSpec.shuffle);
         const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#c25f3d";
         const player = new APlayer({
           container: hostRef.current,
@@ -371,7 +376,7 @@ export function GlobalMusicPlayer({
           // Meting 的 lrc 字段是歌词地址，APlayer 的异步歌词模式会读取并滚动显示它。
           lrcType: 3,
           autoplay: false,
-          order: "list",
+          order: defaultRandom ? "random" : "list",
           loop: "all",
           theme: accent,
         });
@@ -410,11 +415,9 @@ export function GlobalMusicPlayer({
         });
 
         // 默认歌单：后台设置 default_music，加载失败静默（不影响页面点选音乐）。
-        const parsedSpec = parseMusicSpec(defaultMusic);
-        const spec = parsedSpec ? { ...parsedSpec, shuffle: parsedSpec.shuffle || defaultMusicShuffle } : null;
-        if (spec) {
+        if (defaultSpec) {
           try {
-            const tracks = await fetchMusicTracks(apiRef.current, spec);
+            const tracks = await fetchMusicTracks(apiRef.current, defaultSpec);
             if (disposed) return;
             addUniqueTracks(tracks, null);
           } catch {

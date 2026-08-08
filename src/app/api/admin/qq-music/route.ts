@@ -62,6 +62,31 @@ function normalizeSearch(raw: unknown) {
   }).slice(0, 30);
 }
 
+function normalizePlaylists(raw: unknown) {
+  const data = unwrapData(raw);
+  const list = findArray(data, ["playlists", "playlist", "songLists", "songlists", "list"]);
+  const seen = new Set<string>();
+  return list.flatMap((item) => {
+    const playlist = asRecord(item);
+    if (!playlist) return [];
+    const id = getRecordString(playlist, ["disstid", "dissid", "playlistId", "playlist_id", "id"]);
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id) || seen.has(id)) return [];
+    seen.add(id);
+    const rawCount = playlist.songcount ?? playlist.songCount ?? playlist.count ?? playlist.total;
+    const count = typeof rawCount === "number" && Number.isFinite(rawCount)
+      ? Math.max(0, Math.floor(rawCount))
+      : typeof rawCount === "string" && /^\d+$/.test(rawCount)
+        ? Number(rawCount)
+        : null;
+    return [{
+      id,
+      name: getRecordString(playlist, ["dissname", "name", "title", "playlistName"]) || "未命名歌单",
+      count,
+      cover: normalizeQQCover(getRecordString(playlist, ["logo", "cover", "pic", "picurl", "picUrl"])),
+    }];
+  }).slice(0, 100);
+}
+
 async function status() {
   // `qq-music-api` v2.4's getCookie/setCookie routes do not share the QR login
   // state. The durable session is the source of truth for login state. Its
@@ -95,6 +120,14 @@ export async function GET(request: Request) {
       if (!key) return noCache({ error: "请输入歌曲或歌手" }, 400);
       const raw = await qqMusicRequest("/getSearchByKey", { query: { key, limit: "30" } });
       return noCache({ tracks: normalizeSearch(raw) });
+    }
+    if (op === "playlists") {
+      const session = getQQMusicSession();
+      if (!session) return noCache({ error: "请先扫码登录 QQ 音乐" }, 409);
+      const raw = await qqMusicRequest("/user/getUserPlaylists", {
+        query: { uin: session.uin, offset: "0", limit: "100" },
+      });
+      return noCache({ playlists: normalizePlaylists(raw) });
     }
     return noCache({ error: "不支持的操作" }, 400);
   } catch (error) {

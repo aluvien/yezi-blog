@@ -201,13 +201,35 @@ function normalizeCoverUrl(value: string): string {
  */
 export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Promise<MusicTrack[]> {
   if (spec.server === "qqvip") {
-    if (spec.type !== "song") throw new Error("QQ 音乐登录播放暂仅支持单曲");
-    const res = await fetch(`/api/music/qq?mid=${encodeURIComponent(spec.id)}`, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+    if (spec.type !== "song" && spec.type !== "playlist") throw new Error("QQ 音乐登录播放暂支持单曲或歌单");
+    const res = await fetch(`/api/music/qq?id=${encodeURIComponent(spec.id)}&type=${encodeURIComponent(spec.type)}`, { signal: AbortSignal.timeout(60_000), cache: "no-store" });
     if (!res.ok) {
       const payload = await res.json().catch(() => null) as { error?: unknown } | null;
       throw new Error(typeof payload?.error === "string" ? payload.error : `QQ 音乐 ${res.status}`);
     }
-    const track = await res.json() as Partial<MusicTrack>;
+    const payload = await res.json() as Partial<MusicTrack> & { tracks?: unknown };
+    if (spec.type === "playlist") {
+      const tracks = Array.isArray(payload.tracks)
+        ? payload.tracks.flatMap((value, index) => {
+            if (!value || typeof value !== "object") return [];
+            const track = value as Partial<MusicTrack>;
+            const url = firstScalar(track.url);
+            if (!url) return [];
+            return [{
+              name: firstScalar(track.name) || "QQ 音乐",
+              artist: firstScalar(track.artist),
+              url,
+              cover: normalizeCoverUrl(firstScalar(track.cover)),
+              lrc: firstScalar(track.lrc),
+              key: firstScalar(track.key) || `qqvip:${spec.id}:${index}`,
+            }];
+          })
+        : [];
+      if (tracks.length === 0) throw new Error("未能获取 QQ 音乐歌单中的可播放歌曲");
+      if (!spec.shuffle || tracks.length < 2) return tracks;
+      return shuffleTracks(tracks);
+    }
+    const track = payload;
     if (!track.url || typeof track.url !== "string") throw new Error("未能获取 QQ 音乐播放地址");
     return [{
       name: firstScalar(track.name) || "QQ 音乐",
@@ -243,9 +265,14 @@ export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Prom
       };
     });
   if (!spec.shuffle || tracks.length < 2) return tracks;
-  for (let index = tracks.length - 1; index > 0; index -= 1) {
+  return shuffleTracks(tracks);
+}
+
+function shuffleTracks<T>(tracks: T[]): T[] {
+  const shuffled = [...tracks];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
-    [tracks[index], tracks[swapIndex]] = [tracks[swapIndex], tracks[index]];
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
   }
-  return tracks;
+  return shuffled;
 }

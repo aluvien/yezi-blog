@@ -14,7 +14,7 @@ export default function AdminSettingsPage() {
           <h1 className="mt-1 text-xl font-bold">站点设置</h1>
           <p className="mt-2 text-sm text-neutral-500">集中管理站点信息、个人资料、音乐和文章显示方式。</p>
         </div>
-        <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
+        <div className="flex w-full items-start justify-between gap-2 sm:w-auto sm:justify-end">
           <SyncGithubButton />
           <div className="ml-auto shrink-0">
             <LogoutButton />

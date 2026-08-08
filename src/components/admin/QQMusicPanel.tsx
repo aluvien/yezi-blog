@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Status = { available: boolean; loggedIn: boolean; uin: string | null };
 type Qr = { image: string; qrsig: string; ptqrtoken: string };
+type Playlist = { id: string; name: string; count: number | null; cover: string };
+
+type Props = {
+  defaultMusic: string;
+  onDefaultMusicChange: (value: string) => void;
+};
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, cache: "no-store" });
@@ -13,9 +19,12 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /** QQ login is deliberately kept in site settings: it controls a server-only cookie. */
-export default function QQMusicPanel() {
+export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Props) {
   const [status, setStatus] = useState<Status | null>(null);
   const [qr, setQr] = useState<Qr | null>(null);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [playlistBusy, setPlaylistBusy] = useState(false);
+  const [playlistMessage, setPlaylistMessage] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const pollingRef = useRef(false);
@@ -29,12 +38,34 @@ export default function QQMusicPanel() {
     }
   }, []);
 
+  const loadPlaylists = useCallback(async () => {
+    setPlaylistBusy(true);
+    setPlaylistMessage("");
+    try {
+      const result = await api<{ playlists?: Playlist[] }>("/api/admin/qq-music?op=playlists");
+      const next = Array.isArray(result.playlists) ? result.playlists : [];
+      setPlaylists(next);
+      setPlaylistMessage(next.length ? `已读取 ${next.length} 个歌单` : "没有读取到可用歌单");
+    } catch (error) {
+      setPlaylists([]);
+      setPlaylistMessage(error instanceof Error ? error.message : "读取歌单失败");
+    } finally {
+      setPlaylistBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     // Defer the first request one task so React does not synchronously cascade
     // a state update while mounting this settings form.
     const timer = window.setTimeout(() => { void refreshStatus(); }, 0);
     return () => window.clearTimeout(timer);
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (!status?.loggedIn) return;
+    const timer = window.setTimeout(() => { void loadPlaylists(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPlaylists, status?.loggedIn]);
 
   useEffect(() => {
     if (!qr) return;
@@ -123,6 +154,39 @@ export default function QQMusicPanel() {
           </div>
         </div>
       )}
+
+      <div className="mt-4 border-t border-neutral-200 pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-neutral-800">我的 QQ 歌单</p>
+            <p className="mt-1 text-xs leading-5 text-neutral-500">读取已登录账号的歌单，选择后作为全站播放器的默认歌单。</p>
+          </div>
+          <button
+            type="button"
+            disabled={!status?.loggedIn || playlistBusy}
+            onClick={() => void loadPlaylists()}
+            className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {playlistBusy ? "读取中…" : "刷新歌单"}
+          </button>
+        </div>
+        <select
+          value={defaultMusic.match(/^qqvip:([^:]+):playlist(?:$|:)/)?.[1] ?? ""}
+          disabled={!status?.loggedIn || playlistBusy || playlists.length === 0}
+          onChange={(event) => onDefaultMusicChange(event.target.value ? `qqvip:${event.target.value}:playlist` : "")}
+          className="mt-3 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-100"
+        >
+          <option value="">不使用 QQ 默认歌单</option>
+          {playlists.map((playlist) => (
+            <option key={playlist.id} value={playlist.id}>
+              {playlist.name}{playlist.count === null ? "" : `（${playlist.count} 首）`}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1.5 text-xs text-neutral-400">
+          {!status?.loggedIn ? "请先扫码登录 QQ 音乐。" : playlistMessage || "选择歌单后，点击页面底部“保存设置”生效。"}
+        </p>
+      </div>
       {message && <p className={`mt-3 text-xs leading-5 ${status?.available === false ? "text-red-600" : "text-neutral-500"}`}>{message}</p>}
     </div>
   );
