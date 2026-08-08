@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3030",
-    "build": "next build --webpack",
+    "build": "TURBOPACK= NEXT_RSPACK= IS_TURBOPACK_TEST= IS_WEBPACK_TEST= next build --webpack",
     "start": "node scripts/start-standalone.mjs",
     "seed": "node scripts/seed.mjs",
     "demo:taxonomy": "node scripts/demo-taxonomy.mjs",

@@ -41,8 +41,17 @@ function deploymentEnv(): NodeJS.ProcessEnv {
   // JSON 序列化的配置写进 __NEXT_PRIVATE_STANDALONE_CONFIG；若子进程继承它，
   // `next build` 会跳过 next.config.ts，并因函数配置已丢失而构建失败。
   // 所有 __NEXT_PRIVATE_* 都是当前 Next 进程的内部状态，不应带入新的构建进程。
+  // PM2/宝塔有时会为开发环境预设 TURBOPACK=1；本项目的生产构建明确使用
+  // `next build --webpack`，两者同时存在会被 Next 16 直接判定为冲突。
   for (const key of Object.keys(env)) {
-    if (key.startsWith("__NEXT_PRIVATE_")) delete env[key];
+    if (
+      key.startsWith("__NEXT_PRIVATE_")
+      || key === "TURBOPACK"
+      || key.startsWith("TURBOPACK_")
+      || key.startsWith("NEXT_TURBOPACK")
+    ) {
+      delete env[key];
+    }
   }
 
   return {
