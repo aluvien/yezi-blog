@@ -27,11 +27,6 @@ function allowInteraction(key: string): boolean {
   const ts = Date.now();
   const cutoff = ts - INTERACTION_WINDOW_MS;
   const hits = (interactionHits.get(key) ?? []).filter((t) => t > cutoff);
-  // 空窗口的 key 直接删除，避免长期运行内存无限增长
-  if (hits.length === 0) {
-    interactionHits.delete(key);
-    return true;
-  }
   if (hits.length >= INTERACTION_MAX) {
     interactionHits.set(key, hits);
     return false;
@@ -81,4 +76,3 @@ export async function POST(request: Request) {
 export function OPTIONS() {
   return apiOptions();
 }
-

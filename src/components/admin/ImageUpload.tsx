@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import type { Attachment } from "@/lib/db";
 
-/** 客户端 canvas 预压缩:大图 resize 到 maxDim,质量 quality(jpeg)。 */
+/** 客户端 canvas 预压缩:大图 resize 到 maxDim；有透明通道的图片保留为 WebP。 */
 async function resizeImage(file: File, maxDim: number, quality: number): Promise<Blob> {
   const img = new Image();
   const url = URL.createObjectURL(file);
@@ -31,9 +31,12 @@ async function resizeImage(file: File, maxDim: number, quality: number): Promise
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return file;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(img, 0, 0, width, height);
+  const outputType = file.type === "image/png" || file.type === "image/webp" ? "image/webp" : "image/jpeg";
   return await new Promise<Blob>((resolve) => {
-    canvas.toBlob((blob) => resolve(blob ?? file), "image/jpeg", quality);
+    canvas.toBlob((blob) => resolve(blob ?? file), outputType, quality);
   });
 }
 

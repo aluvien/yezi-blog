@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { listCategories, listCommentsForAdmin, listMoments, listPosts, listWorks, listPublishedTags } from "@/lib/db";
+import { countMoments, countPublishedPosts, countWorks, listLatestApprovedComments } from "@/lib/db";
+import { getCachedCategories, getCachedPublishedTags } from "@/lib/server-data";
 import { formatDateOnly } from "@/lib/format";
 import { parseSocialLinks } from "@/lib/site";
 
@@ -34,12 +35,12 @@ function Label({ icon, children }: { icon: CardIconName; children: React.ReactNo
 
 /** 桌面端侧栏的动态信息：只展示本站真实数据。顺序：内容 -> 链接 -> 分类 -> 标签 -> 最新互动。 */
 export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string, string> }) {
-  const posts = listPosts();
-  const moments = listMoments();
-  const works = listWorks();
-  const categories = listCategories();
-  const latestInteractions = listCommentsForAdmin().filter((comment) => comment.status === "approved").slice(0, 8);
-  const tags = listPublishedTags(12);
+  const postCount = countPublishedPosts();
+  const momentCount = countMoments();
+  const workCount = countWorks();
+  const categories = getCachedCategories();
+  const latestInteractions = listLatestApprovedComments(8);
+  const tags = getCachedPublishedTags(12);
   const socialLinks = parseSocialLinks(siteSettings.social_links, 8);
 
   return (
@@ -47,9 +48,9 @@ export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string,
       <div className="site-sidebar-card">
         <Label icon="content">内容</Label>
         <div className="site-sidebar-stat-grid mt-3">
-          <Link href="/posts" className="site-sidebar-stat"><strong>{posts.length}</strong><span>文章</span></Link>
-          <Link href="/moments" className="site-sidebar-stat"><strong>{moments.length}</strong><span>想法</span></Link>
-          <Link href="/works" className="site-sidebar-stat"><strong>{works.length}</strong><span>作品</span></Link>
+          <Link href="/posts" className="site-sidebar-stat"><strong>{postCount}</strong><span>文章</span></Link>
+          <Link href="/moments" className="site-sidebar-stat"><strong>{momentCount}</strong><span>想法</span></Link>
+          <Link href="/works" className="site-sidebar-stat"><strong>{workCount}</strong><span>作品</span></Link>
         </div>
       </div>
 

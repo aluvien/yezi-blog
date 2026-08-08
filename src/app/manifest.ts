@@ -3,7 +3,7 @@ import { getSiteSettings } from "@/lib/db";
 import { site } from "@/lib/site";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export default function manifest(): MetadataRoute.Manifest {
   const siteName = getSiteSettings().site_name?.trim() || site.name;

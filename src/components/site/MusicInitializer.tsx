@@ -62,9 +62,11 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       gesture: CardSwipeGesture | null;
       swipeFrame: number | null;
       suppressClick: boolean;
+      spec: MusicSpec;
+      resolvePromise: Promise<MusicTrack[]> | null;
     };
     const cardMusicState = new WeakMap<HTMLElement, CardMusicState>();
-    const cardSwipeCleanups = new Set<() => void>();
+    const cardSwipeCleanups = new Map<HTMLElement, () => void>();
 
     function trackKey(track: MusicTrack): string {
       return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist}`;
@@ -210,6 +212,37 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       syncCardTitle(card, state);
       syncCardState(card, state);
       syncCardLyric(card, state);
+    }
+
+    function resolveTracks(card: HTMLElement, data: CardMusicState): Promise<MusicTrack[]> {
+      if (data.tracks[0]?.url) return Promise.resolve(data.tracks);
+      if (data.resolvePromise) return data.resolvePromise;
+      data.resolvePromise = fetchMusicTracks(apiRef.current, data.spec)
+        .then((tracks) => {
+          if (tracks.length === 0) throw new Error("音乐暂不可用");
+          if (data.spec.server === "qqvip" && tracks[0] && data.spec.title) {
+            tracks[0] = {
+              ...tracks[0],
+              name: data.spec.title,
+              artist: data.spec.artist || tracks[0].artist,
+              cover: data.spec.cover || tracks[0].cover,
+            };
+          }
+          data.tracks = tracks;
+          renderCardTrack(card, data, data.activeIndex);
+          card.classList.remove("is-error");
+          return tracks;
+        })
+        .catch((error) => {
+          card.classList.add("is-error");
+          const title = card.querySelector<HTMLElement>(".music-trigger-name");
+          if (title) title.textContent = error instanceof Error ? error.message : "音乐暂不可用";
+          throw error;
+        })
+        .finally(() => {
+          data.resolvePromise = null;
+        });
+      return data.resolvePromise;
     }
 
     function setSlideTransition(elements: { current: HTMLElement; preview: HTMLElement }, animated: boolean): void {
@@ -452,8 +485,7 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       el.replaceChildren(card);
 
       let tracks: MusicTrack[] = [];
-      // QQ 搜索引用已携带展示快照。首屏先使用它渲染，播放 URL 则继续在后台加载；
-      // 因此访客不需要点击卡片，也不受详情接口偶发波动影响。
+      // QQ 搜索引用已携带展示快照，首屏直接渲染；播放 URL 延迟到点击时请求。
       if (spec.title) {
         const current = card.querySelector<HTMLElement>('[data-track-slot="current"]');
         if (current) {
@@ -467,20 +499,18 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
           });
         }
       }
-      try {
-        tracks = await fetchMusicTracks(apiRef.current, spec);
-      } catch {
-        card.classList.add("is-error");
-        card.querySelector(".music-trigger-name")!.textContent = "音乐暂不可用（版权或接口异常）";
-        return;
-      }
-      if (spec.server === "qqvip" && tracks[0] && spec.title) {
-        tracks[0] = {
-          ...tracks[0],
-          name: spec.title,
-          artist: spec.artist || tracks[0].artist,
-          cover: spec.cover || tracks[0].cover,
-        };
+      if (spec.server === "qqvip" && spec.title) {
+        // QQ 展示快照已经包含封面、歌名和歌手；播放地址涉及登录态，
+        // 延迟到用户真正点击时再请求，避免首屏为每张卡片发起 VIP 接口调用。
+        tracks = [{ name: spec.title, artist: spec.artist || "", cover: spec.cover || "", url: "", lrc: "", key: `qqvip:${spec.id}` }];
+      } else {
+        try {
+          tracks = await fetchMusicTracks(apiRef.current, spec);
+        } catch {
+          card.classList.add("is-error");
+          card.querySelector(".music-trigger-name")!.textContent = "音乐暂不可用（版权或接口异常）";
+          return;
+        }
       }
       if (tracks.length === 0) {
         card.classList.add("is-error");
@@ -488,7 +518,8 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
         return;
       }
 
-      const data: CardMusicState = { tracks, lyrics: new Map(), loading: new Set(), activeIndex: 0, gesture: null, swipeFrame: null, suppressClick: false };
+      const data: CardMusicState = { tracks, lyrics: new Map(), loading: new Set(), activeIndex: 0, gesture: null, swipeFrame: null, suppressClick: false, spec, resolvePromise: null };
+      if (!el.isConnected) return;
       cardMusicState.set(card, data);
       renderCardTrack(card, data, 0);
       const swipeCleanup = bindCardSwipe(card, data);
@@ -507,9 +538,20 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
         event.preventDefault();
         event.stopPropagation();
         const activeTrack = data.tracks[data.activeIndex] ?? data.tracks[0];
+        if (!activeTrack) return;
+        if (!activeTrack.url) {
+          const alreadyResolving = Boolean(data.resolvePromise);
+          const promise = resolveTracks(card, data);
+          if (alreadyResolving) return;
+          void promise.then((resolved) => {
+            const resolvedTrack = resolved[data.activeIndex] ?? resolved[0];
+            if (resolvedTrack) requestGlobalPlay({ tracks: resolved, cardId: card.dataset.cardId, trackKey: trackKey(resolvedTrack) });
+          }).catch(() => undefined);
+          return;
+        }
         requestGlobalPlay({ tracks: data.tracks, cardId: card.dataset.cardId, trackKey: trackKey(activeTrack) });
       });
-      if (swipeCleanup) cardSwipeCleanups.add(swipeCleanup);
+      if (swipeCleanup) cardSwipeCleanups.set(card, swipeCleanup);
     }
 
     function scan(root: Node) {
@@ -523,25 +565,41 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       });
     }
 
-    scan(document.body);
+    const contentRoot = document.querySelector("main") ?? document.body;
+    scan(contentRoot);
+    const cleanupDisconnectedCards = () => {
+      for (const [card, cleanup] of cardSwipeCleanups) {
+        if (!card.isConnected) {
+          cleanup();
+          cardSwipeCleanups.delete(card);
+        }
+      }
+    };
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1) scan(node);
         });
       }
+      cleanupDisconnectedCards();
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(contentRoot, { childList: true, subtree: true });
 
-    // 订阅全局播放状态：切歌/暂停/结束/取消时刷新所有卡片图标
+    // 播放器的 timeupdate 频率较高，合并到下一帧，避免每次进度事件都遍历长页面。
+    let stateSyncFrame: number | null = null;
     const unsubscribeState = setGlobalStateListener(() => {
-      const state = getGlobalPlaybackState();
-      document.querySelectorAll<HTMLElement>(".music-trigger").forEach((card) => syncCard(card, state));
+      if (stateSyncFrame !== null) return;
+      stateSyncFrame = requestAnimationFrame(() => {
+        stateSyncFrame = null;
+        const state = getGlobalPlaybackState();
+        contentRoot.querySelectorAll<HTMLElement>(".music-trigger").forEach((card) => syncCard(card, state));
+      });
     });
 
     return () => {
       observer.disconnect();
       unsubscribeState();
+      if (stateSyncFrame !== null) cancelAnimationFrame(stateSyncFrame);
       cardSwipeCleanups.forEach((cleanup) => cleanup());
       cardSwipeCleanups.clear();
     };

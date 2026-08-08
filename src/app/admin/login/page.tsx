@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const router = useRouter();
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -23,7 +25,7 @@ export default function AdminLoginPage() {
         setError(data.error || "登录失败，请检查密码");
         return;
       }
-      window.location.assign("/admin");
+      router.replace("/admin");
     } catch {
       setError("无法连接后台服务，请确认网站服务正在运行");
     } finally {

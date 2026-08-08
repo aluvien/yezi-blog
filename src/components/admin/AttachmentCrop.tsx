@@ -22,20 +22,23 @@ export function AttachmentCrop({ attachmentId, src }: { attachmentId: number; sr
   const imgRef = useRef<HTMLImageElement>(null);
 
   async function doCrop() {
-    if (!completedCrop || completedCrop.width === 0 || completedCrop.height === 0) {
+    const image = imgRef.current;
+    if (!completedCrop || completedCrop.width <= 0 || completedCrop.height <= 0 || !image || image.clientWidth <= 0 || image.clientHeight <= 0) {
       window.alert("请先在图片上拖出一个裁切区域");
       return;
     }
+    const scaleX = image.naturalWidth / image.clientWidth;
+    const scaleY = image.naturalHeight / image.clientHeight;
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/attachments/${attachmentId}/crop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          x: completedCrop.x,
-          y: completedCrop.y,
-          width: completedCrop.width,
-          height: completedCrop.height,
+          x: Math.round(completedCrop.x * scaleX),
+          y: Math.round(completedCrop.y * scaleY),
+          width: Math.round(completedCrop.width * scaleX),
+          height: Math.round(completedCrop.height * scaleY),
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string; attachment?: { id: number } };

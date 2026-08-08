@@ -48,7 +48,7 @@ npm run dev                        # http://localhost:3030
 
 后台入口 `http://localhost:3030/admin`，密码为 `.env.local` 中的 `ADMIN_PASSWORD`。
 
-管理员登录内置暴力破解保护：同一来源连续 5 次失败会锁定 15 分钟；全站账户在 15 分钟内累计 25 次失败也会锁定 15 分钟。使用反向代理时请正确配置 `X-Real-IP`，并仅在确实信任代理时开启 `TRUST_PROXY`。
+管理员登录内置暴力破解保护：同一来源连续 5 次失败会锁定 15 分钟；全站账户在 15 分钟内累计 25 次失败也会锁定 15 分钟。只有在反向代理会覆盖客户端请求头、且 Node 端口不直接暴露公网时，才开启 `TRUST_PROXY=true`。
 
 > 注意：直连访问（未配置 `X-Real-IP`/`X-Forwarded-For`）时，来源 IP 会被统一记为 `unknown`，所有此类访客共享同一评论限频与点赞去重键。生产环境务必通过反向代理提供 `X-Real-IP`，以保证限流按真实访客生效。
 
@@ -62,7 +62,7 @@ npm run dev                        # http://localhost:3030
 | `NEXT_PUBLIC_SITE_URL` | 站点对外 URL，用于 metadata / sitemap / RSS，末尾不带斜杠 | `http://localhost:3030` |
 | `BLOG_DB_PATH` | 可选的 SQLite 绝对路径，适合容器挂载或隔离测试 | `data/blog.db` |
 | `API_CORS_ORIGIN` | 可选的 App/Web API 跨域来源；不设置时仅允许同源访问 | 空（同源） |
-| `TRUST_PROXY` | 是否信任 `X-Forwarded-For` 的首个地址；仅在代理已覆盖客户端请求头时开启 | `false` |
+| `TRUST_PROXY` | 是否信任 Nginx/Cloudflare 覆盖后的 `X-Real-IP`、`X-Forwarded-For`；直连 Node 端口保持关闭 | `false` |
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 | `QQ_MUSIC_SESSION_PATH` | QQ 扫码会话文件路径；留空时放在数据库同目录，必须持久化且不可公开访问 | `data/qq-music-session.json` |
 
@@ -162,7 +162,13 @@ pm2 save && pm2 startup         # 开机自启
 后台“同步 GitHub”按钮会在服务器项目目录中执行安全的 `git pull --ff-only origin main`，
 同步前自动备份 SQLite，随后构建并重启 `yezi-blog`。它不会执行 `git reset --hard`、`git clean`、
 `rsync --delete` 或复制数据库的操作。生产环境请在 `.env.local` 中配置 `BLOG_DB_PATH` 和 `UPLOAD_DIR`
-的绝对路径，并确保服务器 Git 已配置 GitHub 访问凭证。
+的绝对路径，并确保服务器 Git 已配置 GitHub 访问凭证。同步过程带有互斥锁，不会并发构建；只有依赖清单变化或 `node_modules` 不完整时才执行 `npm ci`。后台会继续查询 PM2 重启状态，确认成功或报告失败。
+
+如果没有设置 `BLOG_DB_PATH`，程序会固定使用项目根目录下的 `data/blog.db`；`start-standalone.mjs` 会在 PM2 工作目录变化时仍把默认路径指回项目根目录。若数据库放在项目外部，再显式填写绝对路径。
+
+生产构建命令已固定使用 Next 的 webpack 路径（`npm run build`），适合宝塔/PM2 的非交互部署。PM2 进程的工作目录必须是项目根目录，且建议设置 `DEPLOY_PM2_NAME=yezi-blog`；未设置时程序会按 PM2 的 `pm_cwd` 自动查找同目录进程。
+
+如果站点放在 Nginx 后面，请在 `.env.local` 设置 `TRUST_PROXY=true`，并确认 Nginx 覆盖而不是拼接客户端传入的 `X-Real-IP` / `X-Forwarded-For`。如果直接通过 `:3030` 访问，保持 `TRUST_PROXY=false`，避免访客伪造 IP 绕过限流和点赞去重。
 
 Nginx 反向代理示例见 `deploy/nginx.conf.example`（含 `client_max_body_size` 上传大小限制）。上线后记得把 `NEXT_PUBLIC_SITE_URL` 改为正式域名并重新 build。
 

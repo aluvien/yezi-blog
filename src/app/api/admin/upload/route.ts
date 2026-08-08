@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import fs from "fs";
+import { promises as fsPromises } from "node:fs";
 import path from "path";
 import sharp from "sharp";
 import { requireAdminApi } from "@/lib/auth";
@@ -45,6 +45,24 @@ const ALLOWED: Record<string, string> = {
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
 };
 
+function hasBytes(buffer: Buffer, offset: number, bytes: number[]): boolean {
+  return bytes.every((value, index) => buffer[offset + index] === value);
+}
+
+function hasValidSignature(mime: string, buffer: Buffer): boolean {
+  if (mime === "image/jpeg") return hasBytes(buffer, 0, [0xff, 0xd8, 0xff]);
+  if (mime === "image/png") return hasBytes(buffer, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (mime === "image/webp") return buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP";
+  if (mime === "image/gif") return buffer.toString("ascii", 0, 6) === "GIF87a" || buffer.toString("ascii", 0, 6) === "GIF89a";
+  if (mime === "application/pdf") return buffer.toString("ascii", 0, 5) === "%PDF-";
+  if (mime === "application/zip" || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    return hasBytes(buffer, 0, [0x50, 0x4b, 0x03, 0x04]) || hasBytes(buffer, 0, [0x50, 0x4b, 0x05, 0x06]);
+  }
+  if (mime === "application/msword") return hasBytes(buffer, 0, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+  // 纯文本和 Markdown 没有稳定的文件头，继续依赖大小与 MIME 白名单。
+  return true;
+}
+
 export async function POST(request: Request) {
   const session = await requireAdminApi();
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
@@ -80,13 +98,19 @@ export async function POST(request: Request) {
   if (file.type.startsWith("image/")) {
     try {
       const meta = await sharp(finalBuffer).metadata();
-      const pixels = (meta.width ?? 0) * (meta.height ?? 0);
+      if (!meta.width || !meta.height || !hasValidSignature(file.type, finalBuffer)) {
+        return NextResponse.json({ error: "图片文件内容无效" }, { status: 400 });
+      }
+      const pixels = meta.width * meta.height;
       if (pixels > MAX_PIXELS) {
         return NextResponse.json({ error: "图片分辨率过大，请压缩后上传" }, { status: 400 });
       }
     } catch {
-      // 无法读取头信息的图片交给下方压缩分支或落盘逻辑处理，这里不强拦。
+      return NextResponse.json({ error: "图片文件无法读取" }, { status: 400 });
     }
+  }
+  if (!hasValidSignature(file.type, finalBuffer)) {
+    return NextResponse.json({ error: "文件内容与类型不匹配" }, { status: 400 });
   }
   if (shouldCompress) {
     try {
@@ -98,7 +122,7 @@ export async function POST(request: Request) {
       finalExt = ".webp";
       finalMime = "image/webp";
     } catch {
-      // sharp 处理失败则保留原图
+      return NextResponse.json({ error: "图片压缩失败，请更换文件后重试" }, { status: 400 });
     }
   }
 
@@ -106,10 +130,10 @@ export async function POST(request: Request) {
   const name = `${crypto.randomBytes(8).toString("hex")}${finalExt}`;
   const uploadRoot = getUploadDir();
   const dir = path.join(uploadRoot, ym);
-  fs.mkdirSync(dir, { recursive: true });
+  await fsPromises.mkdir(dir, { recursive: true });
   const relativePath = `/uploads/${ym}/${name}`;
   const absolutePath = path.join(dir, name);
-  fs.writeFileSync(absolutePath, finalBuffer);
+  await fsPromises.writeFile(absolutePath, finalBuffer, { mode: 0o640 });
 
   // 所有上传（封面/配图/Logo/头像/附件）都入库，便于在附件管理统一查看与清理
   try {
@@ -122,7 +146,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ path: relativePath, attachment });
   } catch (error) {
-    fs.unlinkSync(absolutePath);
+    await fsPromises.unlink(absolutePath).catch(() => undefined);
     throw error;
   }
 }

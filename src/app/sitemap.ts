@@ -3,7 +3,7 @@ import { listPosts } from "@/lib/db";
 import { site } from "@/lib/site";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticPages: MetadataRoute.Sitemap = [

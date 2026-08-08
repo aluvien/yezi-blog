@@ -37,6 +37,7 @@ yarn-error.log*
 # database & uploads
 /data/
 /public/uploads/
+.deploy-sync.lock
 
 # vercel
 .vercel

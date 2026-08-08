@@ -205,7 +205,6 @@ export function Comments({
               <div className="comment-body">
                 <div className="comment-meta">
                   <span className="comment-author">{c.nickname}</span>
-                  {c.nickname === authorName && <span className="comment-author-badge">UP主</span>}
                   <span className="comment-time">{formatRelativeTime(c.created_at)}</span>
                   {isAdmin && replyingTo !== c.id && (
                     <button type="button" className="comment-reply-btn" onClick={() => openReply(c.id)}>

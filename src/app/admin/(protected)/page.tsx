@@ -6,37 +6,27 @@ import {
   countPosts,
   countWorks,
   getOverallMetrics,
-  listAllPosts,
   listCategories,
   listCommentsForAdmin,
+  listRecentPosts,
+  listRecentTags,
 } from "@/lib/db";
-import { parsePostTags } from "@/lib/post-tags";
 import { formatDateOnly } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default function AdminDashboard() {
   const pending = countPendingComments();
-  const posts = listAllPosts();
+  const recentPosts = listRecentPosts(5);
   const categories = listCategories();
   const metrics = getOverallMetrics();
-  const recentComments = listCommentsForAdmin().slice(0, 5);
-  const recentPosts = posts.slice(0, 5);
+  const recentComments = listCommentsForAdmin(5);
 
   const recentCategories = [...categories]
     .sort((a, b) => b.created_at.localeCompare(a.created_at, "zh-CN"))
     .slice(0, 5);
 
-  const tagLatest = new Map<string, string>();
-  for (const post of posts) {
-    for (const tag of parsePostTags(post.tags)) {
-      if (!tagLatest.has(tag)) tagLatest.set(tag, post.created_at);
-    }
-  }
-  const recentTags = [...tagLatest.entries()]
-    .sort((a, b) => b[1].localeCompare(a[1], "zh-CN"))
-    .slice(0, 5)
-    .map(([name]) => name);
+  const recentTags = listRecentTags(5);
 
   const row1 = [
     { label: "文章", count: countPosts(), href: "/admin/posts" },

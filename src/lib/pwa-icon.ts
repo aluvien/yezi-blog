@@ -7,10 +7,11 @@ import { getSiteAuthor } from "@/lib/site";
 
 function fallbackIcon(): Buffer {
   const letter = getSiteAuthor(getSiteSettings()).charAt(0).toUpperCase();
+  const safeLetter = letter.replace(/[&<>"']/g, "");
   return Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
       <rect width="512" height="512" rx="72" fill="#17191f" />
-      <text x="256" y="330" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="260" font-weight="700">${letter}</text>
+      <text x="256" y="330" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="260" font-weight="700">${safeLetter}</text>
     </svg>
   `);
 }
@@ -18,7 +19,12 @@ function fallbackIcon(): Buffer {
 function configuredLogo(): Buffer | string {
   const logo = getSiteSettings().site_logo?.trim();
   if (!logo || !logo.startsWith("/uploads/")) return fallbackIcon();
-  const relative = decodeURIComponent(logo.slice("/uploads/".length).split("?")[0]);
+  let relative: string;
+  try {
+    relative = decodeURIComponent(logo.slice("/uploads/".length).split("?")[0]);
+  } catch {
+    return fallbackIcon();
+  }
   if (!relative || relative.includes("..")) return fallbackIcon();
   const root = getUploadDir();
   const absolute = path.resolve(root, relative);

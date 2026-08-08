@@ -6,6 +6,17 @@ import type { NextRequest } from "next/server";
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Next 在动态 catch-all 路由解析前可能无法处理非法百分号编码；提前返回 404，
+  // 避免恶意请求把上传路由变成 500。正常上传路径继续直接放行。
+  if (pathname.startsWith("/uploads/")) {
+    try {
+      decodeURIComponent(pathname);
+    } catch {
+      return new NextResponse("Not Found", { status: 404 });
+    }
+    return NextResponse.next();
+  }
+
   // 登录页与登录 API 放行
   if (pathname === "/admin/login" || pathname === "/api/admin/login") {
     return NextResponse.next();
@@ -24,5 +35,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/uploads/:path*"],
 };

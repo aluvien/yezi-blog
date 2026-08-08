@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import type { ContentMetrics, Moment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
 import { formatDateOnly } from "@/lib/format";
@@ -10,8 +11,9 @@ import { MusicEmbed } from "@/components/site/MusicEmbed";
 import { MomentCommentToggle } from "@/components/site/MomentCommentToggle";
 import { MetricIcon } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
-import MomentForm from "@/components/admin/MomentForm";
 import { useMomentView } from "@/components/site/MomentViewTracker";
+
+const MomentForm = dynamic(() => import("@/components/admin/MomentForm"), { ssr: false });
 
 /**
  * 想法条目（朋友圈样式）。

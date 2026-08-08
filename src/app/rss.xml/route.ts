@@ -3,7 +3,7 @@ import { stripMarkdown } from "@/lib/markdown";
 import { site } from "@/lib/site";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 function escapeXml(s: string): string {
   return s
