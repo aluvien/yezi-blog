@@ -30,7 +30,8 @@ function asRecord(value: unknown): JsonRecord | null {
 }
 
 function qrImage(value: unknown): string {
-  const raw = findString(value, ["image", "qrCode", "qrcode", "qr", "base64", "dataUrl"]);
+  // qq-music-api v2.4 returns `img`; older releases used qrCode/qrcode.
+  const raw = findString(value, ["img", "image", "qrCode", "qrcode", "qr", "base64", "dataUrl"]);
   if (!raw) return "";
   if (raw.startsWith("data:image/") || raw.startsWith("http://") || raw.startsWith("https://")) return raw;
   // The sidecar currently returns a bare Base64 PNG. Make it browser-displayable.
