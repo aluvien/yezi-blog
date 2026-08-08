@@ -1,3 +1,5 @@
+import { getQQMusicSession } from "@/lib/qq-music-session";
+
 /**
  * QQ Music sidecar adapter.
  *
@@ -33,10 +35,16 @@ export async function qqMusicRequest(pathname: string, options: {
   query?: Record<string, string | undefined>;
   method?: "GET" | "POST";
   body?: unknown;
+  /** QR login itself does not need the existing account session. */
+  useSession?: boolean;
 } = {}): Promise<unknown> {
+  const session = options.useSession === false ? null : getQQMusicSession();
   const response = await fetch(apiUrl(pathname, options.query), {
     method: options.method ?? "GET",
-    headers: options.body === undefined ? undefined : { "content-type": "application/json" },
+    headers: {
+      ...(options.body === undefined ? {} : { "content-type": "application/json" }),
+      ...(session ? { "X-Custom-Cookie": session.cookie } : {}),
+    },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     cache: "no-store",
     signal: AbortSignal.timeout(12_000),

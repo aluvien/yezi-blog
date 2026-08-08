@@ -64,6 +64,7 @@ npm run dev                        # http://localhost:3030
 | `API_CORS_ORIGIN` | 可选的 App/Web API 跨域来源；不设置时仅允许同源访问 | 空（同源） |
 | `TRUST_PROXY` | 是否信任 `X-Forwarded-For` 的首个地址；仅在代理已覆盖客户端请求头时开启 | `false` |
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
+| `QQ_MUSIC_SESSION_PATH` | QQ 扫码会话文件路径；留空时放在数据库同目录，必须持久化且不可公开访问 | `data/qq-music-session.json` |
 
 ## 音乐功能
 
@@ -103,7 +104,7 @@ qq:数字歌曲ID:song
 接入后：
 
 1. 在“设置 → 音乐设置”点击“扫码登录 QQ 音乐”。
-2. 用手机 QQ 扫码并确认；登录 Cookie 只保留在服务器本机的 QQ Music API 服务中，网站数据库和访客浏览器均不会保存或收到 Cookie。
+2. 用手机 QQ 扫码并确认；登录 Cookie 只保留在服务器的受限会话文件中，并仅通过本机请求头转给 QQ Music API。网站数据库和访客浏览器均不会保存或收到 Cookie。
 3. 在文章或想法编辑器点击“+ 音乐 → QQ 音乐搜索”，选择歌曲即可插入。
 4. 插入的格式为 `qqvip:歌曲MID:song`。前台播放时由本站 `/api/music/qq` 服务端接口临时解析播放地址，并带有限频保护。
 
@@ -200,6 +201,7 @@ QQ_MUSIC_API_URL=http://127.0.0.1:3201
 
 - 不要在宝塔防火墙开放 `3200`，也不要为这个 API 单独绑定公网域名。
 - 只让博客服务通过 `127.0.0.1` 调用 QQ Music API；扫码、Cookie 查询和搜索接口均由博客后台管理员权限保护。
+- `data/qq-music-session.json` 是登录会话文件，权限应为 `600`；它与 `blog.db` 一样需要保留在持久化目录，但绝不能提交到 Git 或暴露为静态文件。
 - 更新此服务时只在它自己的目录执行 `git pull --ff-only`、`npm ci`、`npm run build`、`pm2 restart qq-music-api --update-env`；不要把 QQ Cookie 或其配置文件提交到博客仓库。
 
 ### 方式二：Docker（standalone 输出）

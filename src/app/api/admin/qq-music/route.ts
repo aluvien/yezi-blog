@@ -7,12 +7,12 @@ import {
   getRecordString,
   normalizeQQCover,
   qqMusicRequest,
-  readCookie,
   readUin,
   singerNames,
   type JsonRecord,
   unwrapData,
 } from "@/lib/qq-music-api";
+import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,10 +63,12 @@ function normalizeSearch(raw: unknown) {
 }
 
 async function status() {
-  const raw = await qqMusicRequest("/user/getCookie");
-  const cookie = readCookie(raw);
-  const uin = readUin(raw);
-  return { available: true, loggedIn: Boolean(cookie && uin), uin: uin || null };
+  // `qq-music-api` v2.4's getCookie/setCookie routes do not share the QR login
+  // state. Probe a public endpoint for availability and read our own durable,
+  // server-only session instead.
+  await qqMusicRequest("/getHotkey", { useSession: false });
+  const session = getQQMusicSession();
+  return { available: true, loggedIn: Boolean(session), uin: session?.uin ?? null };
 }
 
 export async function GET(request: Request) {
@@ -76,7 +78,7 @@ export async function GET(request: Request) {
   try {
     if (op === "status") return noCache(await status());
     if (op === "qr") {
-      const raw = await qqMusicRequest("/getQQLoginQr");
+      const raw = await qqMusicRequest("/getQQLoginQr", { useSession: false });
       const image = qrImage(raw);
       const qrsig = findString(raw, ["qrsig"]);
       const ptqrtoken = findString(raw, ["ptqrtoken"]);
@@ -109,13 +111,14 @@ export async function POST(request: Request) {
   if (!qrsig || qrsig.length > 512 || ptqrtoken.length > 512) return noCache({ error: "二维码信息无效，请重新获取" }, 400);
 
   try {
-    const raw = await qqMusicRequest("/checkQQLoginQr", { method: "POST", body: { qrsig, ptqrtoken } });
-    const cookie = readCookie(raw);
+    const raw = await qqMusicRequest("/checkQQLoginQr", { method: "POST", body: { qrsig, ptqrtoken }, useSession: false });
+    const cookie = findString(raw, ["cookie"]);
     const uin = readUin(raw);
     if (cookie && uin) {
-      // Persist the fresh login state only inside the localhost sidecar. The
-      // cookie is never included in this route's response or browser storage.
-      await qqMusicRequest("/user/setCookie", { query: { cookie } });
+      // The upstream API does not persist QR sessions reliably. Keep the
+      // account cookie in the blog's protected data directory and pass it only
+      // over the localhost request header on subsequent API calls.
+      saveQQMusicSession({ cookie, uin });
       return noCache({ state: "success", uin });
     }
     const message = findString(raw, ["message", "msg", "error", "status"]);
