@@ -63,6 +63,7 @@ npm run dev                        # http://localhost:3030
 | `BLOG_DB_PATH` | 可选的 SQLite 绝对路径，适合容器挂载或隔离测试 | `data/blog.db` |
 | `API_CORS_ORIGIN` | 可选的 App/Web API 跨域来源；不设置时仅允许同源访问 | 空（同源） |
 | `TRUST_PROXY` | 是否信任 `X-Forwarded-For` 的首个地址；仅在代理已覆盖客户端请求头时开启 | `false` |
+| `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 
 ## App API
 

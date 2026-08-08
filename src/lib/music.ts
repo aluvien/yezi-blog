@@ -14,7 +14,7 @@
 
 export const DEFAULT_METING_API = "https://api.injahow.cn/meting/";
 
-export const MUSIC_SERVERS = ["netease", "qq", "kugou", "kuwo", "xiami", "baidu"] as const;
+export const MUSIC_SERVERS = ["netease", "qq", "kugou", "kuwo", "xiami", "baidu", "qqvip"] as const;
 export type MusicServer = (typeof MUSIC_SERVERS)[number];
 
 export const MUSIC_TYPES = ["song", "playlist", "album", "search"] as const;
@@ -38,7 +38,9 @@ export function parseMusicSpec(input: string): MusicSpec | null {
   if (parts.length < 2 || parts.length > 4) return null;
   const [server, id, type = "song", mode] = parts;
   if (!SERVER_SET.has(server)) return null;
-  if (!/^\d+$/.test(id)) return null;
+  // QQ Music's official song MID is alphanumeric. `qqvip` means the playback
+  // URL is resolved by our server-side adapter with the owner's login state.
+  if (server === "qqvip" ? !/^[A-Za-z0-9_-]{4,80}$/.test(id) : !/^\d+$/.test(id)) return null;
   if (!TYPE_SET.has(type)) return null;
   if (mode && mode !== "random" && mode !== "shuffle") return null;
   return { server: server as MusicServer, id, type: type as MusicType, shuffle: Boolean(mode) };
@@ -144,6 +146,24 @@ function normalizeCoverUrl(value: string): string {
  * 前端触发卡片与全局播放器的默认歌单都走这里，避免各自重复实现。
  */
 export async function fetchMusicTracks(metingApi: string, spec: MusicSpec): Promise<MusicTrack[]> {
+  if (spec.server === "qqvip") {
+    if (spec.type !== "song") throw new Error("QQ 音乐登录播放暂仅支持单曲");
+    const res = await fetch(`/api/music/qq?mid=${encodeURIComponent(spec.id)}`, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null) as { error?: unknown } | null;
+      throw new Error(typeof payload?.error === "string" ? payload.error : `QQ 音乐 ${res.status}`);
+    }
+    const track = await res.json() as Partial<MusicTrack>;
+    if (!track.url || typeof track.url !== "string") throw new Error("未能获取 QQ 音乐播放地址");
+    return [{
+      name: firstScalar(track.name) || "QQ 音乐",
+      artist: firstScalar(track.artist),
+      url: track.url,
+      cover: normalizeCoverUrl(firstScalar(track.cover)),
+      lrc: firstScalar(track.lrc),
+      key: `qqvip:${spec.id}`,
+    }];
+  }
   const res = await fetch(buildMetingUrl(metingApi, spec), { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`meting ${res.status}`);
   // 不同 Meting 实现可能返回数组或单个对象，封面字段也可能叫 cover、pic、image 或 album.pic。
