@@ -188,7 +188,7 @@ export function MusicInitializer() {
     }
 
     function syncCardLyric(card: HTMLElement, state: ReturnType<typeof getGlobalPlaybackState>): void {
-      const lyricEl = card.querySelector<HTMLElement>(".music-trigger-lyric");
+      const lyricEl = card.querySelector<HTMLElement>('[data-track-slot="current"] .music-trigger-lyric');
       const data = cardMusicState.get(card);
       if (!lyricEl || !data) return;
       const isCurrentCard = Boolean(card.dataset.cardId) && state.cardId === card.dataset.cardId;
@@ -504,7 +504,10 @@ export function MusicInitializer() {
             <span class="music-trigger-cover"><img alt="" loading="lazy" /></span>
             <span class="music-trigger-info">
               <span class="music-trigger-name"></span>
-              <span class="music-trigger-artist"><span class="music-trigger-artist-name"></span></span>
+              <span class="music-trigger-artist">
+                <span class="music-trigger-artist-name"></span>
+                <span class="music-trigger-lyric" aria-live="polite"><span class="music-trigger-lyric-text"></span></span>
+              </span>
             </span>
           </span>
         </span>
