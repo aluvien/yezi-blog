@@ -4,7 +4,10 @@ import {
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
 
-const MAX_HTML_BYTES = 3 * 1024 * 1024;
+// 引用卡片只需要网页头部元信息和正文的一小段内容。保留读取上限，
+// 但不要因为网页声明了较大的 Content-Length 就直接拒绝；不少站点会把
+// 脚本、初始状态或内嵌资源一起放进 HTML，声明大小不代表元信息不可读。
+const MAX_HTML_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 12_000;
 const MAX_REDIRECTS = 3;
 
@@ -44,12 +47,10 @@ export function normalizeReferenceUrl(input: unknown): string {
 }
 
 async function readLimitedText(response: Response): Promise<string> {
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > MAX_HTML_BYTES) throw new Error("文章页面过大，暂时无法读取");
   if (!response.body) {
     const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > MAX_HTML_BYTES) throw new Error("文章页面过大，暂时无法读取");
-    return text;
+    const bytes = new TextEncoder().encode(text);
+    return new TextDecoder().decode(bytes.subarray(0, MAX_HTML_BYTES));
   }
 
   const reader = response.body.getReader();
@@ -60,8 +61,18 @@ async function readLimitedText(response: Response): Promise<string> {
       const { done, value } = await reader.read();
       if (done) break;
       if (value) {
+        const remaining = MAX_HTML_BYTES - size;
+        if (remaining <= 0) {
+          await reader.cancel();
+          break;
+        }
+        if (value.byteLength > remaining) {
+          chunks.push(value.subarray(0, remaining));
+          size += remaining;
+          await reader.cancel();
+          break;
+        }
         size += value.byteLength;
-        if (size > MAX_HTML_BYTES) throw new Error("文章页面过大，暂时无法读取");
         chunks.push(value);
       }
     }
