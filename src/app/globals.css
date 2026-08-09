@@ -1778,6 +1778,146 @@ summary {
   display: none;
 }
 
+/* 文章引用卡片：正文只渲染本地快照，摘要默认折叠，原文在新标签页打开。 */
+.article-reference-card {
+  margin: 1.8em 0;
+  border: 1px solid var(--divider);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--soft) 76%, var(--paper));
+  padding: 1rem;
+}
+
+.article-reference-main {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.article-body .article-reference-cover {
+  display: block;
+  width: 88px;
+  height: 88px;
+  flex: 0 0 88px;
+  margin: 0;
+  border-radius: 10px;
+  object-fit: cover;
+  cursor: default;
+}
+
+.article-reference-cover-fallback {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 12%, var(--paper));
+  color: var(--accent);
+  font-size: 1.8rem;
+  font-weight: 650;
+}
+
+.article-reference-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.article-body .article-reference-source {
+  margin: 0;
+  overflow: hidden;
+  color: var(--accent);
+  font-family: var(--font-site-mono);
+  font-size: 0.75em;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.article-body .article-reference-title {
+  margin: 0.2rem 0 0;
+  font-size: 1.05em;
+  line-height: 1.45;
+}
+
+.article-body .article-reference-title a {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.article-body .article-reference-title a:hover {
+  color: var(--accent);
+}
+
+.article-body .article-reference-description {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.86em;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.article-reference-date {
+  color: var(--muted);
+  font-family: var(--font-site-mono);
+}
+
+.article-body .article-reference-summary {
+  margin-top: 0.85rem;
+  border-top: 1px solid var(--divider);
+  padding-top: 0.7rem;
+}
+
+.article-reference-summary summary {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.86em;
+  font-weight: 600;
+  list-style-position: inside;
+}
+
+.article-reference-summary-body {
+  color: var(--faint);
+  font-size: 0.88em;
+  line-height: 1.7;
+}
+
+.article-body .article-reference-summary-body p {
+  margin: 0.55rem 0 0;
+}
+
+.article-body .article-reference-summary-body ul {
+  margin: 0.45rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.article-body .article-reference-summary-body li + li {
+  margin-top: 0.2rem;
+}
+
+.article-body .article-reference-original {
+  display: inline-block;
+  margin-top: 0.8rem;
+  color: var(--muted);
+  font-size: 0.78em;
+}
+
+.article-body .article-reference-original:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 699px) {
+  .article-reference-card {
+    padding: 0.85rem;
+  }
+
+  .article-body .article-reference-cover {
+    width: 72px;
+    height: 72px;
+    flex-basis: 72px;
+  }
+}
+
 .article-body table {
   width: 100%;
   border-collapse: collapse;

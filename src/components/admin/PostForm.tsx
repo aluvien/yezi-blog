@@ -10,12 +10,14 @@ import { parsePostTags } from "@/lib/post-tags";
 import ImageUpload from "./ImageUpload";
 import { MusicInsertDialog } from "./MusicInsertDialog";
 import { VideoInsertDialog } from "./VideoInsertDialog";
+import { ArticleReferenceDialog } from "./ArticleReferenceDialog";
 
 const MARKDOWN_TOOLS = [
   { kind: "line-prefix", label: "H2", title: "将选中行设为二级标题", prefix: "## ", placeholder: "小标题" },
   { kind: "wrap", label: "粗体", title: "将选中文字设为粗体", before: "**", after: "**", placeholder: "重点文字" },
   { kind: "wrap", label: "斜体", title: "将选中文字设为斜体", before: "*", after: "*", placeholder: "强调文字" },
   { kind: "link", label: "链接", title: "为选中文字添加链接" },
+  { kind: "reference", label: "文章引用", title: "读取公众号或网页文章并插入引用卡片" },
   { kind: "line-prefix", label: "引用", title: "将选中行设为引用", prefix: "> ", placeholder: "引用内容" },
   { kind: "line-prefix", label: "列表", title: "将选中行设为列表", prefix: "- ", placeholder: "列表项" },
   { kind: "wrap", label: "代码", title: "将选中文字设为代码块", before: "```\n", after: "\n```", placeholder: "const value = true" },
@@ -61,6 +63,7 @@ export default function PostForm({ post, initialAttachments = [], categories = [
   const [markdownDialog, setMarkdownDialog] = useState<"link" | "image" | null>(null);
   const [musicDialog, setMusicDialog] = useState(false);
   const [videoDialog, setVideoDialog] = useState(false);
+  const [referenceDialog, setReferenceDialog] = useState(false);
   const [dialogText, setDialogText] = useState("");
   const [dialogUrl, setDialogUrl] = useState("");
   const [dialogError, setDialogError] = useState("");
@@ -168,6 +171,12 @@ export default function PostForm({ post, initialAttachments = [], categories = [
     replaceTextAtRange(`\n\`\`\`video\n${spec}\n\`\`\`\n`, range);
   }
 
+  function insertReferenceMarker(marker: string) {
+    const range = dialogRangeRef.current ?? getEditingRange();
+    dialogRangeRef.current = null;
+    replaceTextAtRange(`\n${marker}\n`, range);
+  }
+
   function openMarkdownDialog(kind: "link" | "image") {
     const range = getEditingRange();
     dialogRangeRef.current = range;
@@ -207,6 +216,9 @@ export default function PostForm({ post, initialAttachments = [], categories = [
     } else if (tool.kind === "video") {
       dialogRangeRef.current = getEditingRange();
       setVideoDialog(true);
+    } else if (tool.kind === "reference") {
+      dialogRangeRef.current = getEditingRange();
+      setReferenceDialog(true);
     } else if (tool.kind === "line-prefix") {
       insertLinePrefix(tool.prefix, tool.placeholder);
     } else if (tool.kind === "raw") {
@@ -628,6 +640,18 @@ export default function PostForm({ post, initialAttachments = [], categories = [
             setVideoDialog(false);
             if (spec) {
               insertVideoBlock(spec);
+            } else {
+              dialogRangeRef.current = null;
+            }
+          }}
+        />
+      )}
+      {referenceDialog && (
+        <ArticleReferenceDialog
+          onClose={(marker) => {
+            setReferenceDialog(false);
+            if (marker) {
+              insertReferenceMarker(marker);
             } else {
               dialogRangeRef.current = null;
             }

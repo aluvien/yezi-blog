@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 import { hashIp } from "@/lib/request";
 
@@ -36,6 +37,24 @@ function createDb(): Database.Database {
       tags TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS article_references (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      url TEXT NOT NULL,
+      canonical_url TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      source_name TEXT NOT NULL DEFAULT '',
+      author TEXT NOT NULL DEFAULT '',
+      published_at TEXT NOT NULL DEFAULT '',
+      cover TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      key_points TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(post_id, canonical_url),
+      FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
     );
     CREATE TABLE IF NOT EXISTS moments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +97,7 @@ function createDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_comments_target_time ON comments (target_type, target_id, status, created_at ASC);
     CREATE INDEX IF NOT EXISTS idx_comments_ip_time ON comments (ip, created_at);
     CREATE INDEX IF NOT EXISTS idx_attachments_post ON attachments (post_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_article_references_post ON article_references (post_id, updated_at DESC);
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       created_at TEXT NOT NULL,
@@ -180,6 +200,23 @@ export interface Post {
   created_at: string;
   updated_at: string;
   status: "draft" | "published";
+}
+
+export interface ArticleReference {
+  id: number;
+  post_id: number;
+  url: string;
+  canonical_url: string;
+  title: string;
+  source_name: string;
+  author: string;
+  published_at: string;
+  cover: string;
+  description: string;
+  summary: string;
+  key_points: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Moment {
@@ -441,9 +478,68 @@ export function deletePost(id: number): void {
     db.prepare("DELETE FROM comments WHERE target_type = 'post' AND target_id = ?").run(id);
     db.prepare("DELETE FROM content_interactions WHERE target_type = 'post' AND target_id = ?").run(id);
     db.prepare("DELETE FROM content_metrics WHERE target_type = 'post' AND target_id = ?").run(id);
+    db.prepare("DELETE FROM article_references WHERE post_id = ?").run(id);
     db.prepare("DELETE FROM posts WHERE id = ?").run(id);
   });
   transaction();
+}
+
+/** 将正文里的引用快照同步为本地缓存，文章访问时不再请求第三方网页。 */
+export function syncArticleReferences(postId: number, snapshots: ArticleReferenceSnapshot[]): void {
+  const unique = new Map<string, ArticleReferenceSnapshot>();
+  for (const snapshot of snapshots) {
+    const key = snapshot.canonicalUrl || snapshot.url;
+    if (key) unique.set(key, snapshot);
+  }
+  const transaction = db.transaction(() => {
+    const upsert = db.prepare(`
+      INSERT INTO article_references
+        (post_id, url, canonical_url, title, source_name, author, published_at, cover, description, summary, key_points, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(post_id, canonical_url) DO UPDATE SET
+        url = excluded.url,
+        title = excluded.title,
+        source_name = excluded.source_name,
+        author = excluded.author,
+        published_at = excluded.published_at,
+        cover = excluded.cover,
+        description = excluded.description,
+        summary = excluded.summary,
+        key_points = excluded.key_points,
+        updated_at = excluded.updated_at
+    `);
+    const timestamp = now();
+    for (const snapshot of unique.values()) {
+      upsert.run(
+        postId,
+        snapshot.url,
+        snapshot.canonicalUrl || snapshot.url,
+        snapshot.title,
+        snapshot.source,
+        snapshot.author,
+        snapshot.publishedAt,
+        snapshot.cover,
+        snapshot.description,
+        snapshot.summary,
+        JSON.stringify(snapshot.keyPoints),
+        timestamp,
+        timestamp,
+      );
+    }
+    if (unique.size === 0) {
+      db.prepare("DELETE FROM article_references WHERE post_id = ?").run(postId);
+      return;
+    }
+    const placeholders = [...unique.keys()].map(() => "?").join(",");
+    db.prepare(`DELETE FROM article_references WHERE post_id = ? AND canonical_url NOT IN (${placeholders})`).run(postId, ...unique.keys());
+  });
+  transaction();
+}
+
+export function listArticleReferencesForPost(postId: number): ArticleReference[] {
+  return db
+    .prepare("SELECT * FROM article_references WHERE post_id = ? ORDER BY id ASC")
+    .all(postId) as ArticleReference[];
 }
 
 // ---------- attachments ----------

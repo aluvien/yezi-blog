@@ -3,7 +3,7 @@
 个人博客：文章、想法（类朋友圈短内容）、作品集与评论。前后台一体，数据存放在本地 SQLite（`better-sqlite3`），无外部服务依赖。
 
 - 前台：首页内容流、文章详情（Markdown 排版）、想法、作品、关于、评论（无感防垃圾、审核后展示、作者回复）、全站音乐播放器
-- 后台：`/admin` 管理文章草稿与发布、分类、附件、想法、作品，以及评论审核、撤回和作者回复；站点设置可修改页头、页脚、Logo 与音乐播放器；可接入自建 QQ Music API 扫码登录并搜索选歌
+- 后台：`/admin` 管理文章草稿与发布、分类、附件、想法、作品，以及评论审核、撤回和作者回复；站点设置可修改页头、页脚、Logo 与音乐播放器；可接入自建 QQ Music API 扫码登录并搜索选歌；文章编辑器支持引用公众号/网页文章
 - SEO：全站 metadata、Open Graph、`sitemap.xml`、`robots.txt`、`rss.xml`
 
 ## 界面截图
@@ -65,6 +65,9 @@ npm run dev                        # http://localhost:3030
 | `TRUST_PROXY` | 是否信任 Nginx/Cloudflare 覆盖后的 `X-Real-IP`、`X-Forwarded-For`；直连 Node 端口保持关闭 | `false` |
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 | `QQ_MUSIC_SESSION_PATH` | QQ 扫码会话文件路径；留空时放在数据库同目录，必须持久化且不可公开访问 | `data/qq-music-session.json` |
+| `LLM_API_KEY` / `OPENAI_API_KEY` | 可选，文章引用 AI 摘要服务的密钥；兼容 OpenAI Chat Completions 格式 | 空（不生成摘要） |
+| `LLM_API_URL` | 可选，AI 摘要接口地址 | `https://api.openai.com/v1/chat/completions` |
+| `LLM_MODEL` | 可选，AI 摘要模型名 | `gpt-4o-mini` |
 
 ## 音乐功能
 
@@ -109,6 +112,14 @@ qqvip:歌曲MID:song
 4. 插入的格式为 `qqvip:歌曲MID:song` 或 `qqvip:歌单ID:playlist`。前台播放时由本站 `/api/music/qq` 服务端接口临时解析播放地址，并带有限频保护。
 
 当前音乐系统只使用 `qqvip`。请仅使用自己拥有合法播放权限的账号，并留意 QQ 音乐的服务规则；第三方接口或上游登录机制变化后，可能需要重新扫码登录。
+
+## 文章引用
+
+文章编辑器工具栏中的“文章引用”支持粘贴微信公众号或普通网页文章链接。后台服务端会读取网页公开的标题、来源、作者、日期、描述和封面，编辑器预览后将快照写入正文；前台渲染时只使用文章内的快照，不会让每位访客再次请求第三方网页，因此不会拖慢文章首屏。
+
+引用卡片会保留“阅读原文”链接；如果配置了 `LLM_API_KEY` 或 `OPENAI_API_KEY`，后台会在读取元信息后自动尝试生成中文摘要和要点，摘要默认折叠显示。没有配置密钥时仍可正常使用普通引用卡片。项目只缓存元信息与摘要，不复制第三方全文。
+
+引用快照保存在 SQLite 的 `article_references` 表中，删除正文中的引用并保存文章时会同步清理对应缓存；文章删除时也会清理关联记录。
 
 ## App API
 

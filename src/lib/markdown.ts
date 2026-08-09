@@ -1,5 +1,10 @@
 import { marked, type Renderer, type Tokens } from "marked";
 import sanitizeHtml from "sanitize-html";
+import {
+  articleReferenceCardHtml,
+  decodeArticleReferencePayload,
+  expandArticleReferenceMarkers,
+} from "@/lib/article-reference";
 import { musicContainerHtml, parseMusicBlock } from "@/lib/music";
 import { parseVideoBlock, videoContainerHtml } from "@/lib/video";
 
@@ -8,15 +13,23 @@ import { parseVideoBlock, videoContainerHtml } from "@/lib/video";
 const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "h2", "h3", "h4", "p", "br", "strong", "em", "del", "blockquote", "code", "pre",
-    "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "iframe",
+    "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "aside", "details", "summary", "time", "iframe",
   ],
   allowedAttributes: {
-    a: ["href", "title", "target", "rel"],
+    a: ["href", "title", "target", "rel", "class"],
     img: ["src", "srcset", "sizes", "alt", "title", "loading", "decoding", "class", "data-original-src"],
     code: ["class"],
     div: ["class", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover"],
+    h3: ["class"],
+    p: ["class"],
+    ul: ["class"],
+    li: ["class"],
+    aside: ["class", "aria-label"],
+    details: ["class", "open"],
+    summary: ["class"],
+    time: ["class", "datetime"],
     iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
-    span: ["class"],
+    span: ["class", "aria-hidden"],
     th: ["align"],
     td: ["align"],
     "*": ["id"],
@@ -117,6 +130,7 @@ export function renderMarkdown(content: string): string {
 
   // ```music 代码块：渲染为 QQ VIP 播放器容器，交由前端 MusicInitializer 初始化。
   // ```video 代码块：只渲染由 parseVideoBlock 校验过的 Bilibili/YouTube iframe。
+  // !reference:... 会先展开成 reference 代码块，使用正文内置的元数据卡片；不会在前台请求第三方网页。
   // 非 music/video 语言走 marked 默认渲染，保持原有代码块样式不变。
   const defaultCode = renderer.code.bind(renderer);
   renderer.code = function (token: Tokens.Code) {
@@ -131,10 +145,15 @@ export function renderMarkdown(content: string): string {
         .map((spec) => videoContainerHtml(spec))
         .join("\n");
     }
+    if (language === "reference") {
+      const snapshot = decodeArticleReferencePayload(token.text.trim());
+      return snapshot ? articleReferenceCardHtml(snapshot) : defaultCode(token);
+    }
     return defaultCode(token);
   };
 
-  return sanitizeHtml(marked.parse(content, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
+  const expandedContent = expandArticleReferenceMarkers(content);
+  return sanitizeHtml(marked.parse(expandedContent, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
 }
 
 /** 从 markdown 提取 h2/h3 标题列表，用于生成目录 */
@@ -156,6 +175,7 @@ export function extractHeadings(content: string): TocHeading[] {
 /** 去掉 markdown 语法，生成纯文本摘要 */
 export function stripMarkdown(content: string, maxLength = 100): string {
   let text = content
+    .replace(/^\s*!reference(?::|\s+)\S+\s*$/gm, " ")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")

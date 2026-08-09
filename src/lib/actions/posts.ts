@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { attachAttachmentsToPost, createPost, deletePost, getPost, normalizePostTags, updatePost } from "@/lib/db";
+import { attachAttachmentsToPost, createPost, deletePost, getPost, normalizePostTags, syncArticleReferences, updatePost } from "@/lib/db";
+import { parseArticleReferenceMarkers } from "@/lib/article-reference";
 
 export interface PostInput {
   title: string;
@@ -31,6 +32,7 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
     status: data.status,
   });
   attachAttachmentsToPost(data.attachmentIds, created.id);
+  syncArticleReferences(created.id, parseArticleReferenceMarkers(data.content));
   revalidatePath("/admin/posts");
   revalidatePath("/admin/attachments");
   revalidatePath("/");
@@ -57,6 +59,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
     status: data.status,
   });
   attachAttachmentsToPost(data.attachmentIds, id);
+  syncArticleReferences(id, parseArticleReferenceMarkers(data.content));
   revalidatePath("/admin/posts");
   revalidatePath("/admin/attachments");
   revalidatePath("/");
