@@ -66,7 +66,7 @@ npm run dev                        # http://localhost:3030
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 | `QQ_MUSIC_SESSION_PATH` | QQ 扫码会话文件路径；留空时放在数据库同目录，必须持久化且不可公开访问 | `data/qq-music-session.json` |
 | `LLM_API_KEY` / `OPENAI_API_KEY` | 可选，文章引用 AI 摘要服务的密钥；兼容 OpenAI Chat Completions 格式 | 空（不生成摘要） |
-| `LLM_API_URL` | 可选，AI 摘要接口地址 | `https://api.openai.com/v1/chat/completions` |
+| `LLM_API_URL` | 可选，AI 摘要接口地址，可填服务商根地址、`/v1` 或完整的 Chat Completions 地址 | `https://api.openai.com/v1/chat/completions` |
 | `LLM_MODEL` | 可选，AI 摘要模型名 | `gpt-4o-mini` |
 
 ## 音乐功能

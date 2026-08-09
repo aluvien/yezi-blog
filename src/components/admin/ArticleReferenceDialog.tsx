@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  articleReferenceCoverSrc,
   encodeArticleReferenceMarker,
   normalizeArticleReferenceSnapshot,
   type ArticleReferenceSnapshot,
@@ -131,9 +132,9 @@ export function ArticleReferenceDialog({ onClose }: Props) {
           <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
             <div className="flex gap-3">
               {snapshot.cover ? (
-                // 外部封面只在管理员预览中显示，不交给 next/image 远程代理。
+                // 外部封面统一走本站代理，避免公众号图片的防盗链和混合内容问题。
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={snapshot.cover} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" />
+                <img src={articleReferenceCoverSrc(snapshot.cover, snapshot.url)} alt="" referrerPolicy="no-referrer" className="h-20 w-20 shrink-0 rounded-lg object-cover" />
               ) : (
                 <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-2xl font-semibold text-accent">引</div>
               )}

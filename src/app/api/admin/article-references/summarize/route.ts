@@ -36,6 +36,26 @@ function parseSummary(value: string): { summary: string; keyPoints: string[] } {
   };
 }
 
+const DEFAULT_LLM_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+
+/** 兼容填写服务商根地址、/v1 地址和完整 Chat Completions 地址。 */
+function resolveLlmEndpoint(input: string): string {
+  const raw = input.trim() || DEFAULT_LLM_ENDPOINT;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("LLM_API_URL 配置格式错误");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("LLM_API_URL 只支持 http 或 https");
+
+  const pathname = url.pathname.replace(/\/+$/, "");
+  if (!pathname || pathname === "/") url.pathname = "/v1/chat/completions";
+  else if (pathname.endsWith("/v1")) url.pathname = `${pathname}/chat/completions`;
+  else url.pathname = pathname;
+  return url.toString();
+}
+
 export async function POST(request: Request) {
   if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
   let body: { url?: unknown };
@@ -51,7 +71,7 @@ export async function POST(request: Request) {
 
   try {
     const document = await fetchReferenceDocument(String(body.url ?? ""));
-    const endpoint = process.env.LLM_API_URL?.trim() || "https://api.openai.com/v1/chat/completions";
+    const endpoint = resolveLlmEndpoint(process.env.LLM_API_URL || "");
     const model = process.env.LLM_MODEL?.trim() || "gpt-4o-mini";
     const sourceText = (document.text || document.snapshot.description || document.snapshot.title).slice(0, 14_000);
     const controller = new AbortController();
@@ -84,7 +104,11 @@ export async function POST(request: Request) {
     } finally {
       clearTimeout(timer);
     }
-    if (!response.ok) throw new Error(`AI 摘要服务返回 ${response.status}`);
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) throw new Error("AI 摘要服务鉴权失败，请检查 LLM_API_KEY");
+      if (response.status === 404) throw new Error("AI 摘要服务返回 404，请检查 LLM_API_URL 和 LLM_MODEL");
+      throw new Error(`AI 摘要服务返回 ${response.status}`);
+    }
     const payload = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
     const raw = extractModelText(payload.choices?.[0]?.message?.content);
     if (!raw) throw new Error("AI 摘要没有返回内容");

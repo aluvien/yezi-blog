@@ -132,6 +132,12 @@ function safeReferenceAssetUrl(value: string): string | null {
   return safeReferenceUrl(value);
 }
 
+export function articleReferenceCoverSrc(coverUrl: string, sourceUrl: string): string {
+  if (coverUrl.startsWith("/uploads/")) return coverUrl;
+  const params = new URLSearchParams({ url: coverUrl, referer: sourceUrl });
+  return `/api/article-references/image?${params.toString()}`;
+}
+
 /** 生成前台和后台预览共用的引用卡片 HTML。 */
 export function articleReferenceCardHtml(input: Partial<ArticleReferenceSnapshot>): string {
   const snapshot = normalizeArticleReferenceSnapshot(input);
@@ -143,7 +149,7 @@ export function articleReferenceCardHtml(input: Partial<ArticleReferenceSnapshot
   })();
   const sourceLine = snapshot.author ? `${source} · ${snapshot.author}` : source;
   const cover = coverUrl
-    ? `<img class="article-reference-cover" src="${escapeHtml(coverUrl)}" alt="" loading="lazy" decoding="async">`
+    ? `<img class="article-reference-cover" src="${escapeHtml(articleReferenceCoverSrc(coverUrl, sourceUrl))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`
     : `<span class="article-reference-cover article-reference-cover-fallback" aria-hidden="true">引</span>`;
   const description = snapshot.description
     ? `<p class="article-reference-description">${escapeHtml(snapshot.description)}</p>`
