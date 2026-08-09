@@ -18,7 +18,7 @@ export default function LogoutButton() {
           router.refresh();
         })
       }
-      className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm text-neutral-600 active:bg-neutral-100"
+      className="inline-flex h-10 min-w-[5rem] shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-neutral-300 px-3 text-sm text-neutral-600 active:bg-neutral-100"
     >
       {pending ? "退出中…" : "退出"}
     </button>
