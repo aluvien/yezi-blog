@@ -1,8 +1,7 @@
 import fs from "node:fs";
-import path from "node:path";
 import sharp from "sharp";
 import { getSiteSettings } from "@/lib/db";
-import { getUploadDir } from "@/lib/uploads";
+import { uploadAbsolutePath } from "@/lib/uploads";
 import { getSiteAuthor } from "@/lib/site";
 
 function fallbackIcon(): Buffer {
@@ -26,9 +25,8 @@ function configuredLogo(): Buffer | string {
     return fallbackIcon();
   }
   if (!relative || relative.includes("..")) return fallbackIcon();
-  const root = getUploadDir();
-  const absolute = path.resolve(root, relative);
-  if (!absolute.startsWith(`${root}${path.sep}`) || !fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return fallbackIcon();
+  const absolute = uploadAbsolutePath(`/uploads/${relative}`);
+  if (!absolute || !fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return fallbackIcon();
   return fs.readFileSync(absolute);
 }
 

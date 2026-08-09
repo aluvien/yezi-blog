@@ -4,7 +4,7 @@ import fs from "fs";
 import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 import { hashIp } from "@/lib/request";
-import { getUploadDir } from "@/lib/uploads";
+import { getUploadRoots } from "@/lib/uploads";
 
 export { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 export { parseMomentImages } from "@/lib/moments";
@@ -708,10 +708,7 @@ function findAttachmentReferences(
 }
 
 function scanUploadDirectory(): DiskAttachment[] {
-  const roots = [...new Set([
-    getUploadDir(),
-    path.join(process.cwd(), "public", "uploads"),
-  ].map((root) => path.resolve(root)))];
+  const roots = getUploadRoots();
   const files: DiskAttachment[] = [];
   const seen = new Set<string>();
 

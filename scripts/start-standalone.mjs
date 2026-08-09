@@ -24,6 +24,7 @@ function loadEnvFile(filePath) {
 // 这样会让相对数据库、上传目录和环境文件指向错误位置。
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
+if (!process.env.BLOG_ROOT) process.env.BLOG_ROOT = root;
 loadEnvFile(path.join(root, ".env.local"));
 loadEnvFile(path.join(root, ".env"));
 
