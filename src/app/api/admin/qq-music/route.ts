@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
 import {
-  findArray,
   findString,
-  getRecordString,
+  normalizeQQPlaylists,
   normalizeQQSearchTracks,
-  normalizeQQCover,
   qqMusicRequest,
   readUin,
-  type JsonRecord,
-  unwrapData,
+  searchQQPlaylists,
+  type QQPlaylistSummary,
 } from "@/lib/qq-music-api";
 import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
 
@@ -24,10 +22,6 @@ function noCache(data: unknown, status = 200): NextResponse {
   return NextResponse.json(data, { status, headers: { "cache-control": "no-store" } });
 }
 
-function asRecord(value: unknown): JsonRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
-}
-
 function qrImage(value: unknown): string {
   // qq-music-api v2.4 returns `img`; older releases used qrCode/qrcode.
   const raw = findString(value, ["img", "image", "qrCode", "qrcode", "qr", "base64", "dataUrl"]);
@@ -37,29 +31,13 @@ function qrImage(value: unknown): string {
   return /^[a-zA-Z0-9+/=\s]+$/.test(raw) ? `data:image/png;base64,${raw.replace(/\s/g, "")}` : "";
 }
 
-function normalizePlaylists(raw: unknown) {
-  const data = unwrapData(raw);
-  const list = findArray(data, ["playlists", "playlist", "songLists", "songlists", "list"]);
+function mergePlaylists(...groups: QQPlaylistSummary[][]): QQPlaylistSummary[] {
   const seen = new Set<string>();
-  return list.flatMap((item) => {
-    const playlist = asRecord(item);
-    if (!playlist) return [];
-    const id = getRecordString(playlist, ["disstid", "dissid", "playlistId", "playlist_id", "id"]);
-    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id) || seen.has(id)) return [];
-    seen.add(id);
-    const rawCount = playlist.songcount ?? playlist.songCount ?? playlist.count ?? playlist.total;
-    const count = typeof rawCount === "number" && Number.isFinite(rawCount)
-      ? Math.max(0, Math.floor(rawCount))
-      : typeof rawCount === "string" && /^\d+$/.test(rawCount)
-        ? Number(rawCount)
-        : null;
-    return [{
-      id,
-      name: getRecordString(playlist, ["dissname", "name", "title", "playlistName"]) || "未命名歌单",
-      count,
-      cover: normalizeQQCover(getRecordString(playlist, ["logo", "cover", "pic", "picurl", "picUrl"])),
-    }];
-  }).slice(0, 100);
+  return groups.flat().filter((playlist) => {
+    if (seen.has(playlist.id)) return false;
+    seen.add(playlist.id);
+    return true;
+  }).slice(0, 200);
 }
 
 async function status() {
@@ -92,17 +70,43 @@ export async function GET(request: Request) {
     }
     if (op === "search") {
       const key = (url.searchParams.get("q") ?? "").trim().slice(0, 80);
-      if (!key) return noCache({ error: "请输入歌曲或歌手" }, 400);
+      const type = url.searchParams.get("type") === "playlist" ? "playlist" : "song";
+      if (!key) return noCache({ error: type === "playlist" ? "请输入歌单名称" : "请输入歌曲或歌手" }, 400);
+      if (type === "playlist") {
+        return noCache({ playlists: await searchQQPlaylists(key, 30) });
+      }
       const raw = await qqMusicRequest("/getSearchByKey", { query: { key, limit: "30" } });
       return noCache({ tracks: normalizeQQSearchTracks(raw) });
     }
     if (op === "playlists") {
       const session = getQQMusicSession();
       if (!session) return noCache({ error: "请先扫码登录 QQ 音乐" }, 409);
-      const raw = await qqMusicRequest("/user/getUserPlaylists", {
-        query: { uin: session.uin, offset: "0", limit: "100" },
+      const [createdResult, collectedResult] = await Promise.allSettled([
+        qqMusicRequest("/user/getUserPlaylists", {
+          query: { uin: session.uin, offset: "0", limit: "100" },
+        }),
+        qqMusicRequest("/user/getUserCollectedSongLists", {
+          query: { uin: session.uin, page: "1", limit: "100" },
+        }),
+      ]);
+      if (createdResult.status === "rejected" && collectedResult.status === "rejected") {
+        throw createdResult.reason;
+      }
+      const created = createdResult.status === "fulfilled"
+        ? normalizeQQPlaylists(createdResult.value, "created", 100)
+        : [];
+      const collected = collectedResult.status === "fulfilled"
+        ? normalizeQQPlaylists(collectedResult.value, "collected", 100)
+        : [];
+      const warnings = [
+        ...(createdResult.status === "rejected" ? [`自建歌单读取失败：${errorMessage(createdResult.reason)}`] : []),
+        ...(collectedResult.status === "rejected" ? [`收藏歌单读取失败：${errorMessage(collectedResult.reason)}`] : []),
+      ];
+      return noCache({
+        playlists: mergePlaylists(created, collected),
+        counts: { created: created.length, collected: collected.length },
+        ...(warnings.length > 0 ? { warning: warnings.join("；") } : {}),
       });
-      return noCache({ playlists: normalizePlaylists(raw) });
     }
     return noCache({ error: "不支持的操作" }, 400);
   } catch (error) {

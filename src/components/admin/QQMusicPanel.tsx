@@ -4,7 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Status = { available: boolean; loggedIn: boolean; uin: string | null };
 type Qr = { image: string; qrsig: string; ptqrtoken: string };
-type Playlist = { id: string; name: string; count: number | null; cover: string };
+type Playlist = {
+  id: string;
+  name: string;
+  creator: string;
+  count: number | null;
+  cover: string;
+  kind: "created" | "collected" | "search";
+};
 
 type Props = {
   defaultMusic: string;
@@ -42,10 +49,19 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
     setPlaylistBusy(true);
     setPlaylistMessage("");
     try {
-      const result = await api<{ playlists?: Playlist[] }>("/api/admin/qq-music?op=playlists");
+      const result = await api<{
+        playlists?: Playlist[];
+        counts?: { created?: number; collected?: number };
+        warning?: string;
+      }>("/api/admin/qq-music?op=playlists");
       const next = Array.isArray(result.playlists) ? result.playlists : [];
       setPlaylists(next);
-      setPlaylistMessage(next.length ? `已读取 ${next.length} 个歌单` : "没有读取到可用歌单");
+      const created = result.counts?.created ?? next.filter((playlist) => playlist.kind === "created").length;
+      const collected = result.counts?.collected ?? next.filter((playlist) => playlist.kind === "collected").length;
+      const summary = next.length
+        ? `已读取 ${next.length} 个歌单（自建 ${created} · 收藏 ${collected}）`
+        : "没有读取到可用歌单";
+      setPlaylistMessage(result.warning ? `${summary}；${result.warning}` : summary);
     } catch (error) {
       setPlaylists([]);
       setPlaylistMessage(error instanceof Error ? error.message : "读取歌单失败");
@@ -159,7 +175,7 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-neutral-800">我的 QQ 歌单</p>
-            <p className="mt-1 text-xs leading-5 text-neutral-500">读取已登录账号的歌单，选择后作为全站播放器的默认歌单。</p>
+            <p className="mt-1 text-xs leading-5 text-neutral-500">同时读取账号自建和收藏的歌单，选择后作为全站播放器的默认歌单。</p>
           </div>
           <button
             type="button"
@@ -177,11 +193,19 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
           className="mt-3 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-100"
         >
           <option value="">不使用 QQ 默认歌单</option>
-          {playlists.map((playlist) => (
-            <option key={playlist.id} value={playlist.id}>
-              {playlist.name}{playlist.count === null ? "" : `（${playlist.count} 首）`}
-            </option>
-          ))}
+          {(["created", "collected"] as const).map((kind) => {
+            const group = playlists.filter((playlist) => playlist.kind === kind);
+            if (group.length === 0) return null;
+            return (
+              <optgroup key={kind} label={kind === "created" ? "自建歌单" : "收藏歌单"}>
+                {group.map((playlist) => (
+                  <option key={playlist.id} value={playlist.id}>
+                    {playlist.name}{playlist.count === null ? "" : `（${playlist.count} 首）`}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
         </select>
         <p className="mt-1.5 text-xs text-neutral-400">
           {!status?.loggedIn ? "请先扫码登录 QQ 音乐。" : playlistMessage || "选择歌单后，点击页面底部“保存设置”生效。"}

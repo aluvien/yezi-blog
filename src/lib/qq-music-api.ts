@@ -175,6 +175,169 @@ export type QQSearchTrack = {
   cover: string;
 };
 
+export type QQPlaylistKind = "created" | "collected" | "search";
+
+export type QQPlaylistSummary = {
+  id: string;
+  name: string;
+  creator: string;
+  count: number | null;
+  cover: string;
+  kind: QQPlaylistKind;
+};
+
+const PLAYLIST_CONTAINER_KEYS = [
+  "playlists", "playlist", "songLists", "songlists", "songList", "songlist",
+  "list", "cdlist", "cdList", "v_playlist", "vPlaylist", "disslist", "dissList",
+  "mydiss", "mymusic", "body", "response", "data",
+];
+
+function playlistIdentifier(record: JsonRecord): string {
+  const specific = getRecordString(record, [
+    "disstid", "dissid", "dissId", "playlistId", "playlist_id", "tid", "dirid", "dirId",
+  ]);
+  if (specific) return specific;
+  const generic = getRecordString(record, ["id"]);
+  const hasPlaylistShape = [
+    "dissname", "dissName", "playlistName", "songcount", "songCount", "song_count",
+    "songnum", "songNum", "song_cnt", "cover_url_big", "coverurl",
+  ].some((key) => record[key] !== undefined);
+  return hasPlaylistShape ? generic : "";
+}
+
+function findPlaylistRecords(value: unknown, depth = 0): JsonRecord[] {
+  if (depth > 9 || !value) return [];
+  if (Array.isArray(value)) {
+    const direct = value.flatMap((item) => isRecord(item) && playlistIdentifier(item) ? [item] : []);
+    if (direct.length > 0) return direct;
+    for (const item of value) {
+      const nested = findPlaylistRecords(item, depth + 1);
+      if (nested.length > 0) return nested;
+    }
+    return [];
+  }
+  if (!isRecord(value)) return [];
+  for (const key of PLAYLIST_CONTAINER_KEYS) {
+    const nested = findPlaylistRecords(value[key], depth + 1);
+    if (nested.length > 0) return nested;
+  }
+  for (const child of Object.values(value)) {
+    const nested = findPlaylistRecords(child, depth + 1);
+    if (nested.length > 0) return nested;
+  }
+  return [];
+}
+
+function playlistCount(record: JsonRecord): number | null {
+  for (const key of ["songcount", "songCount", "song_count", "songnum", "songNum", "song_cnt", "count", "total"]) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+    if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number(value.trim());
+  }
+  return null;
+}
+
+function playlistCreator(record: JsonRecord): string {
+  const direct = getRecordString(record, ["creatorName", "creator_name", "nickname", "nick", "author"]);
+  if (direct) return direct;
+  const creator = isRecord(record.creator) ? record.creator : isRecord(record.user) ? record.user : null;
+  return creator ? getRecordString(creator, ["name", "nickname", "nick", "title", "uin"]) : "";
+}
+
+/** Normalize created, collected and searched playlist envelopes used by QQ's old and new APIs. */
+export function normalizeQQPlaylists(raw: unknown, kind: QQPlaylistKind, limit = 100): QQPlaylistSummary[] {
+  const seen = new Set<string>();
+  return findPlaylistRecords(raw).flatMap((playlist) => {
+    const id = playlistIdentifier(playlist);
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id) || seen.has(id)) return [];
+    seen.add(id);
+    return [{
+      id,
+      name: getRecordString(playlist, ["dissname", "dissName", "name", "title", "playlistName", "dirName"]) || "未命名歌单",
+      creator: playlistCreator(playlist),
+      count: playlistCount(playlist),
+      cover: normalizeQQCover(getRecordString(playlist, [
+        "logo", "cover", "pic", "image", "picurl", "picUrl", "coverurl", "coverUrl",
+        "cover_url", "cover_url_big", "pic_url",
+      ])),
+      kind,
+    }];
+  }).slice(0, Math.max(1, Math.min(limit, 100)));
+}
+
+/**
+ * The sidecar's getSearchByKey controller intentionally fixes `t=0` (songs).
+ * Playlist search therefore uses QQ's SearchCgiService directly on the server;
+ * the owner's cookie is forwarded only upstream and never reaches the browser.
+ */
+export async function searchQQPlaylists(keyword: string, limit = 30): Promise<QQPlaylistSummary[]> {
+  const query = keyword.trim().slice(0, 80);
+  if (!query) return [];
+  const size = Math.max(1, Math.min(limit, 30));
+  const session = getQQMusicSession();
+  const headers = {
+    "content-type": "application/json",
+    referer: "https://y.qq.com/",
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126 Safari/537.36",
+    ...(session ? { cookie: session.cookie } : {}),
+  };
+
+  try {
+    const response = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        comm: { ct: 24, cv: 0, format: "json", platform: "yqq.json", uin: session?.uin || "0" },
+        playlistSearch: {
+          method: "DoSearchForQQMusicDesktop",
+          module: "music.search.SearchCgiService",
+          param: {
+            query,
+            num_per_page: size,
+            page_num: 1,
+            search_type: 3,
+            remoteplace: "txt.yqq.center",
+            grp: 1,
+          },
+        },
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (response.ok) {
+      const playlists = normalizeQQPlaylists(await response.json() as unknown, "search", size);
+      if (playlists.length > 0) return playlists;
+    }
+  } catch {
+    // Continue with the legacy public search endpoint below.
+  }
+
+  try {
+    const endpoint = new URL("https://c.y.qq.com/soso/fcgi-bin/client_search_cp");
+    Object.entries({
+      format: "json",
+      outCharset: "utf-8",
+      ct: "24",
+      qqmusic_ver: "1298",
+      remoteplace: "txt.yqq.playlist",
+      t: "3",
+      aggr: "1",
+      cr: "1",
+      p: "1",
+      n: String(size),
+      w: query,
+    }).forEach(([key, value]) => endpoint.searchParams.set(key, value));
+    const response = await fetch(endpoint, {
+      headers: { referer: headers.referer, "user-agent": headers["user-agent"], ...(session ? { cookie: session.cookie } : {}) },
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    return response.ok ? normalizeQQPlaylists(await response.json() as unknown, "search", size) : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Normalize the search response shared by the admin picker and public QQ
  * fallback route. The sidecar has used both `data.song.list` and a flatter

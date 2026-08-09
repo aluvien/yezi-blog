@@ -31,6 +31,16 @@ declare module "aplayer" {
   export interface APlayerEventPayload {
     index?: number;
   }
+  export type APlayerLrcLine = [number, string];
+  export interface APlayerLrc {
+    container: HTMLElement;
+    parsed: Array<APlayerLrcLine[] | undefined>;
+    current: APlayerLrcLine[];
+    index: number;
+    parse(value: string): APlayerLrcLine[];
+    switch(index: number): void;
+    update(currentTime?: number): void;
+  }
   export default class APlayer {
     constructor(options: APlayerOptions);
     destroy(): void;
@@ -41,6 +51,7 @@ declare module "aplayer" {
     audio: HTMLAudioElement;
     options: APlayerOptions;
     list: APlayerList;
+    lrc?: APlayerLrc;
     on(event: string, handler: (arg?: APlayerEventPayload) => void): void;
   }
 }
