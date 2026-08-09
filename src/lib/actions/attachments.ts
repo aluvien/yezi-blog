@@ -1,11 +1,24 @@
 "use server";
 
+import crypto from "node:crypto";
 import fs from "fs";
+import { promises as fsPromises } from "node:fs";
+import path from "node:path";
 import { revalidatePath } from "next/cache";
+import sharp from "sharp";
 import { requireAdmin } from "@/lib/auth";
-import { deleteAttachment, listAttachments } from "@/lib/db";
+import { deleteAttachment, listAttachments, updateAttachmentSize } from "@/lib/db";
 import { uploadAbsolutePath } from "@/lib/uploads";
 import type { ActionResult } from "@/lib/actions/posts";
+
+export type CompressionProfile = "balanced" | "quality" | "small";
+
+const COMPRESSION_QUALITY: Record<CompressionProfile, number> = {
+  balanced: 80,
+  quality: 90,
+  small: 65,
+};
+const MAX_IMAGE_PIXELS = 60 * 1024 * 1024;
 
 function removeAttachmentFile(relativePath: string): void {
   const target = uploadAbsolutePath(relativePath);
@@ -53,4 +66,72 @@ export async function clearUnusedAttachmentsAction(): Promise<ActionResult> {
   }
   revalidateAttachmentPages();
   return { ok: true };
+}
+
+async function compressImageFile(relativePath: string, profile: CompressionProfile, attachmentId?: number): Promise<ActionResult> {
+  const absolutePath = uploadAbsolutePath(relativePath);
+  if (!absolutePath || !fs.existsSync(absolutePath)) return { ok: false, error: "图片文件不存在" };
+
+  let originalSize = 0;
+  let format: string | undefined;
+  let pages = 1;
+  try {
+    const stat = await fsPromises.stat(absolutePath);
+    if (!stat.isFile()) return { ok: false, error: "附件不是文件" };
+    originalSize = stat.size;
+    const metadata = await sharp(absolutePath, { limitInputPixels: MAX_IMAGE_PIXELS }).metadata();
+    format = metadata.format;
+    pages = metadata.pages ?? 1;
+  } catch {
+    return { ok: false, error: "图片无法读取，可能不是有效的图片文件" };
+  }
+
+  if (!format || !["jpeg", "png", "webp"].includes(format)) {
+    return { ok: false, error: "目前仅支持 JPG、PNG、WebP 图片压缩，GIF/动图暂不处理" };
+  }
+  if (pages > 1) return { ok: false, error: "检测到动图，为避免丢失动画暂不压缩" };
+
+  const quality = COMPRESSION_QUALITY[profile];
+  const temporaryPath = `${absolutePath}.compressing-${crypto.randomBytes(6).toString("hex")}${path.extname(absolutePath) || ".tmp"}`;
+  try {
+    let pipeline = sharp(absolutePath, { limitInputPixels: MAX_IMAGE_PIXELS }).rotate();
+    if (format === "jpeg") {
+      pipeline = pipeline.jpeg({ quality, mozjpeg: true, progressive: true });
+    } else if (format === "png") {
+      pipeline = pipeline.png({ compressionLevel: 9, adaptiveFiltering: true, palette: profile === "small" });
+    } else {
+      pipeline = pipeline.webp({ quality, effort: 6 });
+    }
+    await pipeline.toFile(temporaryPath);
+    const compressedSize = (await fsPromises.stat(temporaryPath)).size;
+    if (compressedSize >= originalSize) {
+      await fsPromises.unlink(temporaryPath).catch(() => undefined);
+      return { ok: true, message: "压缩后体积没有变小，已保留原图" };
+    }
+
+    await fsPromises.rename(temporaryPath, absolutePath);
+    if (attachmentId) updateAttachmentSize(attachmentId, compressedSize);
+    const savedPercent = Math.max(1, Math.round((1 - compressedSize / originalSize) * 100));
+    revalidateAttachmentPages();
+    return { ok: true, message: `压缩完成，体积减少约 ${savedPercent}%；原链接保持不变` };
+  } catch {
+    await fsPromises.unlink(temporaryPath).catch(() => undefined);
+    return { ok: false, error: "图片压缩失败，原图未被修改" };
+  }
+}
+
+export async function compressAttachmentAction(id: number, profile: CompressionProfile = "balanced"): Promise<ActionResult> {
+  await requireAdmin();
+  const attachment = listAttachments().find((item) => item.id === id && item.tracked);
+  if (!attachment) return { ok: false, error: "附件不存在" };
+  if (!Object.prototype.hasOwnProperty.call(COMPRESSION_QUALITY, profile)) return { ok: false, error: "压缩级别无效" };
+  return compressImageFile(attachment.path, profile, attachment.id);
+}
+
+export async function compressUntrackedAttachmentAction(relativePath: string, profile: CompressionProfile = "balanced"): Promise<ActionResult> {
+  await requireAdmin();
+  const attachment = listAttachments().find((item) => item.path === relativePath && !item.tracked);
+  if (!attachment) return { ok: false, error: "目录中的附件不存在" };
+  if (!Object.prototype.hasOwnProperty.call(COMPRESSION_QUALITY, profile)) return { ok: false, error: "压缩级别无效" };
+  return compressImageFile(attachment.path, profile);
 }

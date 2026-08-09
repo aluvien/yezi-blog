@@ -764,6 +764,10 @@ export function deleteAttachment(id: number): Attachment | undefined {
   return attachment;
 }
 
+export function updateAttachmentSize(id: number, size: number): void {
+  db.prepare("UPDATE attachments SET size = ? WHERE id = ?").run(size, id);
+}
+
 export function countPosts(): number {
   return (db.prepare("SELECT COUNT(*) AS c FROM posts").get() as { c: number }).c;
 }

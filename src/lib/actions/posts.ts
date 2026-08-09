@@ -16,7 +16,7 @@ export interface PostInput {
   status: "draft" | "published";
 }
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult = { ok: true; message?: string } | { ok: false; error: string };
 
 export async function createPostAction(data: PostInput): Promise<ActionResult> {
   await requireAdmin();

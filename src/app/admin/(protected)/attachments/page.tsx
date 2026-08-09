@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { listAttachments } from "@/lib/db";
-import { deleteAttachmentAction, deleteUntrackedAttachmentAction } from "@/lib/actions/attachments";
+import { compressAttachmentAction, compressUntrackedAttachmentAction, deleteAttachmentAction, deleteUntrackedAttachmentAction } from "@/lib/actions/attachments";
 import DeleteButton from "@/components/admin/DeleteButton";
 import ClearUnusedAttachmentsButton from "@/components/admin/ClearUnusedAttachmentsButton";
+import CompressAttachmentButton from "@/components/admin/CompressAttachmentButton";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +72,11 @@ export default function AdminAttachmentsPage() {
               <div className="col-start-2 flex shrink-0 items-center gap-3 sm:col-start-3 sm:row-start-1 sm:justify-self-end">
                 {attachment.tracked && <Link href={`/admin/attachments/${attachment.id}`} className="text-sm text-blue-700 no-underline">详情</Link>}
                 <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 no-underline">打开</a>
+                {["image/jpeg", "image/png", "image/webp"].includes(attachment.mime_type) && (
+                  <CompressAttachmentButton
+                    action={attachment.tracked ? compressAttachmentAction.bind(null, attachment.id) : compressUntrackedAttachmentAction.bind(null, attachment.path)}
+                  />
+                )}
                 {!attachment.referenced && (
                   <DeleteButton
                     action={attachment.tracked ? deleteAttachmentAction.bind(null, attachment.id) : deleteUntrackedAttachmentAction.bind(null, attachment.path)}
