@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listAttachments } from "@/lib/db";
-import { deleteAttachmentAction } from "@/lib/actions/attachments";
+import { deleteAttachmentAction, deleteUntrackedAttachmentAction } from "@/lib/actions/attachments";
 import DeleteButton from "@/components/admin/DeleteButton";
 import ClearUnusedAttachmentsButton from "@/components/admin/ClearUnusedAttachmentsButton";
 import { formatDate } from "@/lib/format";
@@ -22,7 +22,7 @@ export default function AdminAttachmentsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-bold">附件管理（{attachments.length}）</h1>
-          <p className="mt-1 text-sm text-neutral-500">查看文章附件的引用状态，未引用文件可以安全清理。</p>
+          <p className="mt-1 text-sm text-neutral-500">同时扫描上传目录；目录中未入库、未被使用的文件也可以安全清理。</p>
         </div>
         <ClearUnusedAttachmentsButton count={unusedCount} />
       </div>
@@ -33,7 +33,7 @@ export default function AdminAttachmentsPage() {
         <ul className="flex flex-col gap-3">
           {attachments.map((attachment) => (
             <li
-              key={attachment.id}
+              key={attachment.path}
               className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 gap-y-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:items-center sm:p-5"
             >
               {attachment.mime_type.startsWith("image/") ? (
@@ -53,7 +53,7 @@ export default function AdminAttachmentsPage() {
                 </p>
                 <div className="mt-2 flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-xs">
                   <span className={`shrink-0 rounded-full px-2 py-0.5 ${attachment.referenced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-800"}`}>
-                    {attachment.referenced ? "已引用" : "未引用"}
+                    {attachment.tracked ? (attachment.referenced ? "已引用" : "未引用") : "目录未入库"}
                   </span>
                   {attachment.references.map((ref, i) => (
                     <Link
@@ -69,9 +69,14 @@ export default function AdminAttachmentsPage() {
                 </div>
               </div>
               <div className="col-start-2 flex shrink-0 items-center gap-3 sm:col-start-3 sm:row-start-1 sm:justify-self-end">
-                <Link href={`/admin/attachments/${attachment.id}`} className="text-sm text-blue-700 no-underline">详情</Link>
+                {attachment.tracked && <Link href={`/admin/attachments/${attachment.id}`} className="text-sm text-blue-700 no-underline">详情</Link>}
                 <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 no-underline">打开</a>
-                {!attachment.referenced && <DeleteButton action={deleteAttachmentAction.bind(null, attachment.id)} confirmText="确定删除这个未引用附件？此操作不可恢复。" />}
+                {!attachment.referenced && (
+                  <DeleteButton
+                    action={attachment.tracked ? deleteAttachmentAction.bind(null, attachment.id) : deleteUntrackedAttachmentAction.bind(null, attachment.path)}
+                    confirmText={attachment.tracked ? "确定删除这个未引用附件？此操作不可恢复。" : "确定删除这个目录中未入库的附件？此操作不可恢复。"}
+                  />
+                )}
               </div>
             </li>
           ))}

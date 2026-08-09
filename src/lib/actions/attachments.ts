@@ -13,6 +13,7 @@ function removeAttachmentFile(relativePath: string): void {
 }
 
 function revalidateAttachmentPages() {
+  revalidatePath("/admin");
   revalidatePath("/admin/attachments");
   revalidatePath("/admin/posts");
 }
@@ -29,12 +30,26 @@ export async function deleteAttachmentAction(id: number): Promise<ActionResult> 
   return { ok: true };
 }
 
+export async function deleteUntrackedAttachmentAction(relativePath: string): Promise<ActionResult> {
+  await requireAdmin();
+  const usage = listAttachments().find((attachment) => attachment.path === relativePath);
+  if (!usage || usage.tracked) return { ok: false, error: "目录附件不存在" };
+  if (usage.referenced) return { ok: false, error: "附件正在网站中使用，请先移除引用" };
+  removeAttachmentFile(usage.path);
+  revalidateAttachmentPages();
+  return { ok: true };
+}
+
 export async function clearUnusedAttachmentsAction(): Promise<ActionResult> {
   await requireAdmin();
   const unused = listAttachments().filter((attachment) => !attachment.referenced);
   for (const attachment of unused) {
-    const deleted = deleteAttachment(attachment.id);
-    if (deleted) removeAttachmentFile(deleted.path);
+    if (attachment.tracked) {
+      const deleted = deleteAttachment(attachment.id);
+      if (deleted) removeAttachmentFile(deleted.path);
+    } else {
+      removeAttachmentFile(attachment.path);
+    }
   }
   revalidateAttachmentPages();
   return { ok: true };

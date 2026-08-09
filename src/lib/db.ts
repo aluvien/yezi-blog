@@ -4,6 +4,7 @@ import fs from "fs";
 import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 import { hashIp } from "@/lib/request";
+import { getUploadDir } from "@/lib/uploads";
 
 export { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 export { parseMomentImages } from "@/lib/moments";
@@ -288,6 +289,8 @@ export interface AttachmentWithUsage extends Attachment {
   /** 引用此附件的文章/想法列表（按正文、封面、想法图片匹配） */
   references: AttachmentReference[];
   referenced: boolean;
+  /** true 表示数据库有记录；false 表示仅在上传目录扫描到，尚未入库。 */
+  tracked: boolean;
 }
 
 export interface Session {
@@ -602,7 +605,7 @@ export function listAttachments(): AttachmentWithUsage[] {
     .prepare("SELECT id, content, images FROM moments")
     .all() as Array<{ id: number; content: string; images: string }>;
   const settings = getSiteSettings();
-  return rows.map((row) => {
+  const tracked = rows.map((row) => {
     const references: AttachmentReference[] = [];
     for (const post of posts) {
       const inContent = Boolean(post.content && post.content.includes(row.path));
@@ -630,7 +633,128 @@ export function listAttachments(): AttachmentWithUsage[] {
       references.push({ type: "setting", id: 0, label: "作者头像" });
     }
     return { ...row, references, referenced: references.length > 0 };
-  });
+  }).map((row) => ({ ...row, tracked: true }));
+
+  const trackedPaths = new Set(rows.map((row) => row.path));
+  const diskFiles = scanUploadDirectory();
+  const untracked = diskFiles
+    .filter((file) => !trackedPaths.has(file.path))
+    .map((file) => {
+      const references = findAttachmentReferences(file.path, posts, moments, settings);
+      return {
+        ...file,
+        id: 0,
+        post_id: null,
+        references,
+        referenced: references.length > 0,
+        tracked: false,
+      } satisfies AttachmentWithUsage;
+    });
+
+  return [...tracked, ...untracked].sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+const UPLOAD_MIME_BY_EXTENSION: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".pdf": "application/pdf",
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".zip": "application/zip",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
+
+interface DiskAttachment extends Omit<Attachment, "id" | "post_id"> {
+  post_id: null;
+}
+
+function findAttachmentReferences(
+  attachmentPath: string,
+  posts: Array<{ id: number; title: string; slug: string; content: string; cover: string | null }>,
+  moments: Array<{ id: number; content: string; images: string }>,
+  settings: Record<string, string>,
+): AttachmentReference[] {
+  const references: AttachmentReference[] = [];
+  for (const post of posts) {
+    const inContent = Boolean(post.content && post.content.includes(attachmentPath));
+    const isCover = Boolean(post.cover && post.cover === attachmentPath);
+    if (inContent || isCover) {
+      references.push({
+        type: "post",
+        id: post.id,
+        label: post.title,
+        slug: post.slug,
+        usage: inContent && isCover ? "content+cover" : isCover ? "cover" : "content",
+      });
+    }
+  }
+  for (const moment of moments) {
+    if (moment.images && moment.images.includes(attachmentPath)) {
+      const summary = moment.content.replace(/\s+/g, " ").trim().slice(0, 30);
+      references.push({ type: "moment", id: moment.id, label: summary || "想法" });
+    }
+  }
+  if (settings.site_logo && settings.site_logo === attachmentPath) {
+    references.push({ type: "setting", id: 0, label: "站点 Logo" });
+  }
+  if (settings.author_avatar && settings.author_avatar === attachmentPath) {
+    references.push({ type: "setting", id: 0, label: "作者头像" });
+  }
+  return references;
+}
+
+function scanUploadDirectory(): DiskAttachment[] {
+  const roots = [...new Set([
+    getUploadDir(),
+    path.join(process.cwd(), "public", "uploads"),
+  ].map((root) => path.resolve(root)))];
+  const files: DiskAttachment[] = [];
+  const seen = new Set<string>();
+
+  function walk(root: string, directory: string): void {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(root, absolute);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const relative = path.relative(root, absolute).split(path.sep).join("/");
+      if (!relative || relative.startsWith("..") || relative.includes("/../")) continue;
+      const webPath = `/uploads/${relative}`;
+      if (seen.has(webPath)) continue;
+      try {
+        const stat = fs.statSync(absolute);
+        seen.add(webPath);
+        files.push({
+          post_id: null,
+          path: webPath,
+          original_name: path.basename(relative),
+          mime_type: UPLOAD_MIME_BY_EXTENSION[path.extname(entry.name).toLowerCase()] || "application/octet-stream",
+          size: stat.size,
+          created_at: new Date(stat.birthtimeMs > 0 ? stat.birthtimeMs : stat.mtimeMs).toISOString(),
+        });
+      } catch {
+        // 文件可能在扫描过程中被清理，忽略本次扫描中的瞬时错误。
+      }
+    }
+  }
+
+  for (const root of roots) {
+    if (fs.existsSync(root)) walk(root, root);
+  }
+  return files;
 }
 
 export function deleteAttachment(id: number): Attachment | undefined {
@@ -960,7 +1084,7 @@ export function countWorks(): number {
 }
 
 export function countAttachments(): number {
-  return (db.prepare("SELECT COUNT(*) AS c FROM attachments").get() as { c: number }).c;
+  return listAttachments().length;
 }
 
 /** 聚合所有文章已用标签及计数（后台 PostForm 建议/展示用）。 */
