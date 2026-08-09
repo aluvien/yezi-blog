@@ -72,6 +72,22 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist}`;
     }
 
+    function comparableTrackText(value: string): string {
+      return value.toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+    }
+
+    function trackMatchesState(track: MusicTrack, state: ReturnType<typeof getGlobalPlaybackState>): boolean {
+      if (state.trackKey && trackKey(track) === state.trackKey) return true;
+      const stateName = comparableTrackText(state.trackName || "");
+      const trackName = comparableTrackText(track.name);
+      if (!stateName || !trackName || stateName !== trackName) return false;
+      const stateArtist = comparableTrackText(state.trackArtist || "");
+      const trackArtist = comparableTrackText(track.artist || "");
+      return !stateArtist || !trackArtist || stateArtist === trackArtist
+        || stateArtist.includes(trackArtist)
+        || trackArtist.includes(stateArtist);
+    }
+
     function preloadTrackCover(track: MusicTrack | undefined): void {
       if (!track?.cover) return;
       const image = new Image();
@@ -180,24 +196,28 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       const data = cardMusicState.get(card);
       if (!lyricEl || !data) return;
       const isCurrentCard = Boolean(card.dataset.cardId) && state.cardId === card.dataset.cardId;
-      const matchesCurrentTrack = Boolean(state.trackKey && hasTrackKey(state.trackKey, data.tracks));
+      const matchesCurrentTrack = data.tracks.some((item) => trackMatchesState(item, state));
       // `cardId` only identifies which card owns the play/pause animation.
       // A song selected from the expanded global list can have no card owner
       // (for example, a default playlist item), but the inline card should
       // still show lyrics whenever its track key matches the current song.
       const isPlaying = state.playing && (isCurrentCard || matchesCurrentTrack);
-      const track = hasTrackKey(state.trackKey, data.tracks)
-        ? data.tracks.find((item) => trackKey(item) === state.trackKey)
+      const track = matchesCurrentTrack
+        ? data.tracks.find((item) => trackMatchesState(item, state))
         : data.tracks[data.activeIndex] ?? data.tracks[0];
       card.classList.toggle("has-lyric", isPlaying && Boolean(track));
       if (!isPlaying || !track) {
         setLyricText(lyricEl, "", false);
         return;
       }
-      const isCurrentTrack = Boolean(state.trackKey && trackKey(track) === state.trackKey);
+      const isCurrentTrack = trackMatchesState(track, state);
       // The global player may have replaced a short/failed NetEase source with
       // QQ while the article card still owns the original track object. Use
       // the player's actual lyric URL so both views show the same lyric.
+      if (isCurrentTrack && state.lyricText) {
+        setLyricText(lyricEl, state.lyricText, true);
+        return;
+      }
       const source = isCurrentTrack && state.lrc ? state.lrc : track.lrc;
       const key = lyricCacheKey(track, source);
       const lines = data.lyrics.get(key);
@@ -209,16 +229,11 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       setLyricText(lyricEl, lines.length > 0 ? (lyricAt(lines, state.currentTime) || "♪") : "暂无歌词", true);
     }
 
-    function hasTrackKey(trackKeyValue: string | null, tracks: MusicTrack[]): boolean {
-      return Boolean(trackKeyValue && tracks.some((item) => trackKey(item) === trackKeyValue));
-    }
-
     function syncCardTitle(card: HTMLElement, state: ReturnType<typeof getGlobalPlaybackState>): void {
       const data = cardMusicState.get(card);
       if (!data || data.tracks.length === 0) return;
-      const isCurrentCard = Boolean(card.dataset.cardId) && state.cardId === card.dataset.cardId;
-      const currentIndex = isCurrentCard
-        ? data.tracks.findIndex((item) => trackKey(item) === state.trackKey)
+      const currentIndex = state.playing
+        ? data.tracks.findIndex((item) => trackMatchesState(item, state))
         : -1;
       renderCardTrack(card, data, currentIndex >= 0 ? currentIndex : data.activeIndex);
     }

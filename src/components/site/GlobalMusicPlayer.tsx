@@ -280,12 +280,18 @@ export function GlobalMusicPlayer({
       const track = player.list.audios[index];
       const normalizedTrack = track ? trackMap.get(trackKey(track)) ?? null : null;
       if (normalizedTrack) updateCurrentTrack(normalizedTrack);
+      const currentLyric = hostRef.current
+        ?.querySelector<HTMLElement>(".aplayer-lrc p.aplayer-lrc-current")
+        ?.textContent?.trim() || null;
       emitGlobalPlaybackState({
         playing,
         cardId,
         trackKey: track ? trackKey(track) : null,
         currentTime: Number.isFinite(player.audio.currentTime) ? player.audio.currentTime : 0,
         lrc: normalizedTrack?.lrc || (track?.lrc ?? null),
+        lyricText: currentLyric,
+        trackName: normalizedTrack?.name || track?.name || null,
+        trackArtist: normalizedTrack?.artist || track?.artist || null,
       });
     }
 
@@ -615,7 +621,16 @@ export function GlobalMusicPlayer({
       trackIndex.clear();
       trackMap.clear();
       currentTrackRef.current = null;
-      emitGlobalPlaybackState({ playing: false, cardId: null, trackKey: null, currentTime: 0, lrc: null });
+      emitGlobalPlaybackState({
+        playing: false,
+        cardId: null,
+        trackKey: null,
+        currentTime: 0,
+        lrc: null,
+        lyricText: null,
+        trackName: null,
+        trackArtist: null,
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

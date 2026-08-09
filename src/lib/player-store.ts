@@ -19,6 +19,11 @@ export interface GlobalPlaybackState {
   currentTime: number;
   /** 全局播放器实际使用的歌词地址；QQ 替代源时可能与文章原曲不同。 */
   lrc: string | null;
+  /** APlayer 当前已解析并显示的歌词文本，供页面卡片复用。 */
+  lyricText: string | null;
+  /** 当前播放器曲目元数据，用于跨请求/跨列表的卡片匹配兜底。 */
+  trackName: string | null;
+  trackArtist: string | null;
 }
 
 type PlayListener = (payload: GlobalPlayPayload) => void;
@@ -29,7 +34,16 @@ type StateListener = (state: GlobalPlaybackState) => void;
 // 播放状态经 emitGlobalPlaybackState 回传，卡片据此切换播放态图标。
 let playListener: PlayListener | null = null;
 let stateListener: StateListener | null = null;
-let state: GlobalPlaybackState = { playing: false, cardId: null, trackKey: null, currentTime: 0, lrc: null };
+let state: GlobalPlaybackState = {
+  playing: false,
+  cardId: null,
+  trackKey: null,
+  currentTime: 0,
+  lrc: null,
+  lyricText: null,
+  trackName: null,
+  trackArtist: null,
+};
 
 /** 全局播放器挂载时注册"追加并播放"监听；返回取消函数。 */
 export function setGlobalPlayListener(fn: PlayListener): () => void {
