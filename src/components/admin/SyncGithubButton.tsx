@@ -81,8 +81,8 @@ export default function SyncGithubButton({ trailingAction }: Props) {
   }
 
   return (
-    <div className="w-full min-w-0 sm:w-auto">
-      <div className="flex items-center justify-end gap-2">
+    <div className="w-full min-w-0 sm:w-[24rem]">
+      <div className="flex items-start gap-2">
         <button
           type="button"
           onClick={sync}
@@ -91,26 +91,28 @@ export default function SyncGithubButton({ trailingAction }: Props) {
         >
           {pending ? "同步中…" : "同步 GitHub"}
         </button>
+        <div className="h-10 min-w-0 flex-1 overflow-hidden text-left text-xs leading-5" aria-live="polite">
+          {status && <p className={`line-clamp-2 ${status.kind === "success" ? "text-green-600" : "text-red-600"}`}>{status.text}</p>}
+        </div>
         {trailingAction}
       </div>
-      <div className="mt-2 min-h-12 w-full max-w-[360px] text-right text-xs leading-5">
-        {status && <p className={status.kind === "success" ? "text-green-600" : "text-red-600"}>{status.text}</p>}
-        {checkingVersion && <p className="text-neutral-400" aria-live="polite">正在检查 GitHub 最新版本…</p>}
+      <div className="mt-2 min-h-10 w-full text-left text-xs leading-5" aria-live="polite">
+        {checkingVersion && <p className="line-clamp-2 text-neutral-400">正在检查 GitHub 最新版本…</p>}
         {!checkingVersion && version?.status === "up-to-date" && (
-          <p className="text-neutral-400" aria-live="polite">代码已是最新 · {version.localCommit}</p>
+          <p className="line-clamp-2 text-neutral-400">代码已是最新 · {version.localCommit}</p>
         )}
         {!checkingVersion && version?.status === "outdated" && (
-          <p className="font-medium text-amber-600" aria-live="polite">
+          <p className="line-clamp-2 font-medium text-amber-600">
             GitHub 有新版本（本地 {version.localCommit} · 最新 {version.remoteCommit}），请点击同步
           </p>
         )}
         {!checkingVersion && version?.status === "dirty" && (
-          <p className="font-medium text-red-600" aria-live="polite">
+          <p className="line-clamp-2 font-medium text-red-600">
             服务器有未提交源码改动，暂不能安全同步
           </p>
         )}
         {!checkingVersion && version?.status === "unavailable" && (
-          <p className="text-neutral-400" aria-live="polite">
+          <p className="line-clamp-2 text-neutral-400">
             {version.error || "暂时无法检查 GitHub 最新版本"}
           </p>
         )}
