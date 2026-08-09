@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { getSiteAuthor, site, parseSocialLinks } from "@/lib/site";
 import { NAV_ITEMS } from "@/components/site/SiteNav";
 import { NavIcon } from "@/components/site/NavIcon";
@@ -12,6 +12,7 @@ import { MusicInitializer } from "@/components/site/MusicInitializer";
 import { GlobalMusicPlayer } from "@/components/site/GlobalMusicPlayer";
 import { ErrorBoundary } from "@/components/site/ErrorBoundary";
 import { SiteImage } from "@/components/site/SiteImage";
+import { NavigationFeedback } from "@/components/site/NavigationFeedback";
 
 export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [] }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }> }) {
   const pathname = usePathname();
@@ -49,6 +50,9 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
   return (
     <div className="site-canvas flex min-h-full flex-1 flex-col">
       <div className="site-frame">
+        <Suspense fallback={null}>
+          <NavigationFeedback />
+        </Suspense>
         <header className="site-frame-header">
           <Link href="/" className="site-brand-link group flex min-w-0 items-center gap-3">
             {siteLogo ? (

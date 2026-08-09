@@ -156,10 +156,9 @@ function normalizeCoverUrl(value: string): string {
   return value;
 }
 
-/** QQ 封面接口支持按尺寸返回图片，播放器卡片只需要小图，避免下载 300px 原图。 */
+/** 保留 QQ 接口返回的原始封面地址，避免改写成并非所有歌曲都支持的尺寸。 */
 export function compactMusicCoverUrl(value: string): string {
-  const normalized = normalizeCoverUrl(value);
-  return normalized.replace(/T002R\d+x\d+M000/i, "T002R160x160M000");
+  return normalizeCoverUrl(value);
 }
 
 /** 获取 QQ VIP 单曲或歌单，所有入口统一走本站 QQ 音乐适配器。 */
