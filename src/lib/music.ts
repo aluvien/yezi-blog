@@ -48,17 +48,11 @@ function qqMusicMetadata(mode: string | undefined): Pick<MusicSpec, "title" | "a
   }
 }
 
-/** 供 QQ 搜索选择器生成带展示快照的引用规格。 */
-export function createQQMusicSpec(mid: string, metadata: Pick<MusicSpec, "title" | "artist" | "cover">): string {
+/** 供 QQ 搜索选择器生成简洁的音乐引用规格。 */
+export function createQQMusicSpec(mid: string): string {
   const safeMid = mid.trim();
   if (!/^[A-Za-z0-9_-]{4,80}$/.test(safeMid)) return "";
-  const requestedCover = stringMetadata(metadata.cover, 1_500);
-  const snapshot = {
-    title: stringMetadata(metadata.title, 180),
-    artist: stringMetadata(metadata.artist, 180),
-    cover: /^https:\/\//i.test(requestedCover) ? requestedCover : "",
-  };
-  return `qqvip:${safeMid}:song:meta-${encodeURIComponent(JSON.stringify(snapshot))}`;
+  return `qqvip:${safeMid}:song`;
 }
 
 /** 解析 `qqvip:id:type[:random]` 规格。 */
