@@ -11,7 +11,6 @@ import { ReadingProgress } from "@/components/site/ReadingProgress";
 import { MusicInitializer } from "@/components/site/MusicInitializer";
 import { GlobalMusicPlayer } from "@/components/site/GlobalMusicPlayer";
 import { ErrorBoundary } from "@/components/site/ErrorBoundary";
-import { DEFAULT_METING_API } from "@/lib/music";
 
 export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [] }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }> }) {
   const pathname = usePathname();
@@ -192,11 +191,10 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
         </div>
       )}
       <ErrorBoundary label="MusicInitializer">
-        <MusicInitializer metingApi={siteSettings.meting_api?.trim() || DEFAULT_METING_API} />
+        <MusicInitializer />
       </ErrorBoundary>
       <ErrorBoundary label="GlobalMusicPlayer">
         <GlobalMusicPlayer
-          metingApi={siteSettings.meting_api?.trim() || DEFAULT_METING_API}
           defaultMusic={siteSettings.default_music?.trim()}
           defaultMusicShuffle={siteSettings.default_music_shuffle === "1"}
           musicFloatEnabled={siteSettings.music_float_enabled !== "0"}

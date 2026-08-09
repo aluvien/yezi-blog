@@ -76,23 +76,23 @@ npm run dev                        # http://localhost:3030
 
 ````md
 ```music
-netease:7785232779:playlist
-qq:数字歌曲ID:song
+qqvip:歌单ID:playlist
+qqvip:歌曲MID:song
 ```
 ````
 
 想法正文中使用独占行标记：
 
 ```text
-!music netease:123456789:song
+!music qqvip:歌曲MID:song
 ```
 
 常规格式为 `平台:ID:类型[:random]`：
 
 | 字段 | 可选值 / 说明 |
 | --- | --- |
-| 平台 | `netease`、`qq`、`kugou`、`kuwo`、`xiami`、`baidu` |
-| 类型 | `song`、`playlist`、`album`、`search` |
+| 平台 | `qqvip` |
+| 类型 | `song`、`playlist` |
 | `random` | 可选；打乱歌单顺序 |
 
 后台文章和想法编辑器的“+ 音乐”按钮也支持手动填写上述格式。
@@ -106,9 +106,9 @@ qq:数字歌曲ID:song
 1. 在“设置 → 音乐设置”点击“扫码登录 QQ 音乐”。
 2. 用手机 QQ 扫码并确认；登录 Cookie 只保留在服务器的受限会话文件中，并仅通过本机请求头转给 QQ Music API。网站数据库和访客浏览器均不会保存或收到 Cookie。
 3. 在文章或想法编辑器点击“+ 音乐 → QQ 音乐搜索”，选择歌曲即可插入。
-4. 插入的格式为 `qqvip:歌曲MID:song`。前台播放时由本站 `/api/music/qq` 服务端接口临时解析播放地址，并带有限频保护。
+4. 插入的格式为 `qqvip:歌曲MID:song` 或 `qqvip:歌单ID:playlist`。前台播放时由本站 `/api/music/qq` 服务端接口临时解析播放地址，并带有限频保护。
 
-`qqvip` 当前仅支持单曲。请仅使用自己拥有合法播放权限的账号，并留意 QQ 音乐的服务规则；第三方接口或上游登录机制变化后，可能需要重新扫码登录。
+当前音乐系统只使用 `qqvip`，Meting 等第三方聚合接口已移除。请仅使用自己拥有合法播放权限的账号，并留意 QQ 音乐的服务规则；第三方接口或上游登录机制变化后，可能需要重新扫码登录。
 
 ## App API
 

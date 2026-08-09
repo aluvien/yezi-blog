@@ -30,7 +30,6 @@ const SETTING_KEYS = [
   "author_avatar",
   "author_avatar_no_border",
   "about_content",
-  "meting_api",
   "default_music",
   "default_music_shuffle",
   "music_float_enabled",

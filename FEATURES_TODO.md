@@ -11,9 +11,9 @@
 **优先级最高，架构级改动。其余音乐相关需求都建立在它之上。**
 
 ### 现状（必须先理解）
-- `src/components/site/MusicInitializer.tsx` 用 MutationObserver 扫描 `.blog-music` 容器，为每个容器**就地** `new APlayer`（播放器嵌在正文里），容器移除即 `destroy`。
-- 播放规格 `MusicSpec = { server, id, type }`，`src/lib/music.ts` 提供 `parseMusicSpec / parseMusicBlock / buildMetingUrl / musicContainerHtml`。
-- Meting API 根地址来自站点设置 `meting_api`（`SiteSettingsForm` 已可配），经 `SiteLayoutInner` 传给 `MusicInitializer`。
+- `src/components/site/MusicInitializer.tsx` 用 MutationObserver 扫描 `.blog-music` 容器，为每个容器生成轻量触发卡片；全站唯一 APlayer 由 `GlobalMusicPlayer` 持有。
+- 播放规格固定为 `qqvip:id:type`，`src/lib/music.ts` 提供 `parseMusicSpec / parseMusicBlock / musicContainerHtml`。
+- QQ 音乐信息、播放地址和歌词统一通过本站 `/api/music/qq` 适配器获取；不再依赖 Meting 或其他聚合接口。
 - 它挂在 `SiteLayoutInner`（`<html>` 内的固定布局层），**客户端导航时不会卸载**。
 
 ### 需求
@@ -27,7 +27,7 @@
 - **持久化前提**：导航无刷新由 Next `<Link>` 客户端路由天然提供（`SiteNav`/移动菜单/正文链接全用 `<Link>`）。要保活，**全局播放器必须挂在与 `MusicInitializer` 同级的布局持久层**（`SiteLayoutInner` 内、`{children}` 之外），不能放进任何页面组件（页面组件每次导航都重建）。
 - **改造方向**：新增一个全局单例播放器组件 `GlobalMusicPlayer`（client），替代/包裹现有"每容器一个 APlayer"的模式：
   - 维护一份全局 `audio[]` 列表 state（Context 或模块级事件总线）。
-  - 初始列表 = 默认歌单（拉 `meting_api` 取 `MusicSpec` → tracks）。
+- 初始列表 = 默认 QQ 歌单（通过 `/api/music/qq` 取 `MusicSpec` → tracks）。
   - 渲染悬浮按钮 + 底部面板，面板内放一个 APlayer 实例（`listFolded` 可配）。
   - 暴露"追加并播放"方法：`addAndPlay(tracks)` → `player.list.add(tracks)` 后 `player.list.switch(末位)` + `player.play()`（APlayer 提供 `list.add / list.switch` API）。
 - **正文 `.blog-music` 容器**改为渲染一个**轻量触发卡片**（封面 + 歌名 + 播放按钮），点击调用全局 `addAndPlay`，不再各自 new APlayer。`MusicInitializer` 的扫描逻辑保留，但职责从"就地初始化播放器"改为"初始化触发卡片并注册到全局列表"。

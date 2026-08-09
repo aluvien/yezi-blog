@@ -141,6 +141,9 @@ function createDb(): Database.Database {
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_status_time ON posts (status, created_at DESC)");
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_category ON posts (category COLLATE NOCASE)");
 
+      // QQ VIP 是唯一音乐源，清理不再使用的 Meting 配置，避免旧值继续出现在设置数据中。
+      db.prepare("DELETE FROM site_settings WHERE key = 'meting_api'").run();
+
       // 旧版本明文存储评论 IP，这里幂等迁移为 sha256 哈希（哈希固定 64 位 hex）。
       const staleIps = db
         .prepare("SELECT id, ip FROM comments WHERE ip != '' AND length(ip) != 64")

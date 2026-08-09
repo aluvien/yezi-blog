@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { fetchMusicTracks, type MusicSpec, type MusicTrack } from "@/lib/music";
+import { fetchMusicTracks, parseMusicSpec, type MusicSpec, type MusicTrack } from "@/lib/music";
 import { getGlobalPlaybackState, requestGlobalPlay, setGlobalStateListener } from "@/lib/player-store";
 import { lyricAt, parseLrc, type LyricLine } from "@/lib/lyrics";
 
@@ -46,12 +46,8 @@ function syncCardState(card: HTMLElement, state: ReturnType<typeof getGlobalPlay
  *
  * 挂在 SiteLayoutInner 上，文章与想法均可触发；SPA 导航新增的容器由 MutationObserver 扫描。
  */
-export function MusicInitializer({ metingApi }: { metingApi: string }) {
-  const apiRef = useRef(metingApi);
+export function MusicInitializer() {
   const cardSeqRef = useRef(0);
-  useEffect(() => {
-    apiRef.current = metingApi;
-  }, [metingApi]);
 
   useEffect(() => {
     type CardMusicState = {
@@ -211,9 +207,7 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
         return;
       }
       const isCurrentTrack = trackMatchesState(track, state);
-      // The global player may have replaced a short/failed NetEase source with
-      // QQ while the article card still owns the original track object. Use
-      // the player's actual lyric URL so both views show the same lyric.
+      // 使用全局播放器当前实际加载的歌词地址，保证卡片和展开播放器一致。
       if (isCurrentTrack && state.lyricText) {
         setLyricText(lyricEl, state.lyricText, true);
         return;
@@ -247,7 +241,7 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
     function resolveTracks(card: HTMLElement, data: CardMusicState): Promise<MusicTrack[]> {
       if (data.tracks[0]?.url) return Promise.resolve(data.tracks);
       if (data.resolvePromise) return data.resolvePromise;
-      data.resolvePromise = fetchMusicTracks(apiRef.current, data.spec)
+      data.resolvePromise = fetchMusicTracks(data.spec)
         .then((tracks) => {
           if (tracks.length === 0) throw new Error("音乐暂不可用");
           if (data.spec.server === "qqvip" && tracks[0] && data.spec.title) {
@@ -476,16 +470,20 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
       const id = el.dataset.id;
       const type = el.dataset.type;
       if (!server || !id || !type) return;
+      const parsedSpec = parseMusicSpec(`${server}:${id}:${type}${el.dataset.shuffle === "1" ? ":random" : ""}`);
+      if (!parsedSpec) {
+        el.dataset.init = "1";
+        el.textContent = "QQ 音乐规格无效或已不再支持";
+        el.classList.add("is-error");
+        return;
+      }
       el.dataset.init = "1";
       const spec = {
-        server,
-        id,
-        type,
-        shuffle: el.dataset.shuffle === "1",
+        ...parsedSpec,
         title: el.dataset.musicName?.trim() || "",
         artist: el.dataset.musicArtist?.trim() || "",
         cover: el.dataset.musicCover?.trim() || "",
-      } as MusicSpec;
+      } satisfies MusicSpec;
 
       const card = document.createElement("div");
       card.className = "music-trigger";
@@ -535,7 +533,7 @@ export function MusicInitializer({ metingApi }: { metingApi: string }) {
         tracks = [{ name: spec.title, artist: spec.artist || "", cover: spec.cover || "", url: "", lrc: "", key: `qqvip:${spec.id}` }];
       } else {
         try {
-          tracks = await fetchMusicTracks(apiRef.current, spec);
+          tracks = await fetchMusicTracks(spec);
         } catch {
           card.classList.add("is-error");
           card.querySelector(".music-trigger-name")!.textContent = "音乐暂不可用（版权或接口异常）";

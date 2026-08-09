@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Status = { available: boolean; loggedIn: boolean; uin: string | null };
@@ -32,6 +31,10 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistBusy, setPlaylistBusy] = useState(false);
   const [playlistMessage, setPlaylistMessage] = useState("");
+  const [playlistSearchKeyword, setPlaylistSearchKeyword] = useState("");
+  const [playlistSearchResults, setPlaylistSearchResults] = useState<Playlist[]>([]);
+  const [playlistSearchBusy, setPlaylistSearchBusy] = useState(false);
+  const [playlistSearchMessage, setPlaylistSearchMessage] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const pollingRef = useRef(false);
@@ -69,6 +72,29 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
       setPlaylistBusy(false);
     }
   }, []);
+
+  async function searchPlaylists() {
+    const query = playlistSearchKeyword.trim();
+    if (!query) return;
+    setPlaylistSearchBusy(true);
+    setPlaylistSearchMessage("");
+    try {
+      const result = await api<{ playlists?: Playlist[] }>(`/api/admin/qq-music?op=search&type=playlist&q=${encodeURIComponent(query)}`);
+      const next = Array.isArray(result.playlists) ? result.playlists : [];
+      setPlaylistSearchResults(next);
+      setPlaylistSearchMessage(next.length ? `找到 ${next.length} 个歌单` : "没有找到匹配歌单");
+    } catch (error) {
+      setPlaylistSearchResults([]);
+      setPlaylistSearchMessage(error instanceof Error ? error.message : "搜索歌单失败");
+    } finally {
+      setPlaylistSearchBusy(false);
+    }
+  }
+
+  function choosePlaylist(playlist: Playlist) {
+    onDefaultMusicChange(`qqvip:${playlist.id}:playlist`);
+    setPlaylistSearchMessage(`已选择「${playlist.name}」`);
+  }
 
   useEffect(() => {
     // Defer the first request one task so React does not synchronously cascade
@@ -210,6 +236,38 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
         <p className="mt-1.5 text-xs text-neutral-400">
           {!status?.loggedIn ? "请先扫码登录 QQ 音乐。" : playlistMessage || "选择歌单后，点击页面底部“保存设置”生效。"}
         </p>
+
+        <div className="mt-4 border-t border-neutral-200 pt-4">
+          <p className="text-sm font-medium text-neutral-800">搜索歌单</p>
+          <p className="mt-1 text-xs leading-5 text-neutral-500">可搜索 QQ 音乐公开歌单；选择后会自动填入默认列表，播放时仍使用已登录账号权限。</p>
+          <div className="mt-3 flex gap-2">
+            <input
+              value={playlistSearchKeyword}
+              onChange={(event) => { setPlaylistSearchKeyword(event.target.value); setPlaylistSearchMessage(""); }}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void searchPlaylists(); } }}
+              className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+              placeholder="输入歌单名称"
+            />
+            <button type="button" disabled={playlistSearchBusy || !playlistSearchKeyword.trim()} onClick={() => void searchPlaylists()} className="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50">
+              {playlistSearchBusy ? "搜索中…" : "搜索"}
+            </button>
+          </div>
+          {playlistSearchResults.length > 0 && (
+            <div className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1">
+              {playlistSearchResults.map((playlist) => (
+                <button key={playlist.id} type="button" onClick={() => choosePlaylist(playlist)} className="flex w-full items-center gap-3 rounded-md p-2 text-left hover:bg-neutral-100">
+                  {playlist.cover ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={playlist.cover} alt="" className="h-9 w-9 rounded-md object-cover" />
+                  ) : <span className="h-9 w-9 rounded-md bg-neutral-100" />}
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm text-neutral-800">{playlist.name}</span><span className="mt-0.5 block truncate text-xs text-neutral-500">{[playlist.creator, playlist.count === null ? "" : `${playlist.count} 首`].filter(Boolean).join(" · ")}</span></span>
+                  <span className="shrink-0 text-xs text-accent">设为默认</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {playlistSearchMessage && <p className="mt-1.5 text-xs text-neutral-400">{playlistSearchMessage}</p>}
+        </div>
       </div>
       {message && <p className={`mt-3 text-xs leading-5 ${status?.available === false ? "text-red-600" : "text-neutral-500"}`}>{message}</p>}
     </div>
