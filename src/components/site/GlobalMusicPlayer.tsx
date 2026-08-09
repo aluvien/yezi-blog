@@ -13,6 +13,8 @@ import {
   parseMusicSpec,
   type MusicTrack,
 } from "@/lib/music";
+import { getMusicLyrics } from "@/lib/music-lyrics";
+import { lyricAt, type LyricLine } from "@/lib/lyrics";
 import { emitGlobalPlaybackState, setGlobalPlayListener } from "@/lib/player-store";
 
 type APlayerInstance = import("aplayer").default;
@@ -131,7 +133,8 @@ export function GlobalMusicPlayer({
     const trackIndex = trackIndexRef.current;
     const trackMap = new Map<string, MusicTrack>();
     const lyricSourceByIndex = new Map<number, string>();
-    const lyricRequests = new Map<string, Promise<string>>();
+    const lyricLinesByIndex = new Map<number, LyricLine[]>();
+    const lyricReadyByIndex = new Map<number, boolean>();
 
     function updateCurrentTrack(track: MusicTrack | null): void {
       currentTrackRef.current = track;
@@ -142,25 +145,10 @@ export function GlobalMusicPlayer({
       return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist ?? ""}`;
     }
 
-    function requestLyricText(source: string): Promise<string> {
-      const inlineLrc = /^\s*\[\d{1,3}:[0-5]\d(?:\.\d{1,3})?]/.test(source);
-      if (inlineLrc) return Promise.resolve(source);
-      const cached = lyricRequests.get(source);
-      if (cached) return cached;
-      const request = fetch(source, {
-        cache: "no-store",
-        signal: AbortSignal.timeout(12_000),
-      })
-        .then((response) => response.ok ? response.text() : "")
-        .catch(() => "");
-      lyricRequests.set(source, request);
-      return request;
-    }
-
     /**
      * APlayer 1.10.1 会把切走时尚未完成的异步歌词永久缓存为 Loading，
-     * 再切回来也不会重新请求。这里在 listswitch 同步阶段先占住 parsed，
-     * 再由独立请求填充该 index；即使快速连续切歌，请求完成后仍会写入缓存。
+     * 再切回来也不会重新请求。这里在 listswitch 同步阶段先清掉上一首，
+     * 再由全站共享歌词缓存填充该 index；即使快速连续切歌，也不会串歌。
      */
     function primePlayerLyrics(player: APlayerInstance, index: number): void {
       const lrc = player.lrc;
@@ -171,13 +159,20 @@ export function GlobalMusicPlayer({
       const identity = `${trackKey(audio)}\u0000${source}`;
       if (lyricSourceByIndex.get(index) === identity) return;
       lyricSourceByIndex.set(index, identity);
+      lyricReadyByIndex.set(index, false);
+      lyricLinesByIndex.delete(index);
       lrc.parsed[index] = [[0, source ? "歌词加载中…" : "暂无歌词"]];
-      if (!source) return;
+      if (!source) {
+        lyricReadyByIndex.set(index, true);
+        lyricLinesByIndex.set(index, []);
+        return;
+      }
 
-      void requestLyricText(source).then((text) => {
+      void getMusicLyrics(normalized ?? audio, source).then((lines) => {
         if (disposed || lyricSourceByIndex.get(index) !== identity) return;
-        const parsed = text ? lrc.parse(text) : [];
-        lrc.parsed[index] = parsed.length > 0 ? parsed : [[0, "暂无歌词"]];
+        lyricLinesByIndex.set(index, lines);
+        lyricReadyByIndex.set(index, true);
+        lrc.parsed[index] = lines.length > 0 ? lines.map((line) => [line.time, line.text]) : [[0, "暂无歌词"]];
         if (player.list.index !== index) return;
         lrc.switch(index);
         lrc.update(Number.isFinite(player.audio.currentTime) ? player.audio.currentTime : 0);
@@ -307,14 +302,14 @@ export function GlobalMusicPlayer({
       const track = player.list.audios[index];
       const normalizedTrack = track ? trackMap.get(trackKey(track)) ?? null : null;
       if (normalizedTrack) updateCurrentTrack(normalizedTrack);
-      const currentLyric = hostRef.current
-        ?.querySelector<HTMLElement>(".aplayer-lrc p.aplayer-lrc-current")
-        ?.textContent?.trim() || null;
+      const currentTime = Number.isFinite(player.audio.currentTime) ? player.audio.currentTime : 0;
+      const lyricLines = lyricReadyByIndex.get(index) ? lyricLinesByIndex.get(index) : undefined;
+      const currentLyric = lyricLines ? lyricAt(lyricLines, currentTime) || null : null;
       emitGlobalPlaybackState({
         playing,
         cardId,
         trackKey: track ? trackKey(track) : null,
-        currentTime: Number.isFinite(player.audio.currentTime) ? player.audio.currentTime : 0,
+        currentTime,
         lrc: normalizedTrack?.lrc || (track?.lrc ?? null),
         lyricText: currentLyric,
         trackName: normalizedTrack?.name || track?.name || null,
@@ -528,7 +523,8 @@ export function GlobalMusicPlayer({
       trackIndex.clear();
       trackMap.clear();
       lyricSourceByIndex.clear();
-      lyricRequests.clear();
+      lyricLinesByIndex.clear();
+      lyricReadyByIndex.clear();
       currentTrackRef.current = null;
       emitGlobalPlaybackState({
         playing: false,

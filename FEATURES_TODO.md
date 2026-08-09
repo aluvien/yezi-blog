@@ -13,7 +13,7 @@
 ### 现状（必须先理解）
 - `src/components/site/MusicInitializer.tsx` 用 MutationObserver 扫描 `.blog-music` 容器，为每个容器生成轻量触发卡片；全站唯一 APlayer 由 `GlobalMusicPlayer` 持有。
 - 播放规格固定为 `qqvip:id:type`，`src/lib/music.ts` 提供 `parseMusicSpec / parseMusicBlock / musicContainerHtml`。
-- QQ 音乐信息、播放地址和歌词统一通过本站 `/api/music/qq` 适配器获取；不再依赖 Meting 或其他聚合接口。
+- QQ 音乐信息、播放地址和歌词统一通过本站 `/api/music/qq` 适配器获取。
 - 它挂在 `SiteLayoutInner`（`<html>` 内的固定布局层），**客户端导航时不会卸载**。
 
 ### 需求

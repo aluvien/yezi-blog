@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 import { fetchMusicTracks, parseMusicSpec, type MusicSpec, type MusicTrack } from "@/lib/music";
 import { getGlobalPlaybackState, requestGlobalPlay, setGlobalStateListener } from "@/lib/player-store";
-import { lyricAt, parseLrc, type LyricLine } from "@/lib/lyrics";
+import { getMusicLyrics } from "@/lib/music-lyrics";
+import { lyricAt, type LyricLine } from "@/lib/lyrics";
 
 type CardSwipeDirection = "next" | "previous";
 
@@ -157,10 +158,9 @@ export function MusicInitializer() {
       if (!source || data.loading.has(key) || data.lyrics.has(key)) return;
       data.loading.add(key);
       try {
-        const response = await fetch(source, { signal: AbortSignal.timeout(10000) });
-        if (response.ok) data.lyrics.set(key, parseLrc(await response.text()));
-        else data.lyrics.set(key, []);
+        data.lyrics.set(key, await getMusicLyrics(track, source));
       } catch {
+        // 共享歌词层已将网络错误归一为无歌词，这里仅兜底保护卡片状态。
         data.lyrics.set(key, []);
       } finally {
         data.loading.delete(key);
