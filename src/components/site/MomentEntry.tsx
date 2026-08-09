@@ -12,6 +12,7 @@ import { MomentCommentToggle } from "@/components/site/MomentCommentToggle";
 import { MetricIcon } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
 import { useMomentView } from "@/components/site/MomentViewTracker";
+import { SiteImage } from "@/components/site/SiteImage";
 
 const MomentForm = dynamic(() => import("@/components/admin/MomentForm"), { ssr: false });
 
@@ -80,9 +81,7 @@ export function MomentEntry({
       <div className="moment-entry-head">
         <div className={`moment-entry-avatar ${avatar ? "has-avatar" : ""} ${authorAvatarNoBorder ? "no-border" : ""}`}>
           {avatar ? (
-            // 头像支持后台设置的本地上传路径或外部 URL。
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatar} alt="" />
+            <SiteImage src={avatar} alt="" fill sizes="40px" className="object-cover" />
           ) : (
             <span>{displayAuthor.charAt(0).toUpperCase()}</span>
           )}

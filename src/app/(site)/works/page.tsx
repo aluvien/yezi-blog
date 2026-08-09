@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { listWorks } from "@/lib/db";
 import { PageHeader } from "@/components/site/PageHeader";
+import { SiteImage } from "@/components/site/SiteImage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,8 +29,9 @@ export default function WorksPage() {
           const inner = (
             <article className="paper-card group h-full overflow-hidden rounded-2xl transition-transform duration-300 hover:-translate-y-1">
               {work.cover && work.cover !== "/placeholder.svg" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={work.cover} alt={work.title} loading="lazy" className="work-cover aspect-[16/9] w-full bg-soft object-cover" />
+                <div className="relative aspect-[16/9] w-full overflow-hidden bg-soft">
+                  <SiteImage src={work.cover} alt={work.title} fill sizes="(max-width: 640px) 100vw, 420px" className="work-cover object-cover" />
+                </div>
               ) : (
                 <div className="work-cover flex aspect-[16/9] items-center justify-center bg-gradient-to-br from-soft to-paper text-[52px] font-bold text-accent/15">{String(index + 1).padStart(2, "0")}</div>
               )}

@@ -39,11 +39,11 @@ export default async function AttachmentDetailPage({ params }: { params: Promise
           <div><dt className="text-neutral-400">上传时间</dt><dd className="text-neutral-800">{formatDate(attachment.created_at)}</dd></div>
           <div className="col-span-2"><dt className="text-neutral-400">路径</dt><dd className="truncate text-neutral-800">{attachment.path}</dd></div>
           {attachment.post_id && (
-            <div><dt className="text-neutral-400">关联文章</dt><dd><Link href={`/admin/posts/${attachment.post_id}/edit`} className="text-blue-700 underline">查看</Link></dd></div>
+            <div><dt className="text-neutral-400">关联文章</dt><dd><Link href={`/admin/posts/${attachment.post_id}/edit`} className="text-blue-700 no-underline">查看</Link></dd></div>
           )}
         </dl>
         <div className="mt-4">
-          <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 underline">打开原文件</a>
+          <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 no-underline">打开原文件</a>
         </div>
       </div>
 

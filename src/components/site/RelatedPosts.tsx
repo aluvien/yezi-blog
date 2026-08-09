@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Post } from "@/lib/db";
 import { formatDateOnly } from "@/lib/format";
+import { SiteImage } from "@/components/site/SiteImage";
 
 export function RelatedPosts({ posts }: { posts: Post[] }) {
   if (posts.length === 0) return null;
@@ -19,8 +20,9 @@ export function RelatedPosts({ posts }: { posts: Post[] }) {
             className="group flex items-start gap-2.5 rounded-lg border border-divider p-2.5 transition-colors hover:border-accent/40"
           >
             {post.cover && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={post.cover} alt="" loading="lazy" className="h-10 w-14 shrink-0 rounded object-cover" />
+              <div className="relative h-10 w-14 shrink-0 overflow-hidden rounded">
+                <SiteImage src={post.cover} alt="" fill sizes="56px" className="object-cover" />
+              </div>
             )}
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-medium leading-snug text-foreground transition-colors group-hover:text-accent line-clamp-2">

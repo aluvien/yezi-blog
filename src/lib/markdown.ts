@@ -12,7 +12,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   ],
   allowedAttributes: {
     a: ["href", "title", "target", "rel"],
-    img: ["src", "alt", "title"],
+    img: ["src", "srcset", "sizes", "alt", "title", "loading", "decoding", "class", "data-original-src"],
     code: ["class"],
     div: ["class", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover"],
     iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
@@ -56,6 +56,24 @@ function safeMarkdownUrl(value: string, kind: "link" | "image"): string | null {
   return null;
 }
 
+const MARKDOWN_IMAGE_WIDTHS = [360, 480, 640, 750, 828, 1080, 1200, 1440, 1920];
+const MARKDOWN_IMAGE_SIZES = "(max-width: 860px) calc(100vw - 2rem), 800px";
+
+function nextImageUrl(src: string, width: number): string {
+  return `/_next/image?url=${encodeURIComponent(src)}&w=${width}&q=72`;
+}
+
+function renderMarkdownImage(src: string, alt: string, titleAttribute: string): string {
+  // 只优化本站上传图，外部图片不交给 Next Image，避免把未知域名变成开放代理。
+  if (!src.startsWith("/uploads/")) {
+    return `<img class="article-content-image site-image-loading" src="${escapeHtml(src)}" data-original-src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async"${titleAttribute}>`;
+  }
+  const srcSet = MARKDOWN_IMAGE_WIDTHS
+    .map((width) => `${nextImageUrl(src, width)} ${width}w`)
+    .join(", ");
+  return `<img class="article-content-image site-image-loading" src="${escapeHtml(nextImageUrl(src, 828))}" srcset="${escapeHtml(srcSet)}" sizes="${MARKDOWN_IMAGE_SIZES}" data-original-src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async"${titleAttribute}>`;
+}
+
 /**
  * 渲染文章 markdown 为 HTML。
  * h2/h3 会自动添加 id 属性用于 TOC 锚点。
@@ -83,7 +101,7 @@ export function renderMarkdown(content: string): string {
     const safeSrc = safeMarkdownUrl(href, "image");
     if (!safeSrc) return escapeHtml(text);
     const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
-    return `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(text)}"${titleAttribute}>`;
+    return renderMarkdownImage(safeSrc, text, titleAttribute);
   };
 
   renderer.heading = function (this: Renderer, { tokens, depth }: Tokens.Heading) {

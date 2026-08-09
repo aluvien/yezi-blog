@@ -11,6 +11,7 @@ import { ReadingProgress } from "@/components/site/ReadingProgress";
 import { MusicInitializer } from "@/components/site/MusicInitializer";
 import { GlobalMusicPlayer } from "@/components/site/GlobalMusicPlayer";
 import { ErrorBoundary } from "@/components/site/ErrorBoundary";
+import { SiteImage } from "@/components/site/SiteImage";
 
 export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [] }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }> }) {
   const pathname = usePathname();
@@ -51,9 +52,9 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
         <header className="site-frame-header">
           <Link href="/" className="site-brand-link group flex min-w-0 items-center gap-3">
             {siteLogo ? (
-              // 管理员可配置站点 Logo；使用原生 img 允许本地上传路径。
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={siteLogo} alt="" className={`site-brand-logo h-10 w-10 shrink-0 rounded-[4px] bg-transparent object-contain ${hideSiteLogoBorder ? "border-0" : "border border-divider"}`} />
+              <span className={`site-brand-logo relative h-10 w-10 shrink-0 overflow-hidden rounded-[4px] bg-transparent ${hideSiteLogoBorder ? "border-0" : "border border-divider"}`}>
+                <SiteImage src={siteLogo} alt="" fill sizes="40px" className="object-contain" priority />
+              </span>
             ) : <span className="site-brand-logo flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-foreground bg-foreground text-[16px] font-bold text-white transition-colors group-hover:border-accent group-hover:bg-accent">{authorName.charAt(0).toUpperCase()}</span>}
             <span className="site-brand-copy min-w-0">
               <span className="site-brand-name block truncate text-[15px] font-semibold leading-none tracking-tight">{siteName}</span>

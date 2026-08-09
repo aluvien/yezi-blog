@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- QQ cover URLs are external dynamic assets. */
 
-import type { MusicSpec } from "@/lib/music";
+import { compactMusicCoverUrl, type MusicSpec } from "@/lib/music";
 
 /**
  * Server-rendered music shell. QQ selections carry their display snapshot, so
@@ -25,7 +25,7 @@ export function MusicEmbed({ spec }: { spec: MusicSpec }) {
           <span className="music-trigger-swipe-stage">
             <span className="music-trigger-swipe-slide" data-track-slot="current">
               <span className={"music-trigger-cover" + (spec.cover ? "" : " is-fallback")}>
-                {spec.cover && <img src={spec.cover} alt="" />}
+                {spec.cover && <img className="site-image-media site-image-loading" src={compactMusicCoverUrl(spec.cover)} alt="" />}
               </span>
               <span className="music-trigger-info">
                 <span className="music-trigger-name">{spec.title}</span>

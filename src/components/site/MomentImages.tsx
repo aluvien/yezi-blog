@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LightboxOverlay } from "@/components/site/ImageLightbox";
+import { SiteImage } from "@/components/site/SiteImage";
 
 /** 社交九宫格布局：根据图片数量把图片分成若干行（每行 1/2/3 张）。 */
 function groupImages(images: string[]): string[][] {
@@ -38,8 +39,13 @@ export function MomentImages({ images }: { images: string[] }) {
                   className="relative aspect-square flex-1 overflow-hidden rounded-md bg-soft"
                   aria-label="查看图片"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <SiteImage
+                    src={src}
+                    alt=""
+                    fill
+                    sizes="(max-width: 640px) 30vw, 200px"
+                    className="h-full w-full object-cover"
+                  />
                 </button>
               ))}
             </div>

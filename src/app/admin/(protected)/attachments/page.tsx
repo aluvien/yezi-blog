@@ -32,7 +32,10 @@ export default function AdminAttachmentsPage() {
       ) : (
         <ul className="flex flex-col gap-3">
           {attachments.map((attachment) => (
-            <li key={attachment.id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+            <li
+              key={attachment.id}
+              className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 gap-y-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:items-center sm:p-5"
+            >
               {attachment.mime_type.startsWith("image/") ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={attachment.path} alt="" className="h-14 w-14 shrink-0 rounded-lg border border-neutral-200 object-cover" />
@@ -41,18 +44,22 @@ export default function AdminAttachmentsPage() {
                   {attachment.mime_type.split("/").pop()?.slice(0, 5) || "file"}
                 </div>
               )}
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-neutral-800">{attachment.original_name}</p>
-                <p className="mt-1 text-xs text-neutral-400">{formatBytes(attachment.size)} · {formatDate(attachment.created_at)}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <span className={`rounded-full px-2 py-0.5 ${attachment.referenced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-800"}`}>
+                <p className="mt-1 flex items-center gap-2 whitespace-nowrap text-xs text-neutral-400">
+                  <span className="shrink-0">{formatBytes(attachment.size)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="shrink-0">{formatDate(attachment.created_at)}</span>
+                </p>
+                <div className="mt-2 flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-xs">
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 ${attachment.referenced ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-800"}`}>
                     {attachment.referenced ? "已引用" : "未引用"}
                   </span>
                   {attachment.references.map((ref, i) => (
                     <Link
                       key={`${ref.type}-${ref.id}-${i}`}
                       href={ref.type === "post" ? `/admin/posts/${ref.id}/edit` : `/admin/moments/${ref.id}/edit`}
-                      className="max-w-full truncate text-blue-700 underline hover:text-blue-900"
+                      className="min-w-0 truncate text-blue-700 no-underline hover:text-blue-900"
                     >
                       {ref.type === "post"
                         ? `${ref.usage === "cover" ? "封面：" : ref.usage === "content+cover" ? "正文+封面：" : "文章："}${ref.label}`
@@ -61,9 +68,9 @@ export default function AdminAttachmentsPage() {
                   ))}
                 </div>
               </div>
-              <div className="ml-[4.25rem] flex shrink-0 flex-wrap gap-x-4 gap-y-2 sm:ml-auto">
-                <Link href={`/admin/attachments/${attachment.id}`} className="text-sm text-blue-700 underline">详情</Link>
-                <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 underline">打开</a>
+              <div className="col-start-2 flex shrink-0 items-center gap-3 sm:col-start-3 sm:row-start-1 sm:justify-self-end">
+                <Link href={`/admin/attachments/${attachment.id}`} className="text-sm text-blue-700 no-underline">详情</Link>
+                <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 no-underline">打开</a>
                 {!attachment.referenced && <DeleteButton action={deleteAttachmentAction.bind(null, attachment.id)} confirmText="确定删除这个未引用附件？此操作不可恢复。" />}
               </div>
             </li>

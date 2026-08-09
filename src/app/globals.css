@@ -628,6 +628,7 @@ body {
 }
 
 .moment-entry-avatar {
+  position: relative;
   display: inline-flex;
   width: 40px;
   height: 40px;
@@ -810,6 +811,7 @@ body {
 }
 
 .mobile-feed-avatar {
+  position: relative;
   display: inline-flex;
   width: 40px;
   height: 40px;
@@ -1290,6 +1292,39 @@ button,
 a,
 summary {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* 图片先显示主题占位，真实资源到达后平滑切换，避免首屏出现大片空白。 */
+.site-image-media,
+.article-content-image {
+  background: linear-gradient(110deg, var(--soft) 20%, color-mix(in srgb, var(--soft) 72%, var(--paper)) 45%, var(--soft) 70%);
+  background-size: 220% 100%;
+}
+
+.site-image-loading,
+.article-content-image.site-image-loading {
+  animation: site-image-shimmer 1.45s ease-in-out infinite;
+  opacity: 0.72;
+}
+
+.site-image-ready,
+.article-content-image.site-image-ready {
+  animation: none;
+  background: transparent;
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+@keyframes site-image-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-image-loading,
+  .article-content-image.site-image-loading {
+    animation: none;
+  }
 }
 
 ::selection {
@@ -2318,6 +2353,24 @@ textarea.comment-field {
 }
 .music-trigger.is-error .music-trigger-play {
   display: none;
+}
+
+.music-trigger.is-pending {
+  cursor: progress;
+}
+
+.music-trigger.is-pending .music-trigger-name {
+  color: transparent;
+  background: linear-gradient(110deg, var(--muted) 20%, var(--paper) 45%, var(--muted) 70%);
+  background-size: 220% 100%;
+  background-clip: text;
+  animation: site-image-shimmer 1.45s ease-in-out infinite;
+}
+
+.music-trigger.is-pending .music-trigger-artist-name {
+  color: transparent;
+  background: var(--divider);
+  border-radius: 999px;
 }
 
 /* 全局音乐播放器：右下角悬浮球（有曲目才显示；面板展开时隐藏避免重叠） */

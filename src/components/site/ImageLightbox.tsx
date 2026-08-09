@@ -189,21 +189,43 @@ export function LightboxOverlay({
 
 export function ArticleImageWrapper({ children }: { children: React.ReactNode }) {
   const [lightbox, setLightbox] = useState<{ images: Array<{ src: string; alt: string }>; index: number } | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+    const images = Array.from(root.querySelectorAll<HTMLImageElement>(".article-content-image"));
+    const cleanups = images.map((image) => {
+      const markLoaded = () => {
+        image.classList.remove("site-image-loading");
+        image.classList.add("site-image-ready");
+      };
+      if (image.complete && image.naturalWidth > 0) markLoaded();
+      else image.addEventListener("load", markLoaded, { once: true });
+      return () => image.removeEventListener("load", markLoaded);
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, [children]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     const container = e.currentTarget as HTMLElement;
     if (target.tagName === "IMG" && container.contains(target)) {
       const img = target as HTMLImageElement;
-      const images = Array.from(container.querySelectorAll("img")).map((item) => ({ src: item.src, alt: item.alt }));
-      const index = Math.max(0, images.findIndex((item) => item.src === img.src));
+      const images = Array.from(container.querySelectorAll("img")).map((item) => ({
+        // 正文缩略图使用 Next Image 优化地址，灯箱改回原图地址。
+        src: item.dataset.originalSrc || item.currentSrc || item.src,
+        alt: item.alt,
+      }));
+      const originalSrc = img.dataset.originalSrc || img.currentSrc || img.src;
+      const index = Math.max(0, images.findIndex((item) => item.src === originalSrc));
       setLightbox({ images, index });
     }
   }, []);
 
   return (
     <>
-      <div onClick={handleClick}>{children}</div>
+      <div ref={contentRef} onClick={handleClick}>{children}</div>
       {lightbox && (
         <LightboxOverlay
           images={lightbox.images}

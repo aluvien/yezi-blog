@@ -16,6 +16,7 @@ import {
 import { getMusicLyrics } from "@/lib/music-lyrics";
 import { lyricAt, type LyricLine } from "@/lib/lyrics";
 import { emitGlobalPlaybackState, setGlobalPlayListener } from "@/lib/player-store";
+import { SiteImage } from "@/components/site/SiteImage";
 
 type APlayerInstance = import("aplayer").default;
 
@@ -649,11 +650,7 @@ export function GlobalMusicPlayer({
           onClick={() => setOpen((value) => !value)}
         >
           {currentTrack?.cover ? (
-            <>
-              {/* QQ/网易云封面是运行时外部 URL，无法交给 Next Image 的本地静态追踪。 */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="global-player-float-cover" src={currentTrack.cover} alt="" />
-            </>
+            <SiteImage src={currentTrack.cover} alt="" width={46} height={46} className="global-player-float-cover object-cover" />
           ) : (
             <span className="global-player-float-fallback" aria-hidden="true">
               <svg className="global-player-float-icon" viewBox="0 0 24 24" fill="currentColor">

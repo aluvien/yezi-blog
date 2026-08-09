@@ -12,6 +12,7 @@ import { splitMomentContent } from "@/lib/music";
 import { MusicEmbed } from "@/components/site/MusicEmbed";
 import { useMomentView } from "@/components/site/MomentViewTracker";
 import { ArticleEditZone } from "@/components/site/ArticleEditZone";
+import { SiteImage } from "@/components/site/SiteImage";
 
 export type FeedItem =
   | { type: "moment"; value: Moment; commentCount: number; metrics: ContentMetrics; initialLiked: boolean }
@@ -39,9 +40,7 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
       <div className="mobile-feed-memo-head">
         <div className={`mobile-feed-avatar ${authorAvatar ? "has-avatar" : ""} ${authorAvatarNoBorder ? "no-border" : ""}`}>
           {authorAvatar ? (
-            // 头像支持后台设置的本地上传路径或外部 URL。
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={authorAvatar} alt="" />
+            <SiteImage src={authorAvatar} alt="" fill sizes="40px" className="object-cover" />
           ) : (
             <span>{authorName.charAt(0).toUpperCase()}</span>
           )}
@@ -85,8 +84,7 @@ function MobilePost({ post, commentCount, metrics, initialLiked, canEdit }: { po
       {post.cover ? (
         <>
           <Link href={`/posts/${post.slug}`} className="mobile-feed-post-banner">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={post.cover} alt="" loading="lazy" />
+            <SiteImage src={post.cover} alt="" fill sizes="(max-width: 640px) 100vw, 620px" className="object-cover" />
             <span>{post.title}</span>
           </Link>
           {excerpt && <p className="mobile-feed-post-excerpt">{excerpt}</p>}

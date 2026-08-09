@@ -6,6 +6,13 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // 本地上传图由 Next Image 按设备宽度按需缩放，首次请求后复用优化缓存。
+  images: {
+    deviceSizes: [360, 480, 640, 750, 828, 1080, 1200, 1440, 1920],
+    imageSizes: [64, 96, 128, 256, 384],
+    qualities: [72, 75],
+    formats: ["image/avif", "image/webp"],
+  },
   serverExternalPackages: ["better-sqlite3"],
   // 反代（nginx/tunnel）转发时 Host 可能变成 127.0.0.1，导致 Next 的
   // Server Actions 同源校验（origin vs host）失败、后台所有保存操作报

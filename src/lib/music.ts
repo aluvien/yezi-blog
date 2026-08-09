@@ -41,7 +41,7 @@ function qqMusicMetadata(mode: string | undefined): Pick<MusicSpec, "title" | "a
     const title = stringMetadata(raw.title, 180);
     const artist = stringMetadata(raw.artist, 180);
     const candidateCover = stringMetadata(raw.cover, 1_500);
-    const cover = /^https:\/\//i.test(candidateCover) ? candidateCover : "";
+    const cover = /^https:\/\//i.test(candidateCover) ? compactMusicCoverUrl(candidateCover) : "";
     return title || artist || cover ? { title, artist, cover } : null;
   } catch {
     return null;
@@ -120,12 +120,12 @@ export function musicContainerHtml(spec: MusicSpec): string {
   })[character] ?? character);
   const title = spec.title?.trim() ?? "";
   const artist = spec.artist?.trim() ?? "";
-  const cover = spec.cover?.trim() ?? "";
+  const cover = compactMusicCoverUrl(spec.cover?.trim() ?? "");
   const snapshotAttributes = title || artist || cover
     ? ` data-music-name="${escapeAttribute(title)}" data-music-artist="${escapeAttribute(artist)}" data-music-cover="${escapeAttribute(cover)}"`
     : "";
   const fallback = title
-    ? `<div class="music-trigger music-trigger-static"><span class="music-trigger-swipe-stage"><span class="music-trigger-swipe-slide" data-track-slot="current"><span class="music-trigger-cover${cover ? "" : " is-fallback"}">${cover ? `<img src="${escapeAttribute(cover)}" alt="">` : ""}</span><span class="music-trigger-info"><span class="music-trigger-name">${escapeAttribute(title)}</span><span class="music-trigger-artist"><span class="music-trigger-artist-name">${escapeAttribute(artist)}</span></span></span></span></span><span class="music-trigger-play" aria-hidden="true"></span></div>`
+    ? `<div class="music-trigger music-trigger-static"><span class="music-trigger-swipe-stage"><span class="music-trigger-swipe-slide" data-track-slot="current"><span class="music-trigger-cover${cover ? "" : " is-fallback"}">${cover ? `<img class="site-image-media site-image-loading" src="${escapeAttribute(cover)}" alt="">` : ""}</span><span class="music-trigger-info"><span class="music-trigger-name">${escapeAttribute(title)}</span><span class="music-trigger-artist"><span class="music-trigger-artist-name">${escapeAttribute(artist)}</span></span></span></span></span><span class="music-trigger-play" aria-hidden="true"></span></div>`
     : "";
   return `<div class="blog-music" data-server="qqvip" data-id="${escapeAttribute(spec.id)}" data-type="${spec.type}" data-shuffle="${spec.shuffle ? "1" : "0"}"${snapshotAttributes}>${fallback}</div>`;
 }
@@ -156,6 +156,12 @@ function normalizeCoverUrl(value: string): string {
   return value;
 }
 
+/** QQ 封面接口支持按尺寸返回图片，播放器卡片只需要小图，避免下载 300px 原图。 */
+export function compactMusicCoverUrl(value: string): string {
+  const normalized = normalizeCoverUrl(value);
+  return normalized.replace(/T002R\d+x\d+M000/i, "T002R160x160M000");
+}
+
 /** 获取 QQ VIP 单曲或歌单，所有入口统一走本站 QQ 音乐适配器。 */
 export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
   if (spec.type !== "song" && spec.type !== "playlist") throw new Error("QQ 音乐登录播放暂支持单曲或歌单");
@@ -179,7 +185,7 @@ export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
             name: firstScalar(track.name) || "QQ 音乐",
             artist: firstScalar(track.artist),
             url,
-            cover: normalizeCoverUrl(firstScalar(track.cover)),
+            cover: compactMusicCoverUrl(firstScalar(track.cover)),
             lrc: firstScalar(track.lrc),
             key: firstScalar(track.key) || `qqvip:${spec.id}:${index}`,
           }];
@@ -195,7 +201,7 @@ export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
     name: firstScalar(track.name) || spec.title || "QQ 音乐",
     artist: firstScalar(track.artist) || spec.artist || "",
     url: track.url,
-    cover: normalizeCoverUrl(firstScalar(track.cover) || spec.cover || ""),
+    cover: compactMusicCoverUrl(firstScalar(track.cover) || spec.cover || ""),
     lrc: firstScalar(track.lrc),
     key: `qqvip:${spec.id}`,
   }];

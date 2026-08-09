@@ -1,12 +1,14 @@
 import { site } from "@/lib/site";
+import { SiteImage } from "@/components/site/SiteImage";
 
 export function AuthorCard({ authorName = site.author, avatar, avatarNoBorder = false }: { authorName?: string; avatar?: string | null; avatarNoBorder?: boolean }) {
   const initial = authorName.charAt(0).toUpperCase();
   return (
     <div className="flex items-center gap-4 rounded-xl bg-soft p-5">
       {avatar ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={avatar} alt="" className={`h-13 w-13 shrink-0 rounded-xl object-cover ${avatarNoBorder ? "border-0" : "border border-divider"}`} />
+        <div className={`relative h-13 w-13 shrink-0 overflow-hidden rounded-xl ${avatarNoBorder ? "" : "border border-divider"}`}>
+          <SiteImage src={avatar} alt="" fill sizes="52px" className="object-cover" />
+        </div>
       ) : (
         <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-semibold text-white">
           {initial}

@@ -5,6 +5,7 @@ import { stripMarkdown } from "@/lib/markdown";
 import { parsePostTags } from "@/lib/post-tags";
 import { MetricIcon } from "@/components/site/MetricIcon";
 import { ArticleEditZone } from "@/components/site/ArticleEditZone";
+import { SiteImage } from "@/components/site/SiteImage";
 
 /** 首页时间线中的文章条目 */
 export function PostEntry({ post, commentCount = 0, canEdit = false }: { post: Post; commentCount?: number; canEdit?: boolean }) {
@@ -38,14 +39,15 @@ export function PostEntry({ post, commentCount = 0, canEdit = false }: { post: P
             </div>
           </div>
           {post.cover && (
-            // 封面为后台上传的本地路径，尺寸不固定，用原生 img
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={post.cover}
-              alt=""
-              loading="lazy"
-              className="h-22 w-28 shrink-0 rounded-xl object-cover sm:w-32"
-            />
+            <div className="relative h-22 w-28 shrink-0 overflow-hidden rounded-xl sm:w-32">
+              <SiteImage
+                src={post.cover}
+                alt=""
+                fill
+                sizes="(max-width: 640px) 112px, 128px"
+                className="object-cover"
+              />
+            </div>
           )}
         </div>
       </Link>
