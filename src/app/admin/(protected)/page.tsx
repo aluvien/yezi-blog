@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   countAttachments,
+  countArticleReferences,
   countMoments,
   countPendingComments,
   countPosts,
@@ -21,6 +22,7 @@ export default function AdminDashboard() {
   const categories = listCategories();
   const metrics = getOverallMetrics();
   const recentComments = listCommentsForAdmin(5);
+  const referenceCount = countArticleReferences();
 
   const recentCategories = [...categories]
     .sort((a, b) => b.created_at.localeCompare(a.created_at, "zh-CN"))
@@ -82,6 +84,16 @@ export default function AdminDashboard() {
           <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">维护索引</div>
         </Link>
       </div>
+
+      <Link href="/admin/references" className="rounded-2xl bg-white p-4 shadow-sm transition-colors hover:bg-neutral-50">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-neutral-800">引用管理</h2>
+            <p className="mt-1 text-xs text-neutral-500">查看文章引用、来源信息和 AI 摘要</p>
+          </div>
+          <span className="shrink-0 text-sm text-neutral-500">{referenceCount} 条 →</span>
+        </div>
+      </Link>
 
       {/* 第三排:标签+分类(上下堆叠) / 最新文章 / 最新评论 */}
       <div className="grid gap-3 md:grid-cols-3">

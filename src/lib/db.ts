@@ -219,6 +219,12 @@ export interface ArticleReference {
   updated_at: string;
 }
 
+export interface ArticleReferenceWithPost extends ArticleReference {
+  post_title: string;
+  post_slug: string;
+  post_status: "draft" | "published";
+}
+
 export interface Moment {
   id: number;
   content: string;
@@ -540,6 +546,19 @@ export function listArticleReferencesForPost(postId: number): ArticleReference[]
   return db
     .prepare("SELECT * FROM article_references WHERE post_id = ? ORDER BY id ASC")
     .all(postId) as ArticleReference[];
+}
+
+export function countArticleReferences(): number {
+  return Number((db.prepare("SELECT COUNT(*) AS count FROM article_references").get() as { count: number }).count);
+}
+
+export function listArticleReferences(): ArticleReferenceWithPost[] {
+  return db.prepare(`
+    SELECT ar.*, p.title AS post_title, p.slug AS post_slug, p.status AS post_status
+    FROM article_references ar
+    INNER JOIN posts p ON p.id = ar.post_id
+    ORDER BY ar.updated_at DESC, ar.id DESC
+  `).all() as ArticleReferenceWithPost[];
 }
 
 // ---------- attachments ----------

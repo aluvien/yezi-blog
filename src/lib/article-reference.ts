@@ -1,7 +1,7 @@
 /**
  * 文章引用的共享格式。
  *
- * 引用快照直接写进 Markdown 标记，而不是让前台渲染时再次请求第三方网页。
+ * 引用快照以紧凑标记写进 Markdown，而不是让前台渲染时再次请求第三方网页。
  * 这样编辑器预览、服务端渲染和之后的文章访问都会使用同一份元数据，第三方
  * 网站临时不可用时也不会拖慢文章首屏。
  */
@@ -30,6 +30,41 @@ const MAX_POINTS = 6;
 
 function text(value: unknown, maxLength: number): string {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+/** 微信的 ct 字段是 Unix 时间戳，不能直接作为文章日期展示。 */
+export function formatArticleReferenceDate(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!/^\d{10,13}$/.test(raw)) return raw;
+  const numeric = Number(raw);
+  const date = new Date(raw.length === 13 ? numeric : numeric * 1_000);
+  if (!Number.isFinite(date.getTime())) return raw;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return year && month && day ? `${year}-${month}-${day}` : raw;
+}
+
+function encodeBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodeBase64Url(value: string): string {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const binary = atob(base64);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
 
 function normalizeUrl(value: unknown): string {
@@ -65,7 +100,7 @@ export function normalizeArticleReferenceSnapshot(input: Partial<ArticleReferenc
     title: text(input.title, MAX_TITLE_LENGTH) || "引用文章",
     source: text(input.source, MAX_SOURCE_LENGTH),
     author: text(input.author, MAX_AUTHOR_LENGTH),
-    publishedAt: text(input.publishedAt, MAX_DATE_LENGTH),
+    publishedAt: text(formatArticleReferenceDate(input.publishedAt), MAX_DATE_LENGTH),
     cover: normalizeAssetUrl(input.cover),
     description: text(input.description, MAX_DESCRIPTION_LENGTH),
     summary: text(input.summary, MAX_SUMMARY_LENGTH),
@@ -75,17 +110,55 @@ export function normalizeArticleReferenceSnapshot(input: Partial<ArticleReferenc
 
 export function encodeArticleReferenceMarker(input: Partial<ArticleReferenceSnapshot>): string {
   const snapshot = normalizeArticleReferenceSnapshot(input);
-  return `!reference:${encodeURIComponent(JSON.stringify(snapshot))}`;
+  // 只保留短字段名并使用 base64url，避免把完整 URL 编码 JSON 暴露在编辑器正文里。
+  // 仍然保留完整快照，保证编辑预览和服务端渲染不需要再次请求原网页。
+  const compact = {
+    u: snapshot.url,
+    c: snapshot.canonicalUrl,
+    t: snapshot.title,
+    s: snapshot.source,
+    a: snapshot.author,
+    d: snapshot.publishedAt,
+    v: snapshot.cover,
+    x: snapshot.description,
+    y: snapshot.summary,
+    p: snapshot.keyPoints,
+  };
+  return `!reference:${encodeBase64Url(JSON.stringify(compact))}`;
 }
 
 export function decodeArticleReferencePayload(payload: string): ArticleReferenceSnapshot | null {
+  let parsed: Record<string, unknown> | null = null;
   try {
-    const parsed = JSON.parse(decodeURIComponent(payload)) as Partial<ArticleReferenceSnapshot>;
-    const snapshot = normalizeArticleReferenceSnapshot(parsed);
-    return snapshot.url ? snapshot : null;
+    const decoded = decodeURIComponent(payload);
+    const value = JSON.parse(decoded) as unknown;
+    if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
   } catch {
-    return null;
+    // 新格式使用 base64url，继续尝试解码；旧格式仍由上面的 URI JSON 兼容处理。
   }
+  if (!parsed) {
+    try {
+      const value = JSON.parse(decodeBase64Url(payload)) as unknown;
+      if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed) return null;
+  const compact = typeof parsed.u === "string" ? {
+    url: parsed.u,
+    canonicalUrl: parsed.c,
+    title: parsed.t,
+    source: parsed.s,
+    author: parsed.a,
+    publishedAt: parsed.d,
+    cover: parsed.v,
+    description: parsed.x,
+    summary: parsed.y,
+    keyPoints: parsed.p,
+  } : parsed;
+  const snapshot = normalizeArticleReferenceSnapshot(compact as Partial<ArticleReferenceSnapshot>);
+  return snapshot.url ? snapshot : null;
 }
 
 function referenceMarkerRegex(): RegExp {
@@ -151,9 +224,6 @@ export function articleReferenceCardHtml(input: Partial<ArticleReferenceSnapshot
   const cover = coverUrl
     ? `<img class="article-reference-cover" src="${escapeHtml(articleReferenceCoverSrc(coverUrl, sourceUrl))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`
     : `<span class="article-reference-cover article-reference-cover-fallback" aria-hidden="true">引</span>`;
-  const description = snapshot.description
-    ? `<p class="article-reference-description">${escapeHtml(snapshot.description)}</p>`
-    : "";
   const date = snapshot.publishedAt
     ? `<time class="article-reference-date">${escapeHtml(snapshot.publishedAt)}</time>`
     : "";
@@ -161,5 +231,5 @@ export function articleReferenceCardHtml(input: Partial<ArticleReferenceSnapshot
     ? `<details class="article-reference-summary"><summary>AI 摘要</summary><div class="article-reference-summary-body">${snapshot.summary ? `<p>${escapeHtml(snapshot.summary)}</p>` : ""}${snapshot.keyPoints.length > 0 ? `<ul>${snapshot.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>` : ""}</div></details>`
     : "";
 
-  return `<aside class="article-reference-card" aria-label="引用文章"><div class="article-reference-main">${cover}<div class="article-reference-copy"><p class="article-reference-source">${escapeHtml(sourceLine)}${date ? ` · ${date}` : ""}</p><h3 class="article-reference-title"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(snapshot.title)}</a></h3>${description}</div></div>${summary}<a class="article-reference-original" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">阅读原文 ↗</a></aside>`;
+  return `<aside class="article-reference-card" aria-label="引用文章"><div class="article-reference-main">${cover}<div class="article-reference-copy"><p class="article-reference-source">${escapeHtml(sourceLine)}${date ? ` · ${date}` : ""}</p><h3 class="article-reference-title"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(snapshot.title)}</a></h3></div></div>${summary}</aside>`;
 }

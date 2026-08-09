@@ -144,7 +144,6 @@ export function ArticleReferenceDialog({ onClose }: Props) {
                 {snapshot.publishedAt && <p className="mt-1 text-xs text-neutral-400">{snapshot.publishedAt}</p>}
               </div>
             </div>
-            {snapshot.description && <p className="mt-3 text-sm leading-6 text-neutral-600">{snapshot.description}</p>}
             {(summarizing || snapshot.summary || snapshot.keyPoints.length > 0 || summaryMessage) && (
               <div className="mt-3 rounded-lg border border-accent/20 bg-accent/5 px-3 py-2.5">
                 <p className="text-xs font-medium text-accent">{summarizing ? "AI 摘要生成中…" : "AI 摘要"}</p>
@@ -156,7 +155,7 @@ export function ArticleReferenceDialog({ onClose }: Props) {
           </div>
         )}
 
-        <p className="mt-3 text-xs leading-5 text-neutral-400">引用卡片只保存标题、来源、封面和摘要快照；正文访问时不会再次请求原网页。原文链接会在新标签页打开。</p>
+        <p className="mt-3 text-xs leading-5 text-neutral-400">标题可直接打开原文；引用卡片只保存标题、来源、封面和摘要快照，正文访问时不会再次请求原网页。</p>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={() => onClose(null)} className="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm text-neutral-600 hover:bg-neutral-50">取消</button>
           {snapshot && !summarizing && !snapshot.summary && <button type="button" onClick={() => void generateSummary(snapshot)} className="rounded-lg border border-accent/40 px-3.5 py-2 text-sm text-accent hover:bg-accent/5">生成 AI 摘要</button>}

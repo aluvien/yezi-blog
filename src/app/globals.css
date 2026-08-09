@@ -1846,17 +1846,6 @@ summary {
   color: var(--accent);
 }
 
-.article-body .article-reference-description {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 0.35rem 0 0;
-  color: var(--muted);
-  font-size: 0.86em;
-  line-height: 1.55;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
 .article-reference-date {
   color: var(--muted);
   font-family: var(--font-site-mono);
@@ -1893,17 +1882,6 @@ summary {
 
 .article-body .article-reference-summary-body li + li {
   margin-top: 0.2rem;
-}
-
-.article-body .article-reference-original {
-  display: inline-block;
-  margin-top: 0.8rem;
-  color: var(--muted);
-  font-size: 0.78em;
-}
-
-.article-body .article-reference-original:hover {
-  color: var(--accent);
 }
 
 @media (max-width: 699px) {

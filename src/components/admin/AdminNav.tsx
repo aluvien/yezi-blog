@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const NAV: Array<{ href: string; label: string; exact?: boolean }> = [
   { href: "/admin", label: "仪表盘", exact: true },
   { href: "/admin/posts", label: "文章" },
+  { href: "/admin/references", label: "引用" },
   { href: "/admin/moments", label: "想法" },
   { href: "/admin/comments", label: "评论" },
   { href: "/admin/works", label: "作品" },
