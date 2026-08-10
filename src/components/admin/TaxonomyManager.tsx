@@ -65,7 +65,7 @@ export default function TaxonomyManager({ categories, tags }: Props) {
 
   return (
     <div className="flex flex-col gap-5">
-      <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+      <section className="admin-card rounded-2xl bg-white p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-medium tracking-[0.14em] text-accent">CATEGORIES</p>
@@ -120,7 +120,7 @@ export default function TaxonomyManager({ categories, tags }: Props) {
         )}
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+      <section className="admin-card rounded-2xl bg-white p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-medium tracking-[0.14em] text-accent">TAGS</p>

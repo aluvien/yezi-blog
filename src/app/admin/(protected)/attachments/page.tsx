@@ -5,6 +5,7 @@ import DeleteButton from "@/components/admin/DeleteButton";
 import ClearUnusedAttachmentsButton from "@/components/admin/ClearUnusedAttachmentsButton";
 import CompressAttachmentButton from "@/components/admin/CompressAttachmentButton";
 import { formatDate } from "@/lib/format";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +21,12 @@ export default function AdminAttachmentsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold">附件管理（{attachments.length}）</h1>
-          <p className="mt-1 text-sm text-neutral-500">同时扫描上传目录；目录中未入库、未被使用的文件也可以安全清理。</p>
-        </div>
-        <ClearUnusedAttachmentsButton count={unusedCount} />
-      </div>
+      <AdminPageHeader
+        eyebrow="ATTACHMENTS"
+        title={`附件管理（${attachments.length}）`}
+        description="同时扫描上传目录；目录中未入库、未被使用的文件也可以安全清理。"
+        actions={<ClearUnusedAttachmentsButton count={unusedCount} />}
+      />
 
       {attachments.length === 0 ? (
         <p className="rounded-2xl bg-white py-12 text-center text-sm text-neutral-400">还没有上传附件</p>
@@ -35,7 +35,7 @@ export default function AdminAttachmentsPage() {
           {attachments.map((attachment) => (
             <li
               key={attachment.path}
-              className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 gap-y-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:items-center sm:p-5"
+              className="admin-card admin-content-card grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 gap-y-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:items-center sm:p-5"
             >
               {attachment.mime_type.startsWith("image/") ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -60,7 +60,7 @@ export default function AdminAttachmentsPage() {
                     <Link
                       key={`${ref.type}-${ref.id}-${i}`}
                       href={ref.type === "post" ? `/admin/posts/${ref.id}/edit` : `/admin/moments/${ref.id}/edit`}
-                      className="min-w-0 truncate text-blue-700 no-underline hover:text-blue-900"
+                      className="admin-link min-w-0 truncate text-blue-700 no-underline hover:text-blue-900"
                     >
                       {ref.type === "post"
                         ? `${ref.usage === "cover" ? "封面：" : ref.usage === "content+cover" ? "正文+封面：" : "文章："}${ref.label}`
@@ -70,8 +70,8 @@ export default function AdminAttachmentsPage() {
                 </div>
               </div>
               <div className="col-start-2 flex shrink-0 items-center gap-3 sm:col-start-3 sm:row-start-1 sm:justify-self-end">
-                {attachment.tracked && <Link href={`/admin/attachments/${attachment.id}`} className="text-sm text-blue-700 no-underline">详情</Link>}
-                <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 no-underline">打开</a>
+                {attachment.tracked && <Link href={`/admin/attachments/${attachment.id}`} className="admin-action-link admin-action-link-primary text-sm text-blue-700 no-underline">详情</Link>}
+                <a href={attachment.path} target="_blank" rel="noopener noreferrer" className="admin-action-link admin-action-link-primary text-sm text-blue-700 no-underline">打开</a>
                 {["image/jpeg", "image/png", "image/webp"].includes(attachment.mime_type) && (
                   <CompressAttachmentButton
                     action={attachment.tracked ? compressAttachmentAction.bind(null, attachment.id) : compressUntrackedAttachmentAction.bind(null, attachment.path)}

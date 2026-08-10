@@ -74,7 +74,8 @@ const MARKDOWN_IMAGE_WIDTHS = [360, 480, 640, 750, 828, 1080, 1200, 1440, 1920];
 const MARKDOWN_IMAGE_SIZES = "(max-width: 860px) calc(100vw - 2rem), 800px";
 
 function nextImageUrl(src: string, width: number): string {
-  return `/_next/image?url=${encodeURIComponent(src)}&w=${width}&q=72`;
+  const params = new URLSearchParams({ url: src, w: String(width), q: "72" });
+  return `/image?${params.toString()}`;
 }
 
 function renderMarkdownImage(src: string, alt: string, titleAttribute: string): string {

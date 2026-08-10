@@ -3,6 +3,7 @@ import { getContentMetricsBulk, listMoments, parseMomentImages } from "@/lib/db"
 import { deleteMomentAction } from "@/lib/actions/moments";
 import { formatDate } from "@/lib/format";
 import DeleteButton from "@/components/admin/DeleteButton";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -12,22 +13,25 @@ export default function AdminMomentsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">想法（{moments.length}）</h1>
-        <Link
-          href="/admin/moments/new"
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white active:bg-neutral-700"
-        >
-          + 发想法
-        </Link>
-      </div>
-      <p className="text-xs leading-5 text-neutral-400">浏览数在访客实际看到想法时统计，同一访客对同一条内容 30 天内只计一次；总浏览数也会汇总到仪表盘。</p>
+      <AdminPageHeader
+        eyebrow="MOMENTS"
+        title={`想法（${moments.length}）`}
+        description="浏览数在访客实际看到想法时统计，同一访客对同一条内容 30 天内只计一次；总浏览数也会汇总到仪表盘。"
+        actions={(
+          <Link
+            href="/admin/moments/new"
+            className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white active:bg-neutral-700"
+          >
+            + 发想法
+          </Link>
+        )}
+      />
       {moments.length === 0 && <p className="py-10 text-center text-sm text-neutral-400">还没有想法</p>}
       <ul className="flex flex-col gap-2">
         {moments.map((moment) => {
           const images = parseMomentImages(moment);
           return (
-            <li key={moment.id} className="rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+            <li key={moment.id} className="admin-card admin-content-card rounded-2xl bg-white p-4 shadow-sm sm:p-5">
               <Link
                 href={`/admin/moments/${moment.id}/edit`}
                 className="block whitespace-pre-wrap text-base transition-colors hover:text-accent"
@@ -52,8 +56,8 @@ export default function AdminMomentsPage() {
                   点赞 {metrics.get(moment.id)?.likes ?? 0}
                 </span>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <Link href={`/moments#moment-${moment.id}`} target="_blank" className="text-sm text-blue-700 hover:text-blue-900">查看</Link>
-                  <Link href={`/admin/moments/${moment.id}/edit`} className="text-sm text-neutral-700 hover:text-neutral-950">编辑</Link>
+                  <Link href={`/moments#moment-${moment.id}`} target="_blank" className="admin-action-link admin-action-link-primary text-sm text-blue-700 hover:text-blue-900">查看</Link>
+                  <Link href={`/admin/moments/${moment.id}/edit`} className="admin-action-link admin-action-link-primary text-sm text-neutral-700 hover:text-neutral-950">编辑</Link>
                   <DeleteButton action={deleteMomentAction.bind(null, moment.id)} />
                 </div>
               </div>

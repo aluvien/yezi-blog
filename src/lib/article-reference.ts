@@ -232,9 +232,15 @@ export function articleReferenceCardHtml(input: Partial<ArticleReferenceSnapshot
   const date = snapshot.publishedAt
     ? `<time class="article-reference-date">${escapeHtml(snapshot.publishedAt)}</time>`
     : "";
-  const summary = snapshot.summary || snapshot.keyPoints.length > 0
-    ? `<details class="article-reference-summary"><summary>AI 摘要</summary><div class="article-reference-summary-body">${snapshot.summary ? `<p>${escapeHtml(snapshot.summary)}</p>` : ""}${snapshot.keyPoints.length > 0 ? `<ul>${snapshot.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>` : ""}</div></details>`
+  const hasSummary = Boolean(snapshot.summary || snapshot.keyPoints.length > 0);
+  const summaryBody = hasSummary
+    ? `<div class="article-reference-summary-body">${snapshot.summary ? `<p>${escapeHtml(snapshot.summary)}</p>` : ""}${snapshot.keyPoints.length > 0 ? `<ul>${snapshot.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>` : ""}</div>`
     : "";
+  const actions = `<div class="article-reference-actions">${hasSummary ? `<span class="article-reference-summary-label">AI 摘要</span>` : ""}<a class="article-reference-read-original" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">阅读原文</a></div>`;
+  const main = `<div class="article-reference-main">${cover}<div class="article-reference-copy"><p class="article-reference-source">${escapeHtml(sourceLine)}${date ? ` · ${date}` : ""}</p><h3 class="article-reference-title">${escapeHtml(snapshot.title)}</h3></div></div>`;
 
-  return `<aside class="article-reference-card" aria-label="引用文章"><div class="article-reference-main">${cover}<div class="article-reference-copy"><p class="article-reference-source">${escapeHtml(sourceLine)}${date ? ` · ${date}` : ""}</p><h3 class="article-reference-title"><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(snapshot.title)}</a></h3></div></div>${summary}</aside>`;
+  if (hasSummary) {
+    return `<details class="article-reference-card"><summary class="article-reference-card-summary">${main}${actions}</summary>${summaryBody}</details>`;
+  }
+  return `<aside class="article-reference-card" aria-label="引用文章">${main}${actions}</aside>`;
 }

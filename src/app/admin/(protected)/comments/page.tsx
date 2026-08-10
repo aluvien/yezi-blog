@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listCommentsForAdmin } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import CommentActions from "@/components/admin/CommentActions";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +23,13 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold">评论管理</h1>
-        <p className="mt-1 text-sm text-neutral-500">审核访客评论、公开或撤回，并以作者身份回复。</p>
-      </div>
+      <AdminPageHeader eyebrow="COMMENTS" title="评论管理" description="审核访客评论、公开或撤回，并以作者身份回复。" />
       <nav className="flex gap-2 overflow-x-auto" aria-label="评论筛选">
         {tabs.map((tab) => (
           <Link
             key={tab.value}
             href={tab.value === "all" ? "/admin/comments" : `/admin/comments?status=${tab.value}`}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${status === tab.value ? "bg-neutral-900 text-white" : "bg-white text-neutral-600 shadow-sm"}`}
+            className={`admin-filter-tab shrink-0 rounded-full px-3 py-1.5 text-sm ${status === tab.value ? "is-active bg-neutral-900 text-white" : "bg-white text-neutral-600 shadow-sm"}`}
           >
             {tab.label} {tab.count}
           </Link>
@@ -44,7 +42,7 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
             ? comment.target_slug ? `/posts/${comment.target_slug}#comments` : null
             : `/moments#moment-${comment.target_id}`;
           return (
-            <li key={comment.id} className="rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+            <li key={comment.id} className="admin-card admin-content-card rounded-2xl bg-white p-4 shadow-sm sm:p-5">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="min-w-0 max-w-full text-sm font-medium">
                   {comment.nickname}
@@ -53,7 +51,7 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
                     {comment.status === "pending" ? "待审核" : "已公开"}
                   </span>
                   {comment.website && (
-                    <a href={comment.website} target="_blank" rel="noopener noreferrer" className="ml-2 break-all text-xs font-normal text-blue-700 underline">网站</a>
+                    <a href={comment.website} target="_blank" rel="noopener noreferrer" className="admin-action-link admin-action-link-primary ml-2 break-all text-xs font-normal text-blue-700">网站</a>
                   )}
                 </span>
               </div>
@@ -65,7 +63,7 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
               )}
               <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500">
                 <span>{comment.target_type === "post" ? "文章" : "想法"}：</span>
-                {targetHref ? <Link href={targetHref} target="_blank" className="max-w-full truncate text-blue-700 hover:text-blue-900">{comment.target_label ?? "查看内容"}</Link> : <span>{comment.target_label ?? "目标已删除"}</span>}
+                {targetHref ? <Link href={targetHref} target="_blank" className="admin-link max-w-full truncate text-blue-700 hover:text-blue-900">{comment.target_label ?? "查看内容"}</Link> : <span>{comment.target_label ?? "目标已删除"}</span>}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400">
                 <span>IP {comment.ip_address || "历史记录无真实 IP"}</span><span>·</span><span>{formatDate(comment.created_at)}</span>

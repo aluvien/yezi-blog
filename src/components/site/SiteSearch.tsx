@@ -1,12 +1,26 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export function SiteSearch() {
   const router = useRouter();
+  const searchRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+
+    function closeWhenClickingOutside(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && searchRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", closeWhenClickingOutside);
+    return () => document.removeEventListener("pointerdown", closeWhenClickingOutside);
+  }, [open]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -16,7 +30,7 @@ export function SiteSearch() {
   }
 
   return (
-    <div className="site-search">
+    <div ref={searchRef} className="site-search">
       <button
         type="button"
         aria-label={open ? "关闭搜索" : "打开搜索"}

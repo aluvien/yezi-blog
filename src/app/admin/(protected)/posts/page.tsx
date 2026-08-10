@@ -4,6 +4,7 @@ import { parsePostTags } from "@/lib/post-tags";
 import { deletePostAction } from "@/lib/actions/posts";
 import { formatDate } from "@/lib/format";
 import DeleteButton from "@/components/admin/DeleteButton";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -13,22 +14,26 @@ export default function AdminPostsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">文章（{posts.length}）</h1>
-        <Link
-          href="/admin/posts/new"
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white active:bg-neutral-700"
-        >
-          + 写文章
-        </Link>
-      </div>
+      <AdminPageHeader
+        eyebrow="POSTS"
+        title={`文章（${posts.length}）`}
+        description="管理已发布文章与草稿内容，查看文章数据并维护分类和标签。"
+        actions={(
+          <Link
+            href="/admin/posts/new"
+            className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white active:bg-neutral-700"
+          >
+            + 写文章
+          </Link>
+        )}
+      />
       {posts.length === 0 && <p className="py-10 text-center text-sm text-neutral-400">还没有文章</p>}
       <ul className="flex flex-col gap-2">
         {posts.map((post) => {
           const tags = parsePostTags(post.tags);
           const postMetrics = metrics.get(post.id) ?? { views: 0, likes: 0 };
           return (
-            <li key={post.id} className="rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+            <li key={post.id} className="admin-card admin-content-card rounded-2xl bg-white p-4 shadow-sm sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -64,9 +69,9 @@ export default function AdminPostsPage() {
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-x-4 gap-y-2 sm:pt-0.5">
                   {post.status === "published" && (
-                    <Link href={`/posts/${post.slug}`} target="_blank" className="text-sm text-blue-700 hover:text-blue-900">查看</Link>
+                    <Link href={`/posts/${post.slug}`} target="_blank" className="admin-action-link admin-action-link-primary text-sm text-blue-700 hover:text-blue-900">查看</Link>
                   )}
-                  <Link href={`/admin/posts/${post.id}/edit`} className="text-sm text-neutral-700 hover:text-neutral-950">
+                  <Link href={`/admin/posts/${post.id}/edit`} className="admin-action-link admin-action-link-primary text-sm text-neutral-700 hover:text-neutral-950">
                     编辑
                   </Link>
                   <DeleteButton action={deletePostAction.bind(null, post.id)} />

@@ -39,7 +39,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
       ) : (
         <div>
           {shown.map((post) => (
-            <div key={post.id} className="py-6 md:py-7">
+            <div key={post.id} className="site-list-entry py-6 md:py-7">
               <PostEntry post={post} commentCount={commentCounts.get(post.id) ?? 0} canEdit={isAuthorized} />
             </div>
           ))}

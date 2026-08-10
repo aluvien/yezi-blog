@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState, type CSSProperties } from "react";
+import imageLoader from "@/lib/image-loader";
 
 type SiteImageProps = {
   src: string;
@@ -61,6 +62,7 @@ export function SiteImage({
         <Image
           src={src}
           alt={alt}
+          loader={imageLoader}
           fill
           sizes={sizes}
           quality={quality}
@@ -78,6 +80,7 @@ export function SiteImage({
       <Image
         src={src}
         alt={alt}
+        loader={imageLoader}
         width={width ?? 1200}
         height={height ?? 800}
         sizes={sizes}

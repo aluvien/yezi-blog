@@ -2,6 +2,8 @@ import Link from "next/link";
 import { articleReferenceCoverSrc, formatArticleReferenceDate } from "@/lib/article-reference";
 import { listArticleReferences } from "@/lib/db";
 import { formatDate } from "@/lib/format";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
+import AdminReferenceSummary from "@/components/admin/AdminReferenceSummary";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +31,11 @@ export default function AdminReferencesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <p className="text-xs font-medium tracking-[0.14em] text-accent">ARTICLE REFERENCES</p>
-        <h1 className="mt-1 text-xl font-bold">引用管理（{references.length}）</h1>
-        <p className="mt-2 text-sm text-neutral-500">查看引用文章的来源、封面、日期、摘要和所在文章。正文中的引用标记已使用短格式保存。</p>
-      </div>
+      <AdminPageHeader
+        eyebrow="ARTICLE REFERENCES"
+        title={`引用管理（${references.length}）`}
+        description="查看引用文章的来源、封面、日期、摘要和所在文章。正文中的引用标记已使用短格式保存。"
+      />
 
       {references.length === 0 ? (
         <p className="rounded-2xl bg-white py-12 text-center text-sm text-neutral-400">还没有保存文章引用</p>
@@ -43,7 +45,7 @@ export default function AdminReferencesPage() {
             const points = parseKeyPoints(reference.key_points);
             const publishedAt = formatArticleReferenceDate(reference.published_at);
             return (
-              <li key={reference.id} className="rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+                <li key={reference.id} className="admin-card admin-content-card rounded-2xl bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex min-w-0 gap-3 sm:gap-4">
                   {reference.cover ? (
                     // 引用封面统一走服务端代理，避免公众号图片防盗链。
@@ -77,19 +79,13 @@ export default function AdminReferencesPage() {
                   </span>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 text-xs">
+                <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 text-xs">
                   <span className={`rounded-full px-2 py-0.5 ${reference.summary || points.length > 0 ? "bg-accent/10 text-accent" : "bg-neutral-100 text-neutral-400"}`}>
                     {reference.summary || points.length > 0 ? "AI 摘要已生成" : "未生成 AI 摘要"}
                   </span>
                   <span className="text-neutral-400">最近同步：{formatDate(reference.updated_at)}</span>
                   {(reference.summary || points.length > 0) && (
-                    <details className="ml-auto">
-                      <summary className="cursor-pointer text-accent">查看摘要</summary>
-                      <div className="mt-2 w-full rounded-lg bg-neutral-50 p-3 leading-5 text-neutral-600">
-                        {reference.summary && <p>{reference.summary}</p>}
-                        {points.length > 0 && <p className="mt-1">要点：{points.join(" · ")}</p>}
-                      </div>
-                    </details>
+                    <AdminReferenceSummary summary={reference.summary} points={points} />
                   )}
                 </div>
               </li>

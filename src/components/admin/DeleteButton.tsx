@@ -26,7 +26,7 @@ export default function DeleteButton({
           router.refresh();
         });
       }}
-      className="text-sm text-red-600 disabled:opacity-50"
+      className="admin-action-link admin-action-link-danger text-sm text-red-600 disabled:opacity-50"
     >
       {pending ? "删除中…" : "删除"}
     </button>

@@ -37,7 +37,7 @@ export default async function MomentsPage() {
         <div>
           {moments.map((moment) => {
             return (
-              <div key={moment.id} className="py-7 md:py-8">
+              <div key={moment.id} className="site-list-entry py-7 md:py-8">
                 <MomentEntry
                   moment={moment}
                   commentCount={commentCounts.get(moment.id) ?? 0}

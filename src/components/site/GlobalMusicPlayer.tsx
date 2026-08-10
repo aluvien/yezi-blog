@@ -51,7 +51,7 @@ function pauseYouTubeFrame(frame: HTMLIFrameElement): void {
 }
 
 /**
- * 全局音乐播放器（右下角悬浮球 + 底部控制面板）。
+ * 全局音乐播放器（左下角悬浮球 + 底部控制面板）。
  *
  * 全站唯一的 APlayer 实例常驻在此组件，挂在 SiteLayoutInner 的布局持久层
  * （`{children}` 之外），站内客户端导航时组件不卸载，音乐因此跨页面连续播放。
@@ -65,11 +65,13 @@ export function GlobalMusicPlayer({
   defaultMusic = "",
   defaultMusicShuffle = false,
   musicFloatEnabled = true,
+  musicFloatInfoEnabled = true,
   musicPosition = "left",
 }: {
   defaultMusic?: string;
   defaultMusicShuffle?: boolean;
   musicFloatEnabled?: boolean;
+  musicFloatInfoEnabled?: boolean;
   musicPosition?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -77,6 +79,7 @@ export function GlobalMusicPlayer({
   const [defaultMusicError, setDefaultMusicError] = useState("");
   const [playing, setPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
+  const [currentLyric, setCurrentLyric] = useState<string | null>(null);
   const [panelDragOffset, setPanelDragOffset] = useState(0);
   const [panelDragging, setPanelDragging] = useState(false);
   const [collapseHintVisible, setCollapseHintVisible] = useState(false);
@@ -95,7 +98,8 @@ export function GlobalMusicPlayer({
   const ownerMapRef = useRef(new Map<number, string | null>());
   const trackIndexRef = useRef(new Map<string, number>());
   const hasDefaultPlaylist = Boolean(parseMusicSpec(defaultMusic));
-  const playerPosition = musicPosition === "right" || musicPosition === "bottom" ? musicPosition : "left";
+  // 旧版本可能保存过 right；新设置不再提供右下角入口，旧值统一回退到左下角。
+  const playerPosition = musicPosition === "bottom" ? "bottom" : "left";
   const shouldShowPlayer = hasTracks || hasDefaultPlaylist;
   const panelOpen = shouldShowPlayer && (open || playerPosition === "bottom");
 
@@ -306,6 +310,10 @@ export function GlobalMusicPlayer({
       const currentTime = Number.isFinite(player.audio.currentTime) ? player.audio.currentTime : 0;
       const lyricLines = lyricReadyByIndex.get(index) ? lyricLinesByIndex.get(index) : undefined;
       const currentLyric = lyricLines ? lyricAt(lyricLines, currentTime) || null : null;
+      const floatLyric = playing
+        ? currentLyric || (lyricReadyByIndex.get(index) ? "暂无歌词" : "歌词加载中…")
+        : null;
+      setCurrentLyric((previous) => previous === floatLyric ? previous : floatLyric);
       emitGlobalPlaybackState({
         playing,
         cardId,
@@ -527,6 +535,7 @@ export function GlobalMusicPlayer({
       lyricLinesByIndex.clear();
       lyricReadyByIndex.clear();
       currentTrackRef.current = null;
+      setCurrentLyric(null);
       emitGlobalPlaybackState({
         playing: false,
         cardId: null,
@@ -636,6 +645,7 @@ export function GlobalMusicPlayer({
   }
 
   const panelStyle = { "--player-drag-y": `${panelDragOffset}px` } as CSSProperties;
+  const showFloatInfo = musicFloatInfoEnabled && playerPosition === "left" && playing && Boolean(currentTrack);
 
   return (
     <>
@@ -643,7 +653,7 @@ export function GlobalMusicPlayer({
       {musicFloatEnabled && playerPosition !== "bottom" && shouldShowPlayer && (
         <button
           type="button"
-          className={`global-player-float ${open ? "is-open" : ""} ${playing ? "is-playing" : ""} ${playerPosition === "right" ? "is-right" : ""}`}
+          className={`global-player-float ${open ? "is-open" : ""} ${playing ? "is-playing" : ""} ${showFloatInfo ? "has-info" : ""}`}
           aria-label={open ? "收起播放器" : currentTrack ? `${playing ? "正在播放" : "播放"}：${currentTrack.name}` : "展开播放器"}
           title={open ? "收起播放器" : currentTrack?.name || "展开播放器"}
           aria-expanded={panelOpen}
@@ -657,6 +667,12 @@ export function GlobalMusicPlayer({
                 <path d="M9 18.5a2.5 2.5 0 1 1-2.5-2.5A2.5 2.5 0 0 1 9 18.5z" />
                 <path d="M12.5 3.5v13.1a3.9 3.9 0 1 1-1.5-3.1V7.2l8-1.8v6.1a3.9 3.9 0 1 1-1.5-3.1V5.5l-5 1.1z" />
               </svg>
+            </span>
+          )}
+          {showFloatInfo && (
+            <span className="global-player-float-info" aria-hidden="true">
+              <span className="global-player-float-title">{currentTrack?.name}</span>
+              <span className="global-player-float-lyric">{currentLyric || "歌词加载中…"}</span>
             </span>
           )}
         </button>

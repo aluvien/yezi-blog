@@ -30,7 +30,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     default_music: initialValues.default_music ?? "",
     default_music_shuffle: initialValues.default_music_shuffle ?? "0",
     music_float_enabled: initialValues.music_float_enabled ?? "1",
-    music_position: initialValues.music_position ?? "left",
+    music_float_info_enabled: initialValues.music_float_info_enabled ?? "1",
+    music_position: initialValues.music_position === "bottom" ? "bottom" : "left",
     theme: initialValues.theme ?? "default",
     layout_theme: initialValues.layout_theme ?? "classic",
     dark_mode: initialValues.dark_mode ?? "auto",
@@ -61,7 +62,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
   return (
     <form onSubmit={submit} className="space-y-5">
       <div className="grid gap-5 xl:grid-cols-12">
-      <section className="rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
+      <section className="admin-card rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-neutral-800">站点信息</h2>
           <p className="mt-1 text-xs text-neutral-500">设置网站名称、副标题和页脚显示内容。</p>
@@ -82,14 +83,14 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm xl:col-span-7 xl:row-span-2 sm:p-6">
+      <section className="admin-card rounded-2xl bg-white p-5 shadow-sm xl:col-span-7 xl:row-span-2 sm:p-6">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-neutral-800">个人资料与品牌</h2>
           <p className="mt-1 text-xs text-neutral-500">这些内容会显示在前台页头、想法、文章和作者卡片中。</p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-4">
-        <div className="rounded-xl border-2 border-accent/25 bg-accent/5 p-4">
+        <div className="admin-settings-highlight rounded-xl border-2 border-accent/25 bg-accent/5 p-4">
           <label className="mb-1 block text-sm font-semibold text-neutral-800">前台作者名称</label>
           <input value={values.author_name} onChange={(event) => update("author_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2" placeholder="例如：Yezi" />
           <p className="mt-1.5 text-xs text-neutral-500">会显示在首页、想法、文章页、评论和作者卡片中；留空时使用默认名称 Yezi。</p>
@@ -108,7 +109,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
 
         </div>
-        <div className="space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+        <div className="admin-settings-subsection space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
           <p className="text-sm font-medium text-neutral-700">头像与 Gravatar</p>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -134,7 +135,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
+      <section className="admin-card rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-neutral-800">社交与关于</h2>
           <p className="mt-1 text-xs text-neutral-500">配置个人链接和关于页的 Markdown 内容。</p>
@@ -152,7 +153,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
       </section>
       </div>
 
-      <section className="space-y-5 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      <section className="admin-card space-y-5 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
         <div>
         <div>
           <h2 className="text-base font-semibold text-neutral-800">音乐设置</h2>
@@ -181,7 +182,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           onDefaultMusicChange={(value) => update("default_music", value)}
         />
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
         <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
           <input
             type="checkbox"
@@ -191,12 +192,20 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           />
           显示音乐图标按钮
         </label>
-        <div className="text-sm text-neutral-700">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={values.music_float_info_enabled === "1"}
+            onChange={(event) => update("music_float_info_enabled", event.target.checked ? "1" : "0")}
+            className="h-4 w-4 accent-neutral-700"
+          />
+          左下角图标显示歌曲名和歌词（桌面端）
+        </label>
+        <div className="text-sm text-neutral-700 md:col-span-2">
           <p>音乐图标/播放器位置</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {[
-              ["left", "左下角"],
-              ["right", "右下角"],
+              ["left", "左下角图标"],
               ["bottom", "底部展开播放器"],
             ].map(([value, label]) => (
               <label key={value} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${values.music_position === value ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
@@ -206,12 +215,12 @@ export default function SiteSettingsForm({ initialValues }: Props) {
             ))}
           </div>
         </div>
-        <p className="text-xs text-neutral-400 md:col-span-2">关闭图标按钮后，播放器仍可由文章音乐触发；选择“底部展开播放器”时不显示悬浮图标，播放器面板会固定展开在页面底部。</p>
+        <p className="text-xs text-neutral-400 md:col-span-2">关闭图标按钮后，播放器仍可由文章音乐触发；选择“底部展开播放器”时不显示悬浮图标，播放器面板会固定展开在页面底部。歌曲名和歌词只显示在桌面端左下角悬浮图标旁。</p>
         </div>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-12">
-      <fieldset className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-8 sm:p-5">
+      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-8 sm:p-5">
         <legend className="px-1 text-sm font-medium text-neutral-700">外观主题</legend>
         <div>
           <p className="text-sm text-neutral-600">前台版式主题（不改变现有内容与数据）</p>
@@ -286,7 +295,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
       </fieldset>
 
-      <fieldset className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-4 xl:self-start sm:p-5">
+      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-4 xl:self-start sm:p-5">
         <legend className="px-1 text-sm font-medium text-neutral-700">文章与列表显示</legend>
         <div className="grid gap-3 md:grid-cols-3">
           <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700">
@@ -305,8 +314,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
       </fieldset>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <button type="submit" disabled={pending} className="rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>
+      <div className="admin-settings-savebar flex flex-wrap items-center gap-4">
+        <button type="submit" disabled={pending} className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>
         {error && <p className="text-sm text-red-600">{error}</p>}
         {message && <p className="text-sm text-green-600">{message}</p>}
       </div>

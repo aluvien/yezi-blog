@@ -152,18 +152,22 @@ export function LightboxOverlay({
             aria-label="上一张"
             disabled={active === 0}
             onClick={(e) => { e.stopPropagation(); goTo(active - 1); }}
-            className="absolute left-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full bg-white/15 px-3 py-1 text-2xl leading-none text-white backdrop-blur transition hover:bg-white/30 disabled:opacity-30 md:flex"
+            className="absolute left-6 top-1/2 hidden h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 p-0 text-white backdrop-blur transition hover:bg-white/30 disabled:opacity-30 md:flex"
           >
-            ‹
+            <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
           </button>
           <button
             type="button"
             aria-label="下一张"
             disabled={active === images.length - 1}
             onClick={(e) => { e.stopPropagation(); goTo(active + 1); }}
-            className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full bg-white/15 px-3 py-1 text-2xl leading-none text-white backdrop-blur transition hover:bg-white/30 disabled:opacity-30 md:flex"
+            className="absolute right-6 top-1/2 hidden h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 p-0 text-white backdrop-blur transition hover:bg-white/30 disabled:opacity-30 md:flex"
           >
-            ›
+            <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
           </button>
         </>
       )}
@@ -174,9 +178,11 @@ export function LightboxOverlay({
           e.stopPropagation();
           onClose();
         }}
-        className="absolute right-5 top-4 z-10 text-2xl font-light leading-none text-white/60 transition-colors hover:text-white"
+        className="absolute right-5 top-4 z-10 flex h-14 w-14 items-center justify-center text-white/65 transition-colors hover:text-white"
       >
-        ×
+        <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+          <path d="m5 5 14 14M19 5 5 19" />
+        </svg>
       </button>
       {hasMultiple && (
         <span className="pointer-events-none absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 font-mono text-xs text-white/80">

@@ -40,18 +40,18 @@ export default function CommentActions({
   }
 
   return (
-    <div className="mt-3 border-t border-neutral-100 pt-3">
+    <div className="admin-comment-actions mt-3 border-t border-neutral-100 pt-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {status === "pending" ? (
-          <button type="button" disabled={pending} onClick={() => run(() => approveCommentAction(id))} className="text-sm font-medium text-green-700 disabled:opacity-50">
+          <button type="button" disabled={pending} onClick={() => run(() => approveCommentAction(id))} className="admin-action-link admin-action-link-success text-sm font-medium text-green-700 disabled:opacity-50">
             通过并公开
           </button>
         ) : (
-          <button type="button" disabled={pending} onClick={() => run(() => hideCommentAction(id))} className="text-sm text-amber-700 disabled:opacity-50">
+          <button type="button" disabled={pending} onClick={() => run(() => hideCommentAction(id))} className="admin-action-link admin-action-link-warning text-sm text-amber-700 disabled:opacity-50">
             撤回审核
           </button>
         )}
-        <button type="button" disabled={pending} onClick={() => setEditingReply((value) => !value)} className="text-sm text-blue-700 disabled:opacity-50">
+        <button type="button" disabled={pending} onClick={() => setEditingReply((value) => !value)} className="admin-action-link admin-action-link-primary text-sm text-blue-700 disabled:opacity-50">
           {editingReply ? "收起回复" : initialReply ? "编辑作者回复" : "作者回复"}
         </button>
         <button
@@ -60,7 +60,7 @@ export default function CommentActions({
           onClick={() => {
             if (window.confirm("确定永久删除这条评论？")) run(() => deleteCommentAction(id));
           }}
-          className="text-sm text-red-600 disabled:opacity-50"
+          className="admin-action-link admin-action-link-danger text-sm text-red-600 disabled:opacity-50"
         >
           删除
         </button>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getAttachment } from "@/lib/db";
 import { AttachmentCrop } from "@/components/admin/AttachmentCrop";
 import { formatDate } from "@/lib/format";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +21,12 @@ export default async function AttachmentDetailPage({ params }: { params: Promise
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
+      <div className="flex flex-col gap-2">
         <Link href="/admin/attachments" className="text-sm text-neutral-500 hover:text-neutral-900">← 返回附件列表</Link>
-        <h1 className="mt-2 text-xl font-bold">附件详情</h1>
+        <AdminPageHeader eyebrow="ATTACHMENT DETAIL" title="附件详情" description="查看文件信息、引用关系，并对图片进行裁切处理。" />
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-sm">
+      <div className="admin-card rounded-2xl bg-white p-5 shadow-sm">
         {isImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={attachment.path} alt={attachment.original_name} className="max-h-[400px] rounded-lg object-contain" />
@@ -48,7 +49,7 @@ export default async function AttachmentDetailPage({ params }: { params: Promise
       </div>
 
       {isImage && (
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <div className="admin-card rounded-2xl bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-neutral-800">重新裁切</h2>
           <p className="mt-1 text-xs text-neutral-400">拖拽选区后点击按钮,裁切结果另存为新附件(保留原图)。</p>
           <div className="mt-4">

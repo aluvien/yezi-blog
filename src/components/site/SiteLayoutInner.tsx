@@ -13,6 +13,7 @@ import { GlobalMusicPlayer } from "@/components/site/GlobalMusicPlayer";
 import { ErrorBoundary } from "@/components/site/ErrorBoundary";
 import { SiteImage } from "@/components/site/SiteImage";
 import { NavigationFeedback } from "@/components/site/NavigationFeedback";
+import { SiteScrollManager } from "@/components/site/SiteScrollManager";
 
 export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [] }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }> }) {
   const pathname = usePathname();
@@ -53,6 +54,9 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
         <Suspense fallback={null}>
           <NavigationFeedback />
         </Suspense>
+        <Suspense fallback={null}>
+          <SiteScrollManager />
+        </Suspense>
         <header className="site-frame-header">
           <Link href="/" className="site-brand-link group flex min-w-0 items-center gap-3">
             {siteLogo ? (
@@ -71,7 +75,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
+                  className={`site-primary-nav-link inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
                     pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href)) ? "text-accent" : "text-muted hover:text-foreground"
                   }`}
                 >
@@ -203,6 +207,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
           defaultMusic={siteSettings.default_music?.trim()}
           defaultMusicShuffle={siteSettings.default_music_shuffle === "1"}
           musicFloatEnabled={siteSettings.music_float_enabled !== "0"}
+          musicFloatInfoEnabled={siteSettings.music_float_info_enabled !== "0"}
           musicPosition={siteSettings.music_position}
         />
       </ErrorBoundary>

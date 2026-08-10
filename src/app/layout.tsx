@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { site } from "@/lib/site";
 import { getCachedSiteSettings } from "@/lib/server-data";
 import { normalizeDarkMode, normalizeLayoutTheme, normalizePalette } from "@/lib/theme";
+import { ViewportZoomLock } from "@/components/site/ViewportZoomLock";
 import "./globals.css";
 import "aplayer/dist/APlayer.min.css";
 
@@ -34,6 +35,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  minimumScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   themeColor: [
     { media: "(max-width: 699px)", color: "#ffffff" },
     { media: "(min-width: 700px)", color: "#f7f7f9" },
@@ -68,6 +72,7 @@ export default function RootLayout({
       <link rel="stylesheet" href="/fonts/chiron/css/vf.css" />
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <ViewportZoomLock />
         {children}
       </body>
     </html>

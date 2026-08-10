@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const NAV: Array<{ href: string; label: string; exact?: boolean }> = [
   { href: "/admin", label: "仪表盘", exact: true },
@@ -25,12 +25,35 @@ function isActive(pathname: string, href: string, exact?: boolean): boolean {
 export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
   const pathname = usePathname();
   const dataActive = DATA_NAV.some((item) => isActive(pathname, item.href));
-  const dataMenuRef = useRef<HTMLDetailsElement>(null);
+  const [dataOpen, setDataOpen] = useState(false);
+  const dataMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dataOpen) return;
+
+    function closeWhenClickingOutside(event: PointerEvent) {
+      if (event.target instanceof Node && !dataMenuRef.current?.contains(event.target)) {
+        setDataOpen(false);
+      }
+    }
+
+    function closeWithEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setDataOpen(false);
+    }
+
+    document.addEventListener("pointerdown", closeWhenClickingOutside);
+    document.addEventListener("keydown", closeWithEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeWhenClickingOutside);
+      document.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [dataOpen]);
+
   function closeDataMenu() {
-    dataMenuRef.current?.removeAttribute("open");
+    setDataOpen(false);
   }
   return (
-    <nav className="admin-nav flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-visible sm:flex-nowrap sm:overflow-x-auto" aria-label="后台导航">
+    <nav className="admin-nav flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-visible sm:flex-nowrap sm:overflow-visible" aria-label="后台导航">
       {NAV.map((item) => {
         const active = isActive(pathname, item.href, item.exact);
         const className = `admin-nav-link relative shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${
@@ -48,16 +71,22 @@ export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
           </Link>
         );
       })}
-      <details ref={dataMenuRef} className="admin-nav-menu group relative shrink-0">
-        <summary
-          className={`admin-nav-link flex cursor-pointer list-none items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm [&::-webkit-details-marker]:hidden ${
+      <div ref={dataMenuRef} className="admin-nav-menu relative shrink-0">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={dataOpen}
+          onClick={() => setDataOpen((open) => !open)}
+          className={`admin-nav-link admin-nav-menu-trigger flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${
             dataActive ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"
-          }`}
+          }${dataOpen ? " is-open" : ""}`}
         >
-          数据
-          <span aria-hidden="true" className="text-[10px] opacity-60 transition-transform group-open:rotate-180">⌄</span>
-        </summary>
-        <div className="admin-nav-submenu absolute left-0 top-[calc(100%+6px)] z-20 flex min-w-24 flex-col gap-1 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg">
+          <span>数据</span>
+          <svg aria-hidden="true" viewBox="0 0 12 12" className="admin-nav-chevron h-3 w-3 shrink-0 fill-none stroke-current stroke-[1.6]">
+            <path d="m3 4.5 3 3 3-3" />
+          </svg>
+        </button>
+        <div className="admin-nav-submenu absolute left-0 top-[calc(100%+8px)] z-20 flex min-w-36 flex-col gap-1 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg" role="menu" hidden={!dataOpen}>
           {DATA_NAV.map((item) => {
             const active = isActive(pathname, item.href);
             return (
@@ -65,14 +94,15 @@ export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
                 key={item.href}
                 href={item.href}
                 onClick={closeDataMenu}
-                className={`rounded-lg px-3 py-2 text-sm no-underline transition-colors ${active ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
+                role="menuitem"
+                className={`admin-nav-submenu-link rounded-lg px-3 py-2 text-sm no-underline transition-colors ${active ? "is-active bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
               >
                 {item.label}
               </Link>
             );
           })}
         </div>
-      </details>
+      </div>
       <Link
         href="/admin/settings"
         onClick={closeDataMenu}

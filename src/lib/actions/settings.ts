@@ -33,6 +33,7 @@ const SETTING_KEYS = [
   "default_music",
   "default_music_shuffle",
   "music_float_enabled",
+  "music_float_info_enabled",
   "music_position",
   "theme",
   "layout_theme",
@@ -52,7 +53,8 @@ export async function updateSiteSettingsAction(values: Record<string, string>): 
       continue;
     }
     const limit = key === "about_content" ? 20000 : 2000;
-    safeValues[key] = String(values[key] ?? "").trim().slice(0, limit);
+    const value = String(values[key] ?? "").trim().slice(0, limit);
+    safeValues[key] = key === "music_position" ? (value === "bottom" ? "bottom" : "left") : value;
   }
   setSiteSettings(safeValues);
   revalidatePath("/", "layout");

@@ -25,7 +25,7 @@ function CardIcon({ name }: { name: CardIconName }) {
 function Label({ icon, children }: { icon: CardIconName; children: React.ReactNode }) {
   return (
     <p className="site-sidebar-label">
-      <span className="inline-flex items-center gap-2">
+      <span className="site-sidebar-label-content inline-flex items-center gap-2">
         <CardIcon name={icon} />
         {children}
       </span>

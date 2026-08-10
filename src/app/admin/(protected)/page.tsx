@@ -13,6 +13,7 @@ import {
   listRecentTags,
 } from "@/lib/db";
 import { formatDateOnly } from "@/lib/format";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +41,12 @@ export default function AdminDashboard() {
     { label: "阅读", count: metrics.views, href: "/admin" },
     { label: "点赞", count: metrics.likes, href: "/admin" },
     { label: "附件", count: countAttachments(), href: "/admin/attachments" },
+    { label: "引用", count: referenceCount, href: "/admin/references" },
   ];
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-xl font-bold">仪表盘</h1>
+      <AdminPageHeader eyebrow="DASHBOARD" title="仪表盘" description="查看内容规模、互动数据和最近更新。" />
 
       {/* 第一排:文章 / 想法 / 作品 / 评论 */}
       <div className="grid grid-cols-4 gap-2 sm:gap-3">
@@ -52,7 +54,7 @@ export default function AdminDashboard() {
           <Link
             key={s.label}
             href={s.href}
-            className="min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
+            className="admin-card admin-dashboard-stat min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
           >
             <div className="text-xl font-bold sm:text-2xl">{s.count}</div>
             <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">
@@ -62,42 +64,25 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* 第二排:阅读 / 点赞 / 附件 / 分类管理(不显示数量) */}
+      {/* 第二排:阅读 / 点赞 / 附件 / 引用 */}
       <div className="grid grid-cols-4 gap-2 sm:gap-3">
         {row2.map((s) => (
           <Link
             key={s.label}
             href={s.href}
-            className="min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
+            className="admin-card admin-dashboard-stat min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
           >
             <div className="text-xl font-bold sm:text-2xl">{s.count}</div>
             <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">
               {s.label}
             </div>
-          </Link>
-        ))}
-        <Link
-          href="/admin/categories"
-          className="min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
-        >
-          <div className="truncate whitespace-nowrap text-sm font-medium text-neutral-700 sm:text-base">分类管理</div>
-          <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">维护索引</div>
-        </Link>
+            </Link>
+          ))}
       </div>
-
-      <Link href="/admin/references" className="rounded-2xl bg-white p-4 shadow-sm transition-colors hover:bg-neutral-50">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-neutral-800">引用管理</h2>
-            <p className="mt-1 text-xs text-neutral-500">查看文章引用、来源信息和 AI 摘要</p>
-          </div>
-          <span className="shrink-0 text-sm text-neutral-500">{referenceCount} 条 →</span>
-        </div>
-      </Link>
 
       {/* 第三排:标签+分类(上下堆叠) / 最新文章 / 最新评论 */}
       <div className="grid gap-3 md:grid-cols-3">
-        <section className="flex flex-col rounded-2xl bg-white p-4 shadow-sm">
+        <section className="admin-card admin-dashboard-panel flex flex-col rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-neutral-800">最新分类</h2>
           {recentCategories.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -117,7 +102,7 @@ export default function AdminDashboard() {
           ) : <p className="mt-3 text-sm text-neutral-400">还没有标签</p>}
         </section>
 
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="admin-card admin-dashboard-panel rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-neutral-800">最新文章</h2>
           {recentPosts.length > 0 ? (
             <ul className="mt-3 flex flex-col gap-3 text-sm">
@@ -138,7 +123,7 @@ export default function AdminDashboard() {
           ) : <p className="mt-3 text-sm text-neutral-400">还没有文章</p>}
         </section>
 
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="admin-card admin-dashboard-panel rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-neutral-800">最新评论</h2>
           {recentComments.length > 0 ? (
             <ul className="mt-3 flex flex-col gap-3 text-sm">

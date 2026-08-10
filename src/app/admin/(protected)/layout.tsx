@@ -10,7 +10,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const pendingCount = countPendingComments();
 
   return (
-    <div className="h-screen overflow-y-auto bg-neutral-50">
+    <div className="admin-shell h-screen overflow-y-auto bg-neutral-50">
       <header className="admin-header sticky top-0 z-10 border-b border-neutral-200 bg-white">
         <div className="admin-header-inner mx-auto flex min-h-14 max-w-[1280px] items-center gap-2 px-3 sm:px-6 lg:px-8">
           <AdminNav pendingCount={pendingCount} />
@@ -27,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1280px] px-3 py-5 sm:px-6 sm:py-7 lg:px-8">{children}</main>
+      <main className="admin-main mx-auto max-w-[1280px] px-3 py-5 sm:px-6 sm:py-7 lg:px-8">{children}</main>
     </div>
   );
 }

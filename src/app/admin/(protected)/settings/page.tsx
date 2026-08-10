@@ -2,20 +2,19 @@ import { getSiteSettings } from "@/lib/db";
 import LogoutButton from "@/components/admin/LogoutButton";
 import SiteSettingsForm from "@/components/admin/SiteSettingsForm";
 import SyncGithubButton from "@/components/admin/SyncGithubButton";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 
 export default function AdminSettingsPage() {
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-medium tracking-[0.14em] text-accent">SITE SETTINGS</p>
-          <h1 className="mt-1 text-xl font-bold">站点设置</h1>
-          <p className="mt-2 text-sm text-neutral-500">集中管理站点信息、个人资料、音乐和文章显示方式。</p>
-        </div>
-        <SyncGithubButton trailingAction={<LogoutButton />} />
-      </div>
+      <AdminPageHeader
+        eyebrow="SITE SETTINGS"
+        title="站点设置"
+        description="集中管理站点信息、个人资料、音乐和文章显示方式。"
+        actions={<SyncGithubButton trailingAction={<LogoutButton />} />}
+      />
       <SiteSettingsForm initialValues={getSiteSettings()} />
     </div>
   );
