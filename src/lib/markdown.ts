@@ -4,6 +4,7 @@ import {
   articleReferenceCardHtml,
   decodeArticleReferencePayload,
   expandArticleReferenceMarkers,
+  type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
 import { musicContainerHtml, parseMusicBlock } from "@/lib/music";
 import { parseVideoBlock, videoContainerHtml } from "@/lib/video";
@@ -91,7 +92,7 @@ function renderMarkdownImage(src: string, alt: string, titleAttribute: string): 
  * 渲染文章 markdown 为 HTML。
  * h2/h3 会自动添加 id 属性用于 TOC 锚点。
  */
-export function renderMarkdown(content: string): string {
+export function renderMarkdown(content: string, references: readonly ArticleReferenceSnapshot[] = []): string {
   const renderer = new marked.Renderer();
   let counter = 0;
 
@@ -146,7 +147,7 @@ export function renderMarkdown(content: string): string {
         .join("\n");
     }
     if (language === "reference") {
-      const snapshot = decodeArticleReferencePayload(token.text.trim());
+      const snapshot = decodeArticleReferencePayload(token.text.trim(), references);
       return snapshot ? articleReferenceCardHtml(snapshot) : defaultCode(token);
     }
     return defaultCode(token);
@@ -175,7 +176,7 @@ export function extractHeadings(content: string): TocHeading[] {
 /** 去掉 markdown 语法，生成纯文本摘要 */
 export function stripMarkdown(content: string, maxLength = 100): string {
   let text = content
-    .replace(/^\s*!reference(?::|\s+)\S+\s*$/gm, " ")
+    .replace(/^[ \t]*!reference(?::|[ \t]+)\S+[ \t]*$/gm, " ")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")

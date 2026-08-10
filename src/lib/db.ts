@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import { pinyin } from "pinyin-pro";
-import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
+import { normalizeArticleReferenceSnapshot, type ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 import { hashIp } from "@/lib/request";
 import { getProjectRoot, getUploadDir } from "@/lib/uploads";
@@ -552,6 +552,32 @@ export function listArticleReferencesForPost(postId: number): ArticleReference[]
   return db
     .prepare("SELECT * FROM article_references WHERE post_id = ? ORDER BY id ASC")
     .all(postId) as ArticleReference[];
+}
+
+export function articleReferenceRowToSnapshot(reference: ArticleReference): ArticleReferenceSnapshot {
+  let keyPoints: string[] = [];
+  try {
+    const parsed = JSON.parse(reference.key_points) as unknown;
+    if (Array.isArray(parsed)) keyPoints = parsed.map((item) => String(item ?? "")).filter(Boolean).slice(0, 6);
+  } catch {
+    // 旧数据的摘要字段异常时，仍然保留其余引用信息。
+  }
+  return normalizeArticleReferenceSnapshot({
+    url: reference.url,
+    canonicalUrl: reference.canonical_url,
+    title: reference.title,
+    source: reference.source_name,
+    author: reference.author,
+    publishedAt: reference.published_at,
+    cover: reference.cover,
+    description: reference.description,
+    summary: reference.summary,
+    keyPoints,
+  });
+}
+
+export function listArticleReferenceSnapshotsForPost(postId: number): ArticleReferenceSnapshot[] {
+  return listArticleReferencesForPost(postId).map(articleReferenceRowToSnapshot);
 }
 
 export function countArticleReferences(): number {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createPostAction, updatePostAction } from "@/lib/actions/posts";
 import { deleteAttachmentAction } from "@/lib/actions/attachments";
 import type { Attachment, Post } from "@/lib/db";
+import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { renderMarkdown } from "@/lib/markdown";
 import { parsePostTags } from "@/lib/post-tags";
 import ImageUpload from "./ImageUpload";
@@ -47,7 +48,7 @@ function isSafeMarkdownUrl(value: string) {
   }
 }
 
-export default function PostForm({ post, initialAttachments = [], categories = [], usedTags = [] }: { post?: Post; initialAttachments?: Attachment[]; categories?: string[]; usedTags?: Array<{ tag: string; count: number }> }) {
+export default function PostForm({ post, initialAttachments = [], initialReferences = [], categories = [], usedTags = [] }: { post?: Post; initialAttachments?: Attachment[]; initialReferences?: ArticleReferenceSnapshot[]; categories?: string[]; usedTags?: Array<{ tag: string; count: number }> }) {
   const router = useRouter();
   const [title, setTitle] = useState(post?.title ?? "");
   const [slug, setSlug] = useState(post?.slug ?? "");
@@ -56,6 +57,7 @@ export default function PostForm({ post, initialAttachments = [], categories = [
   const [attachments, setAttachments] = useState<Attachment[]>(initialAttachments);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [content, setContent] = useState(post?.content ?? "");
+  const [referenceSnapshots, setReferenceSnapshots] = useState<ArticleReferenceSnapshot[]>(initialReferences);
   const [cover, setCover] = useState<string | null>(post?.cover ?? null);
   const [status, setStatus] = useState<"draft" | "published">(post?.status ?? "draft");
   const [preview, setPreview] = useState(false);
@@ -81,7 +83,7 @@ export default function PostForm({ post, initialAttachments = [], categories = [
   function submit() {
     setError("");
     startTransition(async () => {
-      const data = { title, slug, content, cover, category, tags, attachmentIds: attachments.map((attachment) => attachment.id), status };
+      const data = { title, slug, content, cover, category, tags, attachmentIds: attachments.map((attachment) => attachment.id), referenceSnapshots, status };
       const r = post ? await updatePostAction(post.id, data) : await createPostAction(data);
       if (!r.ok) {
         setError(r.error);
@@ -356,7 +358,7 @@ export default function PostForm({ post, initialAttachments = [], categories = [
         {preview ? (
           <div
             className="prose-neutral min-h-64 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-base leading-7 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-bold [&_img]:max-w-full [&_p]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-neutral-800 [&_pre]:p-3 [&_pre]:text-neutral-100 [&_blockquote]:border-l-4 [&_blockquote]:border-neutral-300 [&_blockquote]:pl-3 [&_blockquote]:text-neutral-500 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(content || "*（暂无内容）*") }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(content || "*（暂无内容）*", referenceSnapshots) }}
           />
         ) : (
           <>
@@ -648,10 +650,14 @@ export default function PostForm({ post, initialAttachments = [], categories = [
       )}
       {referenceDialog && (
         <ArticleReferenceDialog
-          onClose={(marker) => {
+          onClose={(selection) => {
             setReferenceDialog(false);
-            if (marker) {
-              insertReferenceMarker(marker);
+            if (selection) {
+              setReferenceSnapshots((current) => {
+                const next = current.filter((item) => item.canonicalUrl !== selection.snapshot.canonicalUrl);
+                return [...next, selection.snapshot];
+              });
+              insertReferenceMarker(selection.marker);
             } else {
               dialogRangeRef.current = null;
             }

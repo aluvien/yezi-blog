@@ -51,15 +51,6 @@ export function formatArticleReferenceDate(value: unknown): string {
   return year && month && day ? `${year}-${month}-${day}` : raw;
 }
 
-function encodeBase64Url(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
 function decodeBase64Url(value: string): string {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
   const binary = atob(base64);
@@ -108,26 +99,29 @@ export function normalizeArticleReferenceSnapshot(input: Partial<ArticleReferenc
   };
 }
 
-export function encodeArticleReferenceMarker(input: Partial<ArticleReferenceSnapshot>): string {
+/**
+ * 根据规范化网址生成稳定的短引用 ID。
+ * 引用正文只保存这个 ID，完整快照继续放在文章引用缓存中，避免 Markdown 被长 URL 和 JSON 撑大。
+ */
+export function articleReferenceToken(input: Partial<ArticleReferenceSnapshot>): string {
   const snapshot = normalizeArticleReferenceSnapshot(input);
-  // 只保留短字段名并使用 base64url，避免把完整 URL 编码 JSON 暴露在编辑器正文里。
-  // 仍然保留完整快照，保证编辑预览和服务端渲染不需要再次请求原网页。
-  const compact = {
-    u: snapshot.url,
-    c: snapshot.canonicalUrl,
-    t: snapshot.title,
-    s: snapshot.source,
-    a: snapshot.author,
-    d: snapshot.publishedAt,
-    v: snapshot.cover,
-    x: snapshot.description,
-    y: snapshot.summary,
-    p: snapshot.keyPoints,
-  };
-  return `!reference:${encodeBase64Url(JSON.stringify(compact))}`;
+  const value = snapshot.canonicalUrl || snapshot.url;
+  let first = 2166136261;
+  let second = 2246822519;
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    first = Math.imul(first ^ code, 16777619);
+    second = Math.imul(second ^ code, 3266489917);
+  }
+  return `r${(first >>> 0).toString(36).padStart(7, "0")}${(second >>> 0).toString(36).padStart(7, "0")}`;
 }
 
-export function decodeArticleReferencePayload(payload: string): ArticleReferenceSnapshot | null {
+export function encodeArticleReferenceMarker(input: Partial<ArticleReferenceSnapshot>): string {
+  const snapshot = normalizeArticleReferenceSnapshot(input);
+  return `!reference:${articleReferenceToken(snapshot)}`;
+}
+
+export function decodeArticleReferencePayload(payload: string, references: readonly ArticleReferenceSnapshot[] = []): ArticleReferenceSnapshot | null {
   let parsed: Record<string, unknown> | null = null;
   try {
     const decoded = decodeURIComponent(payload);
@@ -141,10 +135,13 @@ export function decodeArticleReferencePayload(payload: string): ArticleReference
       const value = JSON.parse(decodeBase64Url(payload)) as unknown;
       if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
     } catch {
-      return null;
+      // 短引用 ID 通过文章已保存的引用快照解析。
     }
   }
-  if (!parsed) return null;
+  if (!parsed) {
+    const snapshot = references.find((reference) => articleReferenceToken(reference) === payload);
+    return snapshot ? normalizeArticleReferenceSnapshot(snapshot) : null;
+  }
   const compact = typeof parsed.u === "string" ? {
     url: parsed.u,
     canonicalUrl: parsed.c,
@@ -163,17 +160,25 @@ export function decodeArticleReferencePayload(payload: string): ArticleReference
 
 function referenceMarkerRegex(): RegExp {
   // 每次都创建新实例，避免 matchAll/replace 的 lastIndex 影响后续渲染。
-  return /^\s*!reference(?::|\s+)(\S+)\s*$/gm;
+  return /^[ \t]*!reference(?::|[ \t]+)(\S+)[ \t]*$/gm;
 }
 
 /** 读取文章正文里已经插入的引用快照，供保存时写入 SQLite 缓存。 */
-export function parseArticleReferenceMarkers(content: string): ArticleReferenceSnapshot[] {
-  const references: ArticleReferenceSnapshot[] = [];
+export function parseArticleReferenceMarkers(content: string, cachedReferences: readonly ArticleReferenceSnapshot[] = []): ArticleReferenceSnapshot[] {
+  const snapshots: ArticleReferenceSnapshot[] = [];
   for (const match of content.matchAll(referenceMarkerRegex())) {
-    const snapshot = decodeArticleReferencePayload(match[1]);
-    if (snapshot) references.push(snapshot);
+    const snapshot = decodeArticleReferencePayload(match[1], cachedReferences);
+    if (snapshot) snapshots.push(snapshot);
   }
-  return references;
+  return snapshots;
+}
+
+/** 将旧的长快照标记和短标记统一压缩成短引用 ID。 */
+export function compactArticleReferenceMarkers(content: string, cachedReferences: readonly ArticleReferenceSnapshot[] = []): string {
+  return content.replace(referenceMarkerRegex(), (line, payload: string) => {
+    const snapshot = decodeArticleReferencePayload(payload, cachedReferences);
+    return snapshot ? encodeArticleReferenceMarker(snapshot) : line;
+  });
 }
 
 /** 把编辑器里的短标记转成 marked 可识别的自定义代码块。 */

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getContentMetrics, listRelatedPosts, countApprovedComments, hasLiked } from "@/lib/db";
+import { getContentMetrics, listArticleReferenceSnapshotsForPost, listRelatedPosts, countApprovedComments, hasLiked } from "@/lib/db";
 import { formatDateOnly } from "@/lib/format";
 import { renderMarkdown, stripMarkdown, extractHeadings } from "@/lib/markdown";
 import { getSiteAuthor } from "@/lib/site";
@@ -50,7 +50,7 @@ export default async function PostPage({ params }: Props) {
   const post = getCachedPostBySlug(slug);
   if (!post) notFound();
 
-  const html = renderMarkdown(post.content);
+  const html = renderMarkdown(post.content, listArticleReferenceSnapshotsForPost(post.id));
   const headings = extractHeadings(post.content);
   const relatedPosts = listRelatedPosts(post.id, 3);
   const siteSettings = getCachedSiteSettings();

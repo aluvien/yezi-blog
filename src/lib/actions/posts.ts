@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { attachAttachmentsToPost, createPost, deletePost, getPost, normalizePostTags, syncArticleReferences, updatePost } from "@/lib/db";
-import { parseArticleReferenceMarkers } from "@/lib/article-reference";
+import { compactArticleReferenceMarkers, parseArticleReferenceMarkers, type ArticleReferenceSnapshot } from "@/lib/article-reference";
 
 export interface PostInput {
   title: string;
@@ -13,6 +13,7 @@ export interface PostInput {
   category: string;
   tags: string;
   attachmentIds: number[];
+  referenceSnapshots?: ArticleReferenceSnapshot[];
   status: "draft" | "published";
 }
 
@@ -22,17 +23,19 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
   await requireAdmin();
   if (!data.title.trim()) return { ok: false, error: "请填写标题" };
   if (data.status === "published" && !data.content.trim()) return { ok: false, error: "发布文章前请填写正文" };
+  const referenceSnapshots = data.referenceSnapshots ?? [];
+  const content = compactArticleReferenceMarkers(data.content, referenceSnapshots);
   const created = createPost({
     title: data.title.trim(),
     slug: data.slug,
-    content: data.content,
+    content,
     cover: data.cover,
     category: data.category,
     tags: normalizePostTags(data.tags),
     status: data.status,
   });
   attachAttachmentsToPost(data.attachmentIds, created.id);
-  syncArticleReferences(created.id, parseArticleReferenceMarkers(data.content));
+  syncArticleReferences(created.id, parseArticleReferenceMarkers(content, referenceSnapshots));
   revalidatePath("/admin/posts");
   revalidatePath("/admin/attachments");
   revalidatePath("/");
@@ -49,17 +52,19 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
   if (!existing) return { ok: false, error: "文章不存在" };
   if (!data.title.trim()) return { ok: false, error: "请填写标题" };
   if (data.status === "published" && !data.content.trim()) return { ok: false, error: "发布文章前请填写正文" };
+  const referenceSnapshots = data.referenceSnapshots ?? [];
+  const content = compactArticleReferenceMarkers(data.content, referenceSnapshots);
   const updated = updatePost(id, {
     title: data.title.trim(),
     slug: data.slug,
-    content: data.content,
+    content,
     cover: data.cover,
     category: data.category,
     tags: normalizePostTags(data.tags),
     status: data.status,
   });
   attachAttachmentsToPost(data.attachmentIds, id);
-  syncArticleReferences(id, parseArticleReferenceMarkers(data.content));
+  syncArticleReferences(id, parseArticleReferenceMarkers(content, referenceSnapshots));
   revalidatePath("/admin/posts");
   revalidatePath("/admin/attachments");
   revalidatePath("/");

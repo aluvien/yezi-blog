@@ -8,7 +8,8 @@ import {
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
 
-type Props = { onClose: (marker: string | null) => void };
+type ArticleReferenceSelection = { marker: string; snapshot: ArticleReferenceSnapshot };
+type Props = { onClose: (selection: ArticleReferenceSelection | null) => void };
 
 type PreviewResponse = { snapshot?: Partial<ArticleReferenceSnapshot>; error?: string };
 type SummaryResponse = { configured?: boolean; summary?: string; keyPoints?: string[]; error?: string };
@@ -119,7 +120,7 @@ export function ArticleReferenceDialog({ onClose }: Props) {
 
   function insert() {
     if (!snapshot) return;
-    onClose(encodeArticleReferenceMarker(snapshot));
+    onClose({ marker: encodeArticleReferenceMarker(snapshot), snapshot });
   }
 
   function selectHistory(item: ArticleReferenceSnapshot) {
