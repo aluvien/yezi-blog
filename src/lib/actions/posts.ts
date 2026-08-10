@@ -49,7 +49,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
   if (!existing) return { ok: false, error: "文章不存在" };
   if (!data.title.trim()) return { ok: false, error: "请填写标题" };
   if (data.status === "published" && !data.content.trim()) return { ok: false, error: "发布文章前请填写正文" };
-  updatePost(id, {
+  const updated = updatePost(id, {
     title: data.title.trim(),
     slug: data.slug,
     content: data.content,
@@ -66,7 +66,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
   revalidatePath("/archives");
   revalidatePath(`/categories/${encodeURIComponent(data.category)}`);
   revalidatePath(`/posts/${existing.slug}`);
-  revalidatePath(`/posts/${data.slug || existing.slug}`);
+  revalidatePath(`/posts/${updated?.slug || existing.slug}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");
   return { ok: true };

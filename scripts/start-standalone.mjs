@@ -31,10 +31,9 @@ loadEnvFile(path.join(root, ".env"));
 // standalone server 启动后可能把 cwd 切到 .next/standalone，数据库必须固定在项目根目录，
 // 否则本地数据和运行中的网站会各自使用一份 blog.db。
 if (!process.env.BLOG_DB_PATH) process.env.BLOG_DB_PATH = path.join(root, "data", "blog.db");
-// 上传文件存到项目根 data/uploads（与 blog.db 同目录持久化），由 /uploads route 实时提供。
-// 避免写入 standalone/public 后新文件不被静态服务识别（需重启才出现的 404 问题）。
-if (!process.env.UPLOAD_DIR) process.env.UPLOAD_DIR = path.join(root, "data", "uploads");
-fs.mkdirSync(process.env.UPLOAD_DIR, { recursive: true });
+// 上传文件只存到项目根 data/uploads（与 blog.db 同目录持久化），由 /uploads route 实时提供。
+// 不写入 public 或 standalone，避免多个目录造成数据分叉。
+fs.mkdirSync(path.join(root, "data", "uploads"), { recursive: true });
 
 // 维护只在真正启动服务时执行，避免 next build 加载数据库模块时修改生产数据。
 await import("./maintain-db.mjs");

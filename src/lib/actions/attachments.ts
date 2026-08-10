@@ -70,7 +70,8 @@ export async function clearUnusedAttachmentsAction(): Promise<ActionResult> {
 
 async function compressImageFile(relativePath: string, profile: CompressionProfile, attachmentId?: number): Promise<ActionResult> {
   const absolutePath = uploadAbsolutePath(relativePath);
-  if (!absolutePath || !fs.existsSync(absolutePath)) return { ok: false, error: "图片文件不存在" };
+  if (!absolutePath) return { ok: false, error: "附件路径无效" };
+  if (!fs.existsSync(absolutePath)) return { ok: false, error: "图片文件不存在，请确认上传目录与数据库使用的是同一份数据" };
 
   let originalSize = 0;
   let format: string | undefined;
@@ -82,8 +83,10 @@ async function compressImageFile(relativePath: string, profile: CompressionProfi
     const metadata = await sharp(absolutePath, { limitInputPixels: MAX_IMAGE_PIXELS }).metadata();
     format = metadata.format;
     pages = metadata.pages ?? 1;
-  } catch {
-    return { ok: false, error: "图片无法读取，可能不是有效的图片文件" };
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    if (code === "EACCES" || code === "EPERM") return { ok: false, error: "图片无法读取，请检查上传目录权限" };
+    return { ok: false, error: "图片无法读取，可能文件已损坏或分辨率超过 60MP" };
   }
 
   if (!format || !["jpeg", "png", "webp"].includes(format)) {
@@ -114,8 +117,10 @@ async function compressImageFile(relativePath: string, profile: CompressionProfi
     const savedPercent = Math.max(1, Math.round((1 - compressedSize / originalSize) * 100));
     revalidateAttachmentPages();
     return { ok: true, message: `压缩完成，体积减少约 ${savedPercent}%；原链接保持不变` };
-  } catch {
+  } catch (error) {
     await fsPromises.unlink(temporaryPath).catch(() => undefined);
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    if (code === "EACCES" || code === "EPERM") return { ok: false, error: "图片压缩失败，请检查上传目录写入权限" };
     return { ok: false, error: "图片压缩失败，原图未被修改" };
   }
 }

@@ -1,16 +1,17 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import { pinyin } from "pinyin-pro";
 import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 import { hashIp } from "@/lib/request";
-import { getUploadRoots } from "@/lib/uploads";
+import { getProjectRoot, getUploadDir } from "@/lib/uploads";
 
 export { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 export { parseMomentImages } from "@/lib/moments";
 
 const configuredDbPath = process.env.BLOG_DB_PATH?.trim();
-const DB_PATH = configuredDbPath ? path.resolve(configuredDbPath) : path.join(process.cwd(), "data", "blog.db");
+const DB_PATH = configuredDbPath ? path.resolve(configuredDbPath) : path.join(getProjectRoot(), "data", "blog.db");
 const DB_DIR = path.dirname(DB_PATH);
 
 function sleepSync(ms: number): void {
@@ -338,12 +339,14 @@ function hashSessionToken(token: string): string {
 // ---------- slug ----------
 
 export function slugify(title: string): string {
-  return title
+  const romanized = pinyin(title, { toneType: "none", nonZh: "consecutive" });
+  return romanized
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+    .slice(0, 80)
+    .replace(/-+$/g, "");
 }
 
 /** 未填 slug 时从标题生成（标题无法生成有效 slug 则用时间戳），并保证唯一 */
@@ -564,6 +567,32 @@ export function listArticleReferences(): ArticleReferenceWithPost[] {
   `).all() as ArticleReferenceWithPost[];
 }
 
+/**
+ * 编辑器引用弹窗使用的历史引用：按最近更新时间倒序，并按 canonical_url 去重。
+ * 默认只返回最近 5 条；搜索时由调用方传入更大的上限，匹配标题、来源、作者和网址等字段。
+ */
+export function listRecentArticleReferences(keyword = "", limit = 5): ArticleReference[] {
+  const safeLimit = Math.min(20, Math.max(1, Math.trunc(limit)));
+  const needle = keyword.trim().toLocaleLowerCase();
+  const rows = db
+    .prepare("SELECT * FROM article_references ORDER BY updated_at DESC, id DESC")
+    .all() as ArticleReference[];
+  const seen = new Set<string>();
+  return rows
+    .filter((row) => {
+      if (!needle) return true;
+      return [row.title, row.source_name, row.author, row.url, row.canonical_url, row.description, row.summary, row.key_points]
+        .some((value) => value.toLocaleLowerCase().includes(needle));
+    })
+    .filter((row) => {
+      const key = row.canonical_url || row.url;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, safeLimit);
+}
+
 // ---------- attachments ----------
 
 export function createAttachment(data: {
@@ -708,9 +737,8 @@ function findAttachmentReferences(
 }
 
 function scanUploadDirectory(): DiskAttachment[] {
-  const roots = getUploadRoots();
+  const root = getUploadDir();
   const files: DiskAttachment[] = [];
-  const seen = new Set<string>();
 
   function walk(root: string, directory: string): void {
     let entries: fs.Dirent[];
@@ -730,10 +758,8 @@ function scanUploadDirectory(): DiskAttachment[] {
       const relative = path.relative(root, absolute).split(path.sep).join("/");
       if (!relative || relative.startsWith("..") || relative.includes("/../")) continue;
       const webPath = `/uploads/${relative}`;
-      if (seen.has(webPath)) continue;
       try {
         const stat = fs.statSync(absolute);
-        seen.add(webPath);
         files.push({
           post_id: null,
           path: webPath,
@@ -748,9 +774,7 @@ function scanUploadDirectory(): DiskAttachment[] {
     }
   }
 
-  for (const root of roots) {
-    if (fs.existsSync(root)) walk(root, root);
-  }
+  if (fs.existsSync(root)) walk(root, root);
   return files;
 }
 

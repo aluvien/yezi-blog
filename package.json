@@ -17,6 +17,7 @@
     "better-sqlite3": "^13.0.2",
     "marked": "^18.0.7",
     "next": "16.3.0",
+    "pinyin-pro": "^3.28.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-image-crop": "^11.1.2",

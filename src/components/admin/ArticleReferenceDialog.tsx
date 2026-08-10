@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   articleReferenceCoverSrc,
   encodeArticleReferenceMarker,
@@ -12,6 +12,17 @@ type Props = { onClose: (marker: string | null) => void };
 
 type PreviewResponse = { snapshot?: Partial<ArticleReferenceSnapshot>; error?: string };
 type SummaryResponse = { configured?: boolean; summary?: string; keyPoints?: string[]; error?: string };
+type HistoryResponse = { references?: ArticleReferenceSnapshot[]; error?: string };
+
+async function fetchReferenceHistory(keyword: string): Promise<ArticleReferenceSnapshot[]> {
+  const response = await fetch(`/api/admin/article-references/history?q=${encodeURIComponent(keyword)}`, {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({})) as HistoryResponse;
+  if (!response.ok) throw new Error(data.error || "读取历史引用失败");
+  return data.references ?? [];
+}
 
 export function ArticleReferenceDialog({ onClose }: Props) {
   const [url, setUrl] = useState("");
@@ -20,6 +31,29 @@ export function ArticleReferenceDialog({ onClose }: Props) {
   const [summarizing, setSummarizing] = useState(false);
   const [error, setError] = useState("");
   const [summaryMessage, setSummaryMessage] = useState("");
+  const [historyKeyword, setHistoryKeyword] = useState("");
+  const [history, setHistory] = useState<ArticleReferenceSnapshot[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  const loadHistory = useCallback(async (keyword: string) => {
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      setHistory(await fetchReferenceHistory(keyword));
+    } catch (reason) {
+      setHistoryError(reason instanceof Error ? reason.message : "读取历史引用失败");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadHistory("");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadHistory]);
 
   async function generateSummary(target: ArticleReferenceSnapshot) {
     setSummarizing(true);
@@ -88,6 +122,13 @@ export function ArticleReferenceDialog({ onClose }: Props) {
     onClose(encodeArticleReferenceMarker(snapshot));
   }
 
+  function selectHistory(item: ArticleReferenceSnapshot) {
+    setSnapshot(item);
+    setUrl(item.url);
+    setError("");
+    setSummaryMessage("");
+  }
+
   return (
     <div
       className="fixed inset-0 z-[85] flex items-center justify-center bg-neutral-900/30 p-4 backdrop-blur-[2px]"
@@ -125,6 +166,57 @@ export function ArticleReferenceDialog({ onClose }: Props) {
             {loading ? "读取中…" : "读取信息"}
           </button>
         </div>
+
+        <section className="mt-5 border-t border-neutral-200 pt-4" aria-label="历史引用">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-neutral-800">历史引用</h3>
+              <p className="mt-0.5 text-xs text-neutral-400">默认显示最近 5 条，点击即可复用</p>
+            </div>
+            {historyLoading && <span className="text-xs text-neutral-400">读取中…</span>}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={historyKeyword}
+              onChange={(event) => setHistoryKeyword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void loadHistory(historyKeyword);
+                }
+              }}
+              placeholder="搜索标题、来源、作者或网址"
+              className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+            <button type="button" disabled={historyLoading} onClick={() => void loadHistory(historyKeyword)} className="shrink-0 rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">搜索</button>
+          </div>
+          {historyError && <p className="mt-2 text-xs text-red-600">{historyError}</p>}
+          {!historyLoading && !historyError && history.length === 0 && <p className="mt-3 text-xs text-neutral-400">没有找到匹配的历史引用</p>}
+          {history.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2">
+              {history.map((item) => (
+                <button
+                  key={`${item.canonicalUrl || item.url}-${item.title}`}
+                  type="button"
+                  onClick={() => selectHistory(item)}
+                  className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-colors ${snapshot?.canonicalUrl === item.canonicalUrl ? "border-accent/50 bg-accent/5" : "border-neutral-200 hover:border-accent/30 hover:bg-neutral-50"}`}
+                >
+                  {item.cover ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={articleReferenceCoverSrc(item.cover, item.url)} alt="" referrerPolicy="no-referrer" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                  ) : (
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-lg font-semibold text-accent">引</span>
+                  )}
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs text-accent">{item.source || "网页文章"}{item.author ? ` · ${item.author}` : ""}</span>
+                    <span className="mt-0.5 block line-clamp-2 text-sm font-medium leading-5 text-neutral-800">{item.title}</span>
+                    {item.publishedAt && <span className="mt-0.5 block text-[11px] text-neutral-400">{item.publishedAt}</span>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 

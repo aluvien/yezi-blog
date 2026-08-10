@@ -38,17 +38,24 @@ export function SiteImage({
   loading,
   style,
 }: SiteImageProps) {
-  const [loaded, setLoaded] = useState(false);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const resolvedLoading = priority ? "eager" : (loading ?? "lazy");
+  const loaded = loadedSrc === src;
+  const failed = failedSrc === src;
   const imageClassName = [
     "site-image-media",
     loaded ? "site-image-ready" : "site-image-loading",
     fill && !isLocalImage(src) ? "absolute inset-0" : "",
     className,
   ].filter(Boolean).join(" ");
-  const handleLoaded = () => setLoaded(true);
+  const handleLoaded = () => setLoadedSrc(src);
+  const handleError = () => {
+    setLoadedSrc(src);
+    setFailedSrc(src);
+  };
 
-  if (isLocalImage(src)) {
+  if (isLocalImage(src) && !failed) {
     if (fill) {
       return (
         <Image
@@ -63,7 +70,7 @@ export function SiteImage({
           className={imageClassName}
           style={style}
           onLoad={handleLoaded}
-          onError={handleLoaded}
+          onError={handleError}
         />
       );
     }
@@ -81,7 +88,7 @@ export function SiteImage({
         className={imageClassName}
         style={style}
         onLoad={handleLoaded}
-        onError={handleLoaded}
+        onError={handleError}
       />
     );
   }
@@ -95,10 +102,10 @@ export function SiteImage({
       height={height}
       loading={resolvedLoading}
       decoding="async"
-      className={imageClassName}
+      className={`${imageClassName} ${fill ? "absolute inset-0" : ""}`}
       style={style}
       onLoad={handleLoaded}
-      onError={handleLoaded}
+      onError={handleError}
     />
   );
 }
