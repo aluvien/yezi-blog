@@ -25,6 +25,7 @@ import {
   isTelegramConfigured,
   sendTelegramMessage,
   sendTelegramPhoto,
+  escapeTelegramHtml,
   type TelegramInlineKeyboard,
 } from "@/lib/telegram";
 
@@ -158,21 +159,25 @@ function commentButtons(commentId: number): TelegramInlineKeyboard {
 
 async function sendBotMenu(chatId: string): Promise<void> {
   await sendTelegramMessage([
-    "🍃 博客管理 Bot",
-    "可查看站点概览、审核评论和管理 QQ 音乐登录。",
-    "内容编辑、删除与同步部署仍请在后台完成。",
-  ].join("\n"), { chatId, replyMarkup: BOT_MENU });
+    "<b>🍃 博客管理</b>",
+    "<i>轻量管理入口</i>",
+    "",
+    "查看数据概览、审核评论，或管理 QQ 音乐登录。",
+    "内容编辑、删除与部署同步仍请在网页后台完成。",
+  ].join("\n"), { chatId, parseMode: "HTML", replyMarkup: BOT_MENU });
 }
 
 async function sendDashboard(chatId: string): Promise<void> {
   await sendTelegramMessage([
-    "📊 博客数据概览",
-    `文章：${countPublishedPosts()} 已发布 / ${countPosts()} 总计`,
-    `想法：${countMoments()}　作品：${countWorks()}`,
-    `待审评论：${countPendingComments()}　引用：${countArticleReferences()}`,
-    `附件：${countAttachments()}`,
-    `后台：${site.url}/admin`,
-  ].join("\n"), { chatId, replyMarkup: BOT_MENU });
+    "<b>📊 博客数据概览</b>",
+    "",
+    `<b>文章</b>　${countPublishedPosts()} 已发布 / ${countPosts()} 总计`,
+    `<b>想法</b>　${countMoments()}　　<b>作品</b>　${countWorks()}`,
+    `<b>待审评论</b>　${countPendingComments()}　　<b>引用</b>　${countArticleReferences()}`,
+    `<b>附件</b>　${countAttachments()}`,
+    "",
+    `<a href=\"${site.url}/admin\">打开网页后台 →</a>`,
+  ].join("\n"), { chatId, parseMode: "HTML", replyMarkup: BOT_MENU });
 }
 
 function pendingComments(limit = 5): CommentWithTarget[] {
@@ -184,28 +189,31 @@ function pendingComments(limit = 5): CommentWithTarget[] {
 async function sendPendingComments(chatId: string): Promise<void> {
   const comments = pendingComments();
   if (comments.length === 0) {
-    await sendTelegramMessage("✅ 当前没有待审评论。", { chatId, replyMarkup: BOT_MENU });
+    await sendTelegramMessage("<b>✅ 评论审核</b>\n\n当前没有待审评论。", { chatId, parseMode: "HTML", replyMarkup: BOT_MENU });
     return;
   }
-  await sendTelegramMessage(`💬 待审评论 ${countPendingComments()} 条，以下展示最近 ${comments.length} 条：`, { chatId });
+  await sendTelegramMessage(`<b>💬 待审评论</b>\n\n共 ${countPendingComments()} 条，以下展示最近 ${comments.length} 条。`, { chatId, parseMode: "HTML" });
   for (const comment of comments) {
     const target = comment.target_type === "post" ? "文章" : "想法";
     await sendTelegramMessage([
-      `#${comment.id} · ${compact(comment.nickname, 60)}`,
-      `${target}：${compact(comment.target_label ?? "已删除内容", 100)}`,
-      compact(comment.content, 700),
-    ].join("\n"), { chatId, replyMarkup: commentButtons(comment.id) });
+      `<b>评论 #${comment.id}</b>　${escapeTelegramHtml(compact(comment.nickname, 60))}`,
+      `<b>${target}</b>　${escapeTelegramHtml(compact(comment.target_label ?? "已删除内容", 100))}`,
+      "",
+      `<blockquote>${escapeTelegramHtml(compact(comment.content, 700))}</blockquote>`,
+    ].join("\n"), { chatId, parseMode: "HTML", replyMarkup: commentButtons(comment.id) });
   }
 }
 
 async function sendQQMusicStatus(chatId: string): Promise<void> {
   const result = await inspectQQMusicHealth();
   await sendTelegramMessage([
-    "🎵 QQ 音乐状态",
-    `结果：${qqMusicHealthStatusLabel(result.status)}`,
-    `诊断：${result.detail}`,
-    result.status === "healthy" ? "播放授权正常。" : "如需重新登录，可发送 /qqlogin。",
-  ].join("\n"), { chatId, replyMarkup: BOT_MENU });
+    "<b>🎵 QQ 音乐状态</b>",
+    "",
+    `<b>结果</b>　${qqMusicHealthStatusLabel(result.status)}`,
+    `<b>诊断</b>　${escapeTelegramHtml(result.detail)}`,
+    "",
+    result.status === "healthy" ? "播放授权正常。" : "如需重新登录，可发送 <code>/qqlogin</code>。",
+  ].join("\n"), { chatId, parseMode: "HTML", replyMarkup: BOT_MENU });
 }
 
 async function beginQQLogin(state: TelegramBotState, chatId: string): Promise<void> {
@@ -346,7 +354,7 @@ async function handleMessage(state: TelegramBotState, message: JsonRecord): Prom
   if (action === "/cancel") {
     if (state.pendingQQLogin?.chatId === chatId) delete state.pendingQQLogin;
     if (state.pendingCommentReplies?.[chatId]) delete state.pendingCommentReplies[chatId];
-    await sendTelegramMessage("已取消当前操作。", { chatId });
+    await sendTelegramMessage("<b>操作已取消</b>\n\n当前评论回复或 QQ 登录已取消。", { chatId, parseMode: "HTML" });
     return;
   }
   if (action.startsWith("/")) {

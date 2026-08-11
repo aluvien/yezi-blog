@@ -35,6 +35,7 @@ type TelegramMessageOptions = {
   /** Defaults to the configured administrator chat. */
   chatId?: string;
   replyMarkup?: TelegramInlineKeyboard;
+  parseMode?: "HTML";
 };
 
 export type TelegramCommentNotification = {
@@ -62,8 +63,23 @@ export function isTelegramAdminChat(chatId: string): boolean {
 }
 
 function compactText(value: string, maxLength: number): string {
-  const normalized = value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
+  const normalized = value
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return normalized.length > maxLength ? `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…` : normalized;
+}
+
+/** Escape dynamic data before it is interpolated into Telegram HTML messages. */
+export function escapeTelegramHtml(value: string): string {
+  return compactText(value, 3_800)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function telegramErrorMessage(description: string): string {
@@ -119,6 +135,7 @@ export async function sendTelegramMessage(text: string, options: TelegramMessage
       chat_id: options.chatId ?? current.chatId,
       text: compactText(text, 3800),
       disable_web_page_preview: true,
+      ...(options.parseMode ? { parse_mode: options.parseMode } : {}),
       ...(options.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
     }),
   });
@@ -174,20 +191,25 @@ export async function registerTelegramBotCommands(): Promise<void> {
 export async function notifyNewComment(input: TelegramCommentNotification): Promise<TelegramNotificationResult> {
   const targetType = input.targetType === "post" ? "文章" : "想法";
   return sendTelegramMessage([
-    "💬 博客有一条新评论待审核",
-    `作者：${compactText(input.nickname, 80)}`,
-    `位置：${targetType} · ${compactText(input.targetLabel, 100) || "未命名内容"}`,
-    `内容：${compactText(input.content, 500)}`,
-    `管理：${site.url}/admin/comments`,
+    "<b>💬 新评论待审核</b>",
+    "",
+    `<b>作者</b>　${escapeTelegramHtml(input.nickname)}`,
+    `<b>位置</b>　${targetType} · ${escapeTelegramHtml(input.targetLabel || "未命名内容")}`,
+    "",
+    `<blockquote>${escapeTelegramHtml(input.content)}</blockquote>`,
+    "",
+    `<a href=\"${site.url}/admin/comments\">进入后台审核 →</a>`,
   ].join("\n"), {
+    parseMode: "HTML",
     replyMarkup: { inline_keyboard: [[{ text: "通过", callback_data: `comment:approve:${input.commentId}` }, { text: "回复并通过", callback_data: `comment:reply:${input.commentId}` }]] },
   });
 }
 
 export async function sendTelegramTestNotification(): Promise<TelegramNotificationResult> {
   return sendTelegramMessage([
-    "✅ 博客 Telegram 通知已连接",
-    "新评论审核与 QQ 音乐登录状态检测会推送到这里。",
-    "发送 /qqlogin 可直接接收 QQ 音乐授权二维码。",
-  ].join("\n"));
+    "<b>✅ 博客 Telegram 已连接</b>",
+    "",
+    "新评论审核与 QQ 音乐状态会推送到这里。",
+    "发送 <code>/qqlogin</code> 可接收 QQ 音乐授权二维码。",
+  ].join("\n"), { parseMode: "HTML" });
 }

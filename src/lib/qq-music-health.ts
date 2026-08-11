@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getQQMusicSession } from "@/lib/qq-music-session";
 import { findString, normalizeQQAudio, qqMusicRequest, unwrapData } from "@/lib/qq-music-api";
-import { isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
+import { escapeTelegramHtml, isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
 
 export type QQMusicHealthStatus = "healthy" | "missing_session" | "expired" | "unavailable" | "unverified";
 
@@ -159,11 +159,14 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
 
   if (isTelegramConfigured() && isFailureStatus(result.status) && shouldRepeatAlert(previous, result.status, now)) {
     const sent = await sendTelegramMessage([
-      "⚠️ QQ 音乐需要处理",
-      `状态：${statusLabel(result.status)}`,
-      `详情：${result.detail}`,
-      "请到博客后台「设置 → 音乐设置」重新扫码登录。",
+      "<b>⚠️ QQ 音乐需要处理</b>",
+      "",
+      `<b>状态</b>　${statusLabel(result.status)}`,
+      `<b>诊断</b>　${escapeTelegramHtml(result.detail)}`,
+      "",
+      "可在下方直接获取登录二维码。",
     ].join("\n"), {
+      parseMode: "HTML",
       replyMarkup: {
         inline_keyboard: [[{ text: "发送 QQ 登录二维码", callback_data: "qq:login" }]],
       },
@@ -174,7 +177,7 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
       notified = true;
     }
   } else if (isTelegramConfigured() && result.status === "healthy" && isFailureStatus(previous.lastNotifiedStatus)) {
-    const sent = await sendTelegramMessage("✅ QQ 音乐登录已恢复，播放器授权检测正常。");
+    const sent = await sendTelegramMessage("<b>✅ QQ 音乐已恢复</b>\n\n播放器授权检测正常。", { parseMode: "HTML" });
     if (sent.ok) {
       next.lastNotifiedStatus = "recovered";
       next.lastNotifiedAt = result.checkedAt;
