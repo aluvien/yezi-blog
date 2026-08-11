@@ -11,6 +11,7 @@ import {
   updateCategory,
 } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { refreshQQMusicHealthScheduler } from "@/lib/qq-music-scheduler";
 
 export type SettingsActionResult = { ok: true } | { ok: false; error: string };
 
@@ -35,6 +36,8 @@ const SETTING_KEYS = [
   "music_float_enabled",
   "music_float_info_enabled",
   "music_position",
+  "qq_music_health_check_enabled",
+  "qq_music_health_check_interval_hours",
   "theme",
   "layout_theme",
   "dark_mode",
@@ -56,7 +59,10 @@ export async function updateSiteSettingsAction(values: Record<string, string>): 
     const value = String(values[key] ?? "").trim().slice(0, limit);
     safeValues[key] = key === "music_position" ? (value === "bottom" ? "bottom" : "left") : value;
   }
+  const schedulerChanged = ["qq_music_health_check_enabled", "qq_music_health_check_interval_hours"]
+    .some((key) => safeValues[key] !== (existing[key] ?? ""));
   setSiteSettings(safeValues);
+  if (schedulerChanged) refreshQQMusicHealthScheduler();
   revalidatePath("/", "layout");
   revalidatePath("/about");
   return { ok: true };

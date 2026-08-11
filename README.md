@@ -65,6 +65,8 @@ npm run dev                        # http://localhost:3030
 | `TRUST_PROXY` | 是否信任 Nginx/Cloudflare 覆盖后的 `X-Real-IP`、`X-Forwarded-For`；直连 Node 端口保持关闭 | `false` |
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 | `QQ_MUSIC_SESSION_PATH` | QQ 扫码会话文件路径；留空时放在数据库同目录，必须持久化且不可公开访问 | `data/qq-music-session.json` |
+| `QQ_MUSIC_HEALTH_CHECK_MID` | 用于验证 QQ Cookie 真实播放授权的歌曲 MID；建议选择一首可稳定播放的歌曲 | 内置测试歌曲 |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选，Telegram Bot 管理员通知凭据；用于新评论和 QQ 音乐状态提醒 | 空（不发送） |
 | `LLM_API_KEY` / `OPENAI_API_KEY` | 可选，文章引用 AI 摘要服务的密钥；兼容 OpenAI Chat Completions 格式 | 空（不生成摘要） |
 | `LLM_API_URL` | 可选，AI 摘要接口地址，可填服务商根地址、`/v1` 或完整的 Chat Completions 地址 | `https://api.openai.com/v1/chat/completions` |
 | `LLM_MODEL` | 可选，AI 摘要模型名 | `gpt-4o-mini` |
@@ -220,6 +222,14 @@ QQ_MUSIC_API_URL=http://127.0.0.1:3201
 - 只让博客服务通过 `127.0.0.1` 调用 QQ Music API；扫码、Cookie 查询和搜索接口均由博客后台管理员权限保护。
 - `data/qq-music-session.json` 是登录会话文件，权限应为 `600`；它与 `blog.db` 一样需要保留在持久化目录，但绝不能提交到 Git 或暴露为静态文件。
 - 更新此服务时只在它自己的目录执行 `git pull --ff-only`、`npm ci`、`npm run build`、`pm2 restart qq-music-api --update-env`；不要把 QQ Cookie 或其配置文件提交到博客仓库。
+
+### 可选：Telegram 管理员提醒
+
+在博客服务器的 `.env.local` 配置 `TELEGRAM_BOT_TOKEN` 与 `TELEGRAM_CHAT_ID` 后，重启博客服务。后台“设置 → 音乐设置”会显示通知配置状态，可发送测试消息，也可手动检测一次 QQ 音乐真实播放授权。
+
+新评论会即时推送到 Telegram（不含评论者邮箱和 IP），QQ 音乐 Cookie 缺失、失效或本机服务不可用时会提醒；同一故障最多每 24 小时重复一次，恢复后会再发一条恢复通知。
+
+QQ 音乐检测由博客 Node 进程内置调度：服务启动后会先检测一次，之后按后台设置的 1 / 6 / 12 / 24 小时间隔运行。保存设置后调度即时刷新，PM2 重启后也会自动恢复；无需宝塔计划任务、外部 `curl` 或额外密钥。当前实现适用于单实例 PM2 部署。
 
 ### 方式二：Docker（standalone 输出）
 

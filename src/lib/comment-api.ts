@@ -1,5 +1,7 @@
-import { commentTargetExists, createComment, lastCommentAgeByIp } from "@/lib/db";
+import { after } from "next/server";
+import { commentTargetExists, createComment, getMoment, getPost, lastCommentAgeByIp } from "@/lib/db";
 import { getClientIp } from "@/lib/request";
+import { notifyNewComment } from "@/lib/telegram";
 
 export type CommentResult = { data: unknown; status: number };
 
@@ -12,6 +14,12 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function commentTargetLabel(targetType: "post" | "moment", targetId: number): string {
+  if (targetType === "post") return getPost(targetId)?.title.trim() || "未命名文章";
+  const content = getMoment(targetId)?.content ?? "";
+  return content.replace(/\s+/g, " ").trim().slice(0, 90) || "未命名想法";
 }
 
 export async function submitComment(request: Request): Promise<CommentResult> {
@@ -61,6 +69,15 @@ export async function submitComment(request: Request): Promise<CommentResult> {
   }
 
   const comment = createComment({ target_type: targetType, target_id: targetId, nickname, email, website, content, ip });
+  // `after` keeps the async delivery in the request lifecycle without making a
+  // visitor wait for Telegram or allowing a delivery failure to reject a valid
+  // comment submission.
+  after(() => notifyNewComment({
+    nickname: comment.nickname,
+    content: comment.content,
+    targetType,
+    targetLabel: commentTargetLabel(targetType, targetId),
+  }));
   return {
     data: {
       message: "评论已提交，审核后展示",

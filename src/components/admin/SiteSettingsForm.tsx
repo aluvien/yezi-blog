@@ -6,6 +6,7 @@ import { updateSiteSettingsAction } from "@/lib/actions/settings";
 import { DARK_MODE_OPTIONS, LAYOUT_THEMES, THEME_PALETTES } from "@/lib/theme";
 import ImageUpload from "./ImageUpload";
 import QQMusicPanel from "./QQMusicPanel";
+import TelegramNotifyPanel from "./TelegramNotifyPanel";
 
 type Props = { initialValues: Record<string, string> };
 
@@ -32,6 +33,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     music_float_enabled: initialValues.music_float_enabled ?? "1",
     music_float_info_enabled: initialValues.music_float_info_enabled ?? "1",
     music_position: initialValues.music_position === "bottom" ? "bottom" : "left",
+    qq_music_health_check_enabled: initialValues.qq_music_health_check_enabled ?? "1",
+    qq_music_health_check_interval_hours: initialValues.qq_music_health_check_interval_hours ?? "6",
     theme: initialValues.theme ?? "default",
     layout_theme: initialValues.layout_theme ?? "classic",
     dark_mode: initialValues.dark_mode ?? "auto",
@@ -180,6 +183,13 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         <QQMusicPanel
           defaultMusic={values.default_music}
           onDefaultMusicChange={(value) => update("default_music", value)}
+        />
+
+        <TelegramNotifyPanel
+          healthCheckEnabled={values.qq_music_health_check_enabled === "1"}
+          healthCheckIntervalHours={values.qq_music_health_check_interval_hours}
+          onHealthCheckEnabledChange={(enabled) => update("qq_music_health_check_enabled", enabled ? "1" : "0")}
+          onHealthCheckIntervalHoursChange={(hours) => update("qq_music_health_check_interval_hours", hours)}
         />
 
         <div className="grid gap-3 md:grid-cols-2">
