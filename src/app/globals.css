@@ -1721,6 +1721,8 @@ summary {
 
 .site-link-pending {
   color: var(--accent) !important;
+  opacity: 0.72;
+  text-decoration-color: currentColor;
   transition: color 120ms ease, opacity 120ms ease, transform 120ms ease;
 }
 
@@ -2137,6 +2139,12 @@ summary {
   border-radius: 14px;
   background: color-mix(in srgb, var(--soft) 76%, var(--paper));
   padding: 1rem;
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.article-reference-card[open] {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--divider));
+  background: color-mix(in srgb, var(--soft) 70%, var(--paper));
 }
 
 .article-reference-card-summary {
@@ -2227,9 +2235,26 @@ summary {
 }
 
 .article-reference-summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
   color: var(--accent);
   font-size: 0.86em;
   font-weight: 600;
+}
+
+.article-reference-summary-label::after {
+  width: 0.42em;
+  height: 0.42em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  content: "";
+  transform: rotate(45deg) translateY(-0.15em);
+  transition: transform 180ms ease;
+}
+
+.article-reference-card[open] .article-reference-summary-label::after {
+  transform: rotate(225deg) translate(-0.12em, -0.12em);
 }
 
 .article-body .article-reference-read-original {
@@ -2248,10 +2273,30 @@ summary {
 }
 
 .article-reference-summary-body {
-  margin-top: 0.75rem;
+  display: grid;
+  visibility: hidden;
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
   color: var(--faint);
   font-size: 0.88em;
   line-height: 1.7;
+  pointer-events: none;
+  transition: grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease, visibility 0s linear 220ms;
+}
+
+.article-reference-card[open] > .article-reference-summary-body {
+  visibility: visible;
+  grid-template-rows: 1fr;
+  margin-top: 0.75rem;
+  opacity: 1;
+  pointer-events: auto;
+  transition: grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease, visibility 0s;
+}
+
+.article-reference-summary-inner {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .article-body .article-reference-summary-body p {
@@ -3041,7 +3086,7 @@ textarea.comment-field {
   }
 }
 .music-trigger.is-error {
-  cursor: default;
+  cursor: pointer;
 }
 .music-trigger.is-error .music-trigger-name {
   font-weight: 400;
@@ -3049,6 +3094,44 @@ textarea.comment-field {
 }
 .music-trigger.is-error .music-trigger-play {
   display: none;
+}
+
+.music-trigger-retry {
+  display: none;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--divider));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--paper));
+  color: var(--accent);
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.music-trigger-retry svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.music-trigger-retry:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  transform: rotate(-16deg);
+}
+
+.music-trigger-retry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.music-trigger.is-error .music-trigger-retry {
+  display: inline-flex;
 }
 
 .music-trigger.is-pending {
@@ -3067,6 +3150,31 @@ textarea.comment-field {
   color: transparent;
   background: var(--divider);
   border-radius: 999px;
+}
+
+/* 已有歌曲快照时不遮住信息，只把播放键变成轻量的连接状态。 */
+.music-trigger.is-pending .music-trigger-play,
+.music-trigger.is-resolving .music-trigger-play {
+  background: color-mix(in srgb, var(--accent) 72%, var(--muted));
+}
+
+.music-trigger.is-pending .music-trigger-play::before,
+.music-trigger.is-resolving .music-trigger-play::before {
+  width: 14px;
+  height: 14px;
+  margin-left: 0;
+  border: 2px solid color-mix(in srgb, #fff 38%, transparent);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: music-trigger-spinner 0.75s linear infinite;
+}
+
+.music-trigger.is-slow .music-trigger-play {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+@keyframes music-trigger-spinner {
+  to { transform: rotate(1turn); }
 }
 
 /* 全局音乐播放器：左下角悬浮球（有曲目才显示；面板展开时隐藏避免重叠） */

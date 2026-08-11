@@ -243,6 +243,19 @@ export function MusicInitializer() {
     function resolveTracks(card: HTMLElement, data: CardMusicState): Promise<MusicTrack[]> {
       if (data.tracks[0]?.url) return Promise.resolve(data.tracks);
       if (data.resolvePromise) return data.resolvePromise;
+      const hasDisplaySnapshot = data.tracks.length > 0;
+      card.classList.remove("is-error", "is-slow");
+      card.classList.toggle("is-pending", !hasDisplaySnapshot);
+      card.classList.toggle("is-resolving", hasDisplaySnapshot);
+      card.setAttribute("aria-busy", "true");
+      card.setAttribute("aria-label", "正在加载音乐");
+      const slowTimer = window.setTimeout(() => {
+        // 不把快照替换成错误文字：请求较慢时仍保留用户已经看到的歌名、歌手和封面。
+        if (data.resolvePromise) {
+          card.classList.add("is-slow");
+          card.setAttribute("aria-label", "音乐加载较慢，仍在连接");
+        }
+      }, 2_400);
       data.resolvePromise = fetchMusicTracks(data.spec)
         .then((tracks) => {
           if (tracks.length === 0) throw new Error("音乐暂不可用");
@@ -257,10 +270,10 @@ export function MusicInitializer() {
           data.tracks = tracks;
           renderCardTrack(card, data, data.activeIndex);
           syncCard(card, getGlobalPlaybackState());
-          card.classList.remove("is-error");
-          card.classList.remove("is-pending");
+          card.classList.remove("is-error", "is-pending", "is-resolving", "is-slow");
           card.classList.add("is-ready");
           card.setAttribute("aria-busy", "false");
+          card.removeAttribute("aria-label");
           if (!cardSwipeCleanups.has(card)) {
             const swipeCleanup = bindCardSwipe(card, data);
             if (swipeCleanup) cardSwipeCleanups.set(card, swipeCleanup);
@@ -269,13 +282,16 @@ export function MusicInitializer() {
         })
         .catch((error) => {
           card.classList.add("is-error");
-          card.classList.remove("is-pending");
+          card.classList.remove("is-pending", "is-resolving", "is-slow");
           card.setAttribute("aria-busy", "false");
+          card.setAttribute("aria-label", "音乐暂时无法加载，可点击重试");
           const title = card.querySelector<HTMLElement>(".music-trigger-name");
-          if (title) title.textContent = error instanceof Error ? error.message : "音乐暂不可用";
+          // 有首屏快照时保留歌曲信息；没有快照才以错误信息替代占位文本。
+          if (title && !data.tracks[0]?.name) title.textContent = error instanceof Error ? error.message : "音乐暂不可用";
           throw error;
         })
         .finally(() => {
+          window.clearTimeout(slowTimer);
           data.resolvePromise = null;
         });
       return data.resolvePromise;
@@ -525,6 +541,9 @@ export function MusicInitializer() {
           </span>
         </span>
         <span class="music-trigger-play" aria-hidden="true"></span>
+        <button class="music-trigger-retry" type="button" aria-label="重新加载音乐" title="重新加载音乐">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0 1.1 4"/><path d="M20 4v7h-7"/></svg>
+        </button>
       `;
       el.replaceChildren(card);
 
@@ -589,6 +608,13 @@ export function MusicInitializer() {
           return;
         }
         requestGlobalPlay({ tracks: data.tracks, cardId: card.dataset.cardId, trackKey: trackKey(activeTrack) });
+      });
+      const retryButton = card.querySelector<HTMLButtonElement>(".music-trigger-retry");
+      retryButton?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        data.playAfterResolve = false;
+        void resolveTracks(card, data).catch(() => undefined);
       });
       metadataObserver?.observe(card);
     }

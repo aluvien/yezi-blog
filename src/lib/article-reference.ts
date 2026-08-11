@@ -234,7 +234,7 @@ export function articleReferenceCardHtml(input: Partial<ArticleReferenceSnapshot
     : "";
   const hasSummary = Boolean(snapshot.summary || snapshot.keyPoints.length > 0);
   const summaryBody = hasSummary
-    ? `<div class="article-reference-summary-body">${snapshot.summary ? `<p>${escapeHtml(snapshot.summary)}</p>` : ""}${snapshot.keyPoints.length > 0 ? `<ul>${snapshot.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>` : ""}</div>`
+    ? `<div class="article-reference-summary-body"><div class="article-reference-summary-inner">${snapshot.summary ? `<p>${escapeHtml(snapshot.summary)}</p>` : ""}${snapshot.keyPoints.length > 0 ? `<ul>${snapshot.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>` : ""}</div></div>`
     : "";
   const actions = `<div class="article-reference-actions">${hasSummary ? `<span class="article-reference-summary-label">AI 摘要</span>` : ""}<a class="article-reference-read-original" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">阅读原文</a></div>`;
   const main = `<div class="article-reference-main">${cover}<div class="article-reference-copy"><p class="article-reference-source">${escapeHtml(sourceLine)}${date ? ` · ${date}` : ""}</p><h3 class="article-reference-title">${escapeHtml(snapshot.title)}</h3></div></div>`;

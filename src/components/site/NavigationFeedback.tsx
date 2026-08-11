@@ -14,7 +14,8 @@ type PendingNavigation = {
 
 const MIN_VISIBLE_MS = 220;
 const COMPLETE_VISIBLE_MS = 180;
-const SLOW_AFTER_MS = 3_500;
+// 两秒多仍未完成时，再明确告诉用户请求还在继续；进度线本身会在点击瞬间出现。
+const SLOW_AFTER_MS = 2_400;
 
 function clearPendingAnchor(anchor: HTMLAnchorElement | null): void {
   if (!anchor) return;
