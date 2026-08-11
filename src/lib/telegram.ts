@@ -21,6 +21,16 @@ export type TelegramInlineKeyboard = {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
 };
 
+const TELEGRAM_BOT_COMMANDS = [
+  { command: "start", description: "打开博客管理菜单" },
+  { command: "dashboard", description: "查看站点数据概览" },
+  { command: "comments", description: "查看和审核待审评论" },
+  { command: "qqstatus", description: "检测 QQ 音乐播放授权" },
+  { command: "qqlogin", description: "获取 QQ 音乐登录二维码" },
+  { command: "cancel", description: "取消当前回复或登录操作" },
+  { command: "help", description: "查看可用指令" },
+] as const;
+
 type TelegramMessageOptions = {
   /** Defaults to the configured administrator chat. */
   chatId?: string;
@@ -149,6 +159,17 @@ export async function answerTelegramCallback(callbackId: string, text: string): 
   });
 }
 
+/** Register Telegram's native command menu once for the configured Bot. */
+export async function registerTelegramBotCommands(): Promise<void> {
+  const result = await telegramRequest("setMyCommands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ commands: TELEGRAM_BOT_COMMANDS }),
+  });
+  // A transient Telegram failure must not stop command polling or the blog.
+  requestResult(result);
+}
+
 /** New comments are always pending first, so the message leads to moderation. */
 export async function notifyNewComment(input: TelegramCommentNotification): Promise<TelegramNotificationResult> {
   const targetType = input.targetType === "post" ? "文章" : "想法";
@@ -159,12 +180,7 @@ export async function notifyNewComment(input: TelegramCommentNotification): Prom
     `内容：${compactText(input.content, 500)}`,
     `管理：${site.url}/admin/comments`,
   ].join("\n"), {
-    replyMarkup: {
-      inline_keyboard: [[
-        { text: "通过", callback_data: `comment:approve:${input.commentId}` },
-        { text: "回复并通过", callback_data: `comment:reply:${input.commentId}` },
-      ]],
-    },
+    replyMarkup: { inline_keyboard: [[{ text: "通过", callback_data: `comment:approve:${input.commentId}` }, { text: "回复并通过", callback_data: `comment:reply:${input.commentId}` }]] },
   });
 }
 

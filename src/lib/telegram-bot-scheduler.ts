@@ -1,4 +1,4 @@
-import { isTelegramConfigured } from "@/lib/telegram";
+import { isTelegramConfigured, registerTelegramBotCommands } from "@/lib/telegram";
 import { processTelegramBotUpdates } from "@/lib/telegram-bot";
 
 type SchedulerState = {
@@ -45,5 +45,6 @@ export function startTelegramBotScheduler(): void {
   const current = state();
   if (current.started || !isTelegramConfigured()) return;
   current.started = true;
+  void registerTelegramBotCommands();
   schedule(current, 1_500);
 }

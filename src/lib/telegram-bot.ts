@@ -1,8 +1,23 @@
 import fs from "node:fs";
 import path from "node:path";
-import { approveComment, getComment, updateCommentReply } from "@/lib/db";
+import {
+  approveComment,
+  countArticleReferences,
+  countAttachments,
+  countMoments,
+  countPendingComments,
+  countPosts,
+  countPublishedPosts,
+  countWorks,
+  getComment,
+  listCommentsForAdmin,
+  updateCommentReply,
+  type CommentWithTarget,
+} from "@/lib/db";
 import { findString, qqMusicRequest, readUin } from "@/lib/qq-music-api";
+import { inspectQQMusicHealth, qqMusicHealthStatusLabel } from "@/lib/qq-music-health";
 import { saveQQMusicSession } from "@/lib/qq-music-session";
+import { site } from "@/lib/site";
 import {
   answerTelegramCallback,
   getTelegramUpdates,
@@ -10,6 +25,7 @@ import {
   isTelegramConfigured,
   sendTelegramMessage,
   sendTelegramPhoto,
+  type TelegramInlineKeyboard,
 } from "@/lib/telegram";
 
 type JsonRecord = Record<string, unknown>;
@@ -35,6 +51,19 @@ type TelegramBotState = {
 const QR_LOGIN_TTL_MS = 2 * 60 * 1000;
 const COMMENT_REPLY_TTL_MS = 5 * 60 * 1000;
 const INITIAL_UPDATE_WINDOW_SECONDS = 120;
+
+const BOT_MENU: TelegramInlineKeyboard = {
+  inline_keyboard: [
+    [
+      { text: "数据概览", callback_data: "menu:dashboard" },
+      { text: "待审评论", callback_data: "menu:comments" },
+    ],
+    [
+      { text: "QQ 音乐状态", callback_data: "menu:qqstatus" },
+      { text: "QQ 登录二维码", callback_data: "qq:login" },
+    ],
+  ],
+};
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -113,6 +142,72 @@ function command(text: string): string {
   return first?.replace(/@[^\s]+$/, "") ?? "";
 }
 
+function compact(value: string, maxLength: number): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…` : text;
+}
+
+function commentButtons(commentId: number): TelegramInlineKeyboard {
+  return {
+    inline_keyboard: [[
+      { text: "通过", callback_data: `comment:approve:${commentId}` },
+      { text: "回复并通过", callback_data: `comment:reply:${commentId}` },
+    ]],
+  };
+}
+
+async function sendBotMenu(chatId: string): Promise<void> {
+  await sendTelegramMessage([
+    "🍃 博客管理 Bot",
+    "可查看站点概览、审核评论和管理 QQ 音乐登录。",
+    "内容编辑、删除与同步部署仍请在后台完成。",
+  ].join("\n"), { chatId, replyMarkup: BOT_MENU });
+}
+
+async function sendDashboard(chatId: string): Promise<void> {
+  await sendTelegramMessage([
+    "📊 博客数据概览",
+    `文章：${countPublishedPosts()} 已发布 / ${countPosts()} 总计`,
+    `想法：${countMoments()}　作品：${countWorks()}`,
+    `待审评论：${countPendingComments()}　引用：${countArticleReferences()}`,
+    `附件：${countAttachments()}`,
+    `后台：${site.url}/admin`,
+  ].join("\n"), { chatId, replyMarkup: BOT_MENU });
+}
+
+function pendingComments(limit = 5): CommentWithTarget[] {
+  return listCommentsForAdmin(Math.min(50, Math.max(1, limit * 4)))
+    .filter((comment) => comment.status === "pending")
+    .slice(0, limit);
+}
+
+async function sendPendingComments(chatId: string): Promise<void> {
+  const comments = pendingComments();
+  if (comments.length === 0) {
+    await sendTelegramMessage("✅ 当前没有待审评论。", { chatId, replyMarkup: BOT_MENU });
+    return;
+  }
+  await sendTelegramMessage(`💬 待审评论 ${countPendingComments()} 条，以下展示最近 ${comments.length} 条：`, { chatId });
+  for (const comment of comments) {
+    const target = comment.target_type === "post" ? "文章" : "想法";
+    await sendTelegramMessage([
+      `#${comment.id} · ${compact(comment.nickname, 60)}`,
+      `${target}：${compact(comment.target_label ?? "已删除内容", 100)}`,
+      compact(comment.content, 700),
+    ].join("\n"), { chatId, replyMarkup: commentButtons(comment.id) });
+  }
+}
+
+async function sendQQMusicStatus(chatId: string): Promise<void> {
+  const result = await inspectQQMusicHealth();
+  await sendTelegramMessage([
+    "🎵 QQ 音乐状态",
+    `结果：${qqMusicHealthStatusLabel(result.status)}`,
+    `诊断：${result.detail}`,
+    result.status === "healthy" ? "播放授权正常。" : "如需重新登录，可发送 /qqlogin。",
+  ].join("\n"), { chatId, replyMarkup: BOT_MENU });
+}
+
 async function beginQQLogin(state: TelegramBotState, chatId: string): Promise<void> {
   try {
     const raw = await qqMusicRequest("/getQQLoginQr", { useSession: false });
@@ -179,6 +274,21 @@ async function handleCallback(state: TelegramBotState, callback: JsonRecord): Pr
     return;
   }
 
+  if (data === "menu:dashboard") {
+    await answerTelegramCallback(callbackId, "正在读取概览…");
+    await sendDashboard(chatId);
+    return;
+  }
+  if (data === "menu:comments") {
+    await answerTelegramCallback(callbackId, "正在读取待审评论…");
+    await sendPendingComments(chatId);
+    return;
+  }
+  if (data === "menu:qqstatus") {
+    await answerTelegramCallback(callbackId, "正在检测 QQ 音乐…");
+    await sendQQMusicStatus(chatId);
+    return;
+  }
   if (data === "qq:login") {
     await answerTelegramCallback(callbackId, "正在发送二维码…");
     await beginQQLogin(state, chatId);
@@ -214,7 +324,19 @@ async function handleMessage(state: TelegramBotState, message: JsonRecord): Prom
   if (!text) return;
   const action = command(text);
   if (action === "/start" || action === "/help") {
-    await sendTelegramMessage("博客管理 Bot 已连接。\n/qqlogin - 获取 QQ 音乐授权二维码\n/cancel - 取消当前评论回复或 QQ 登录", { chatId });
+    await sendBotMenu(chatId);
+    return;
+  }
+  if (action === "/dashboard") {
+    await sendDashboard(chatId);
+    return;
+  }
+  if (action === "/comments") {
+    await sendPendingComments(chatId);
+    return;
+  }
+  if (action === "/qqstatus") {
+    await sendQQMusicStatus(chatId);
     return;
   }
   if (action === "/qqlogin") {
@@ -228,7 +350,7 @@ async function handleMessage(state: TelegramBotState, message: JsonRecord): Prom
     return;
   }
   if (action.startsWith("/")) {
-    await sendTelegramMessage("可用命令：/qqlogin、/cancel。", { chatId });
+    await sendTelegramMessage("可用命令：/dashboard、/comments、/qqstatus、/qqlogin、/cancel。", { chatId, replyMarkup: BOT_MENU });
     return;
   }
 
