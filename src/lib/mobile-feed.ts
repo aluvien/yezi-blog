@@ -1,8 +1,12 @@
-import type { Post } from "@/lib/db";
+import type { ContentMetrics, Moment, Post } from "@/lib/db";
 
 export type PostSummary = Pick<Post, "id" | "title" | "slug" | "cover" | "category" | "created_at"> & {
   excerpt: string;
 };
+
+export type FeedItem =
+  | { type: "moment"; value: Moment; commentCount: number; metrics: ContentMetrics; initialLiked: boolean }
+  | { type: "post"; value: PostSummary; commentCount: number; metrics: ContentMetrics; initialLiked: boolean };
 
 export function toPostSummary(post: Post, excerpt: string): PostSummary {
   return {

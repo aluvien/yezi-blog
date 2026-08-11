@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContentMetrics, Moment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
 import { formatDateOnly } from "@/lib/format";
-import type { PostSummary } from "@/lib/mobile-feed";
+import type { FeedItem, PostSummary } from "@/lib/mobile-feed";
 import { MetricIcon, type MetricIconType } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
 import { LikeButton } from "@/components/site/LikeButton";
@@ -14,9 +15,7 @@ import { useMomentView } from "@/components/site/MomentViewTracker";
 import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 import { SiteImage } from "@/components/site/SiteImage";
 
-export type FeedItem =
-  | { type: "moment"; value: Moment; commentCount: number; metrics: ContentMetrics; initialLiked: boolean }
-  | { type: "post"; value: PostSummary; commentCount: number; metrics: ContentMetrics; initialLiked: boolean };
+export type { FeedItem } from "@/lib/mobile-feed";
 
 function Metric({ type, value, href }: { type: MetricIconType; value: number; href?: string }) {
   const content = <><MetricIcon type={type} /><span>{value}</span></>;
@@ -110,15 +109,74 @@ function MobilePost({ post, commentCount, metrics, initialLiked, canEdit }: { po
   );
 }
 
-export function MobileFeed({ items, authorName = "", authorAvatar, authorAvatarNoBorder = false, canEdit = false }: { items: FeedItem[]; authorName?: string; authorAvatar?: string; authorAvatarNoBorder?: boolean; canEdit?: boolean }) {
+type FeedPagination = {
+  initialHasMore: boolean;
+  batchSize: number;
+};
+
+type HomeFeedResponse = {
+  items?: FeedItem[];
+  hasMore?: boolean;
+};
+
+export function MobileFeed({ items, authorName = "", authorAvatar, authorAvatarNoBorder = false, canEdit = false, pagination }: { items: FeedItem[]; authorName?: string; authorAvatar?: string; authorAvatarNoBorder?: boolean; canEdit?: boolean; pagination?: FeedPagination }) {
+  const isPaginated = Boolean(pagination);
+  const [loadedItems, setLoadedItems] = useState(items);
+  const [hasMore, setHasMore] = useState(pagination?.initialHasMore ?? false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
+  const batchSize = pagination?.batchSize ?? 5;
+
+  const loadMore = useCallback(async (retry = false) => {
+    if (!isPaginated || !hasMore || loadingRef.current || (loadError && !retry)) return;
+    loadingRef.current = true;
+    setLoadingMore(true);
+    setLoadError("");
+    try {
+      const response = await fetch(`/api/home-feed?offset=${loadedItems.length}&limit=${batchSize}`, { cache: "no-store", credentials: "same-origin" });
+      const payload = await response.json().catch(() => null) as HomeFeedResponse | null;
+      if (!response.ok || !payload || !Array.isArray(payload.items) || typeof payload.hasMore !== "boolean") throw new Error("加载失败");
+      setLoadedItems((current) => {
+        const known = new Set(current.map((item) => `${item.type}:${item.value.id}`));
+        const additions = payload.items!.filter((item) => !known.has(`${item.type}:${item.value.id}`));
+        return additions.length > 0 ? [...current, ...additions] : current;
+      });
+      setHasMore(payload.hasMore);
+    } catch {
+      setLoadError("加载较早记录失败");
+    } finally {
+      loadingRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [batchSize, hasMore, isPaginated, loadError, loadedItems.length]);
+
+  useEffect(() => {
+    const target = sentinelRef.current;
+    if (!isPaginated || !target || !hasMore || loadError) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) void loadMore();
+    }, { rootMargin: "420px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, isPaginated, loadError, loadMore]);
+
+  const displayedItems = isPaginated ? loadedItems : items;
   return (
     <div className="mobile-feed">
-      {items.map((item) => item.type === "moment" ? (
+      {displayedItems.map((item) => item.type === "moment" ? (
         <MobileMemo key={`moment-${item.value.id}`} moment={item.value} commentCount={item.commentCount} metrics={item.metrics} authorName={authorName} authorAvatar={authorAvatar} authorAvatarNoBorder={authorAvatarNoBorder} initialLiked={item.initialLiked} canEdit={canEdit} />
       ) : (
         <MobilePost key={`post-${item.value.id}`} post={item.value} commentCount={item.commentCount} metrics={item.metrics} initialLiked={item.initialLiked} canEdit={canEdit} />
       ))}
-      <p className="mobile-feed-end">继续向下浏览更早的记录</p>
+      {isPaginated ? (
+        <div ref={sentinelRef} className="mobile-feed-end" role="status">
+          {loadingMore ? "正在加载更早的记录…" : loadError ? (
+            <button type="button" onClick={() => void loadMore(true)} className="mobile-feed-retry">加载失败，点击重试</button>
+          ) : hasMore ? "继续向下浏览更早的记录" : "已经到底了"}
+        </div>
+      ) : <p className="mobile-feed-end">继续向下浏览更早的记录</p>}
     </div>
   );
 }

@@ -1378,11 +1378,27 @@ body {
 }
 
 .mobile-feed-end {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
   margin: 4px 0 24px;
   color: var(--muted);
   font-family: var(--font-site-mono);
-  font-size: 14px;
+  font-size: 13px;
   text-align: center;
+}
+
+.mobile-feed-retry {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.mobile-feed-retry:hover {
+  text-decoration: underline;
 }
 
 .site-mobile-menu {
