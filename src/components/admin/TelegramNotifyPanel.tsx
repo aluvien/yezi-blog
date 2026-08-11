@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Status = {
   configured: boolean;
-  qqMusic: { status?: string; label?: string; lastCheckedAt: string | null; lastNotifiedAt: string | null };
+  qqMusic: { status?: string; label?: string; lastCheckedAt: string | null; lastDetail: string | null; lastNotifiedAt: string | null };
 };
 
 type Props = {
@@ -87,6 +87,7 @@ export default function TelegramNotifyPanel({
       <div className="mt-3 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-5 text-neutral-600">
         <p>QQ 音乐：{status?.qqMusic.label ?? "尚未检测"}</p>
         <p className="text-neutral-400">上次检测：{formatTime(status?.qqMusic.lastCheckedAt ?? null)}</p>
+        {status?.qqMusic.lastDetail && <p className="mt-1 text-neutral-500">诊断：{status.qqMusic.lastDetail}</p>}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-neutral-700">

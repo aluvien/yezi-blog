@@ -18,6 +18,7 @@ export async function GET() {
     qqMusic: {
       ...(state.lastStatus ? { status: state.lastStatus, label: qqMusicHealthStatusLabel(state.lastStatus) } : {}),
       lastCheckedAt: state.lastCheckedAt ?? null,
+      lastDetail: state.lastDetail ?? null,
       lastNotifiedAt: state.lastNotifiedAt ?? null,
     },
   });

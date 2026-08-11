@@ -77,6 +77,12 @@ function isCookieFailure(message: string): boolean {
   return /cookie|登录|登入|失效|过期|expired|invalid\s*(?:cookie|session)|\buin\b/i.test(message);
 }
 
+/** Only connection/timeout failures mean the local sidecar is unavailable. */
+function isServiceUnavailable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /fetch failed|econnrefused|econnreset|enotfound|network|timeout|timed out|aborted/i.test(message);
+}
+
 function statusLabel(status: QQMusicHealthStatus): string {
   switch (status) {
     case "healthy": return "正常";
@@ -98,7 +104,10 @@ export async function inspectQQMusicHealth(): Promise<QQMusicHealthResult> {
   }
 
   try {
-    const raw = await qqMusicRequest("/getMusicPlay", { query: { songMID: probeMid(), quality: "320" } });
+    // The sidecar accepts `songmid` (lowercase), exactly like the front-end
+    // player route. `songMID` happens to work on some releases but is rejected
+    // as a bad request on others, which previously looked like an outage.
+    const raw = await qqMusicRequest("/getMusicPlay", { query: { songmid: probeMid(), quality: "320" } });
     const data = unwrapData(raw);
     const audioUrl = normalizeQQAudio(findString(data, ["url", "purl", "play_url"]));
     if (audioUrl) return { status: "healthy", checkedAt, detail: "QQ 音乐播放授权正常" };
@@ -113,10 +122,14 @@ export async function inspectQQMusicHealth(): Promise<QQMusicHealthResult> {
       detail: detail ? `探测歌曲暂时不可播放：${detail.slice(0, 120)}` : "探测歌曲未返回播放地址",
     };
   } catch (error) {
+    const detail = error instanceof Error ? error.message.slice(0, 120) : "未知错误";
     return {
-      status: "unavailable",
+      // A non-2xx response from the sidecar or QQ upstream is not proof that
+      // the sidecar itself is down. Keep it visible for diagnosis but avoid a
+      // false Telegram outage alert.
+      status: isServiceUnavailable(error) ? "unavailable" : "unverified",
       checkedAt,
-      detail: error instanceof Error ? `QQ 音乐服务不可用：${error.message.slice(0, 120)}` : "QQ 音乐服务不可用",
+      detail: isServiceUnavailable(error) ? `无法连接 QQ 音乐服务：${detail}` : `播放授权探测未完成：${detail}`,
     };
   }
 }

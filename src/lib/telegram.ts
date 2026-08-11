@@ -39,6 +39,15 @@ function compactText(value: string, maxLength: number): string {
   return normalized.length > maxLength ? `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…` : normalized;
 }
 
+function telegramErrorMessage(description: string): string {
+  if (/chat not found/i.test(description)) {
+    return "Telegram 找不到这个 Chat ID：请先打开 Bot 私聊并发送 /start；若通知发往群组，请把 Bot 加入群组后填写该群组的 Chat ID。";
+  }
+  if (/unauthorized|bot token/i.test(description)) return "Telegram Bot Token 无效或已失效。";
+  if (/bot was blocked by the user/i.test(description)) return "该聊天已屏蔽 Bot，请先在 Telegram 中解除屏蔽并发送 /start。";
+  return compactText(description, 180);
+}
+
 /**
  * Send a plain-text message without ever exposing Telegram credentials to a
  * browser, the database, or a caller. Telegram errors are normalized so route
@@ -59,7 +68,7 @@ export async function sendTelegramMessage(text: string): Promise<TelegramNotific
     const data = await response.json().catch(() => null) as TelegramApiResponse | null;
     if (!response.ok || data?.ok !== true) {
       const description = typeof data?.description === "string" ? data.description.trim() : "Telegram 服务未接受通知";
-      return { ok: false, configured: true, error: compactText(description, 180) };
+      return { ok: false, configured: true, error: telegramErrorMessage(description) };
     }
     return { ok: true, configured: true };
   } catch {
