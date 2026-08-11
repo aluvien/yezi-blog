@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { commentTargetExists, createComment, getMoment, getPost, lastCommentAgeByIp } from "@/lib/db";
+import { commentTargetExists, createComment, getMoment, getPost, getSiteSettings, lastCommentAgeByIp } from "@/lib/db";
 import { getClientIp } from "@/lib/request";
 import { notifyNewComment } from "@/lib/telegram";
 
@@ -72,12 +72,15 @@ export async function submitComment(request: Request): Promise<CommentResult> {
   // `after` keeps the async delivery in the request lifecycle without making a
   // visitor wait for Telegram or allowing a delivery failure to reject a valid
   // comment submission.
-  after(() => notifyNewComment({
-    nickname: comment.nickname,
-    content: comment.content,
-    targetType,
-    targetLabel: commentTargetLabel(targetType, targetId),
-  }));
+  if (getSiteSettings().telegram_comment_notifications_enabled !== "0") {
+    after(() => notifyNewComment({
+      commentId: comment.id,
+      nickname: comment.nickname,
+      content: comment.content,
+      targetType,
+      targetLabel: commentTargetLabel(targetType, targetId),
+    }));
+  }
   return {
     data: {
       message: "评论已提交，审核后展示",

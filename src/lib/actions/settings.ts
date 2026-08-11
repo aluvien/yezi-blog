@@ -38,6 +38,7 @@ const SETTING_KEYS = [
   "music_position",
   "qq_music_health_check_enabled",
   "qq_music_health_check_interval_hours",
+  "telegram_comment_notifications_enabled",
   "theme",
   "layout_theme",
   "dark_mode",

@@ -163,7 +163,11 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
       `状态：${statusLabel(result.status)}`,
       `详情：${result.detail}`,
       "请到博客后台「设置 → 音乐设置」重新扫码登录。",
-    ].join("\n"));
+    ].join("\n"), {
+      replyMarkup: {
+        inline_keyboard: [[{ text: "发送 QQ 登录二维码", callback_data: "qq:login" }]],
+      },
+    });
     if (sent.ok) {
       next.lastNotifiedStatus = result.status;
       next.lastNotifiedAt = result.checkedAt;

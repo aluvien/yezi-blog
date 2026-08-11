@@ -12,6 +12,8 @@ type Props = {
   healthCheckIntervalHours: string;
   onHealthCheckEnabledChange: (enabled: boolean) => void;
   onHealthCheckIntervalHoursChange: (hours: string) => void;
+  commentNotificationsEnabled: boolean;
+  onCommentNotificationsEnabledChange: (enabled: boolean) => void;
 };
 
 async function api<T>(init?: RequestInit): Promise<T> {
@@ -32,6 +34,8 @@ export default function TelegramNotifyPanel({
   healthCheckIntervalHours,
   onHealthCheckEnabledChange,
   onHealthCheckIntervalHoursChange,
+  commentNotificationsEnabled,
+  onCommentNotificationsEnabledChange,
 }: Props) {
   const [status, setStatus] = useState<Status | null>(null);
   const [message, setMessage] = useState("");
@@ -117,6 +121,17 @@ export default function TelegramNotifyPanel({
         </label>
       </div>
       <p className="mt-1.5 text-xs leading-5 text-neutral-400">保存设置后立即生效；博客 Node 进程重启时会自动恢复，不依赖宝塔计划任务。</p>
+
+      <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
+        <input
+          type="checkbox"
+          checked={commentNotificationsEnabled}
+          onChange={(event) => onCommentNotificationsEnabledChange(event.target.checked)}
+          className="h-4 w-4 accent-neutral-700"
+        />
+        新评论推送 Telegram（可在消息内直接通过或回复并通过）
+      </label>
+      <p className="mt-1.5 text-xs leading-5 text-neutral-400">向 Bot 发送 <code>/qqlogin</code> 可获取 QQ 音乐授权二维码；点击“回复并通过”后，直接发送回复内容即可。</p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" disabled={busy !== null} onClick={() => void run("test")} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">

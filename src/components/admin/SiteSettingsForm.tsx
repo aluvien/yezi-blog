@@ -35,6 +35,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     music_position: initialValues.music_position === "bottom" ? "bottom" : "left",
     qq_music_health_check_enabled: initialValues.qq_music_health_check_enabled ?? "1",
     qq_music_health_check_interval_hours: initialValues.qq_music_health_check_interval_hours ?? "6",
+    telegram_comment_notifications_enabled: initialValues.telegram_comment_notifications_enabled ?? "1",
     theme: initialValues.theme ?? "default",
     layout_theme: initialValues.layout_theme ?? "classic",
     dark_mode: initialValues.dark_mode ?? "auto",
@@ -190,6 +191,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
           healthCheckIntervalHours={values.qq_music_health_check_interval_hours}
           onHealthCheckEnabledChange={(enabled) => update("qq_music_health_check_enabled", enabled ? "1" : "0")}
           onHealthCheckIntervalHoursChange={(hours) => update("qq_music_health_check_interval_hours", hours)}
+          commentNotificationsEnabled={values.telegram_comment_notifications_enabled === "1"}
+          onCommentNotificationsEnabledChange={(enabled) => update("telegram_comment_notifications_enabled", enabled ? "1" : "0")}
         />
 
         <div className="grid gap-3 md:grid-cols-2">
