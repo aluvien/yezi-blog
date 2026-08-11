@@ -4,11 +4,14 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/lib/format";
 import { site } from "@/lib/site";
+import { generatedAvatar } from "@/lib/avatar";
 import { replyCommentAction } from "@/lib/actions/comments";
+import { SiteImage } from "@/components/site/SiteImage";
 
 export interface CommentItem {
   id: number;
   nickname: string;
+  avatar: string;
   content: string;
   created_at: string;
   admin_reply: string | null;
@@ -18,30 +21,15 @@ export interface CommentItem {
 interface PendingCommentItem {
   id: number;
   nickname: string;
+  avatar: string;
   content: string;
   created_at: string;
 }
 
-function avatarColor(name: string): string {
-  const colors = [
-    "#07c160", "#576b95", "#fa5151", "#ffc300",
-    "#1aad19", "#3b7ddd", "#eb5757", "#f2994a",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-}
-
-function Avatar({ name }: { name: string }) {
-  const initial = name.charAt(0).toUpperCase();
-  const bg = avatarColor(name);
+function Avatar({ name, src, noBorder = false }: { name: string; src?: string | null; noBorder?: boolean }) {
   return (
-    <div
-      className="comment-avatar"
-      style={{ backgroundColor: bg }}
-      aria-hidden="true"
-    >
-      {initial}
+    <div className={`comment-avatar ${src ? "has-avatar" : ""} ${noBorder ? "no-border" : ""}`}>
+      {src ? <SiteImage src={src} alt={`${name} 的头像`} fill sizes="40px" className="object-cover" /> : name.charAt(0).toUpperCase()}
     </div>
   );
 }
@@ -58,6 +46,8 @@ export function Comments({
   commentCount,
   isAdmin = false,
   authorName = site.author,
+  authorAvatar,
+  authorAvatarNoBorder = false,
 }: {
   targetType: "post" | "moment";
   targetId: number;
@@ -66,6 +56,8 @@ export function Comments({
   commentCount?: number;
   isAdmin?: boolean;
   authorName?: string;
+  authorAvatar?: string | null;
+  authorAvatarNoBorder?: boolean;
 }) {
   const router = useRouter();
   const [nickname, setNickname] = useState("");
@@ -138,7 +130,12 @@ export function Comments({
       };
       if (res.status === 201) {
         setMessage({ ok: true, text: "评论已提交，将在审核后展示。" });
-        if (data.comment) setSubmittedComments((current) => [...current, data.comment!]);
+        if (data.comment) {
+          setSubmittedComments((current) => [...current, {
+            ...data.comment!,
+            avatar: data.comment!.avatar || generatedAvatar(`comment:${data.comment!.id}:${data.comment!.nickname.trim().toLowerCase()}`),
+          }]);
+        }
         setContent("");
       } else if (res.status === 429) {
         setMessage({ ok: false, text: "发布太频繁，请稍后再试。" });
@@ -201,7 +198,7 @@ export function Comments({
         <ul className="comments-list">
           {comments.map((c) => (
             <li key={c.id} className="comment-item">
-              <Avatar name={c.nickname} />
+              <Avatar name={c.nickname} src={c.avatar} />
               <div className="comment-body">
                 <div className="comment-meta">
                   <span className="comment-author">{c.nickname}</span>
@@ -216,7 +213,7 @@ export function Comments({
                 {c.admin_reply && (
                   <div className="comment-children">
                     <div className="comment-item comment-item-reply">
-                      <Avatar name={authorName} />
+                      <Avatar name={authorName} src={authorAvatar} noBorder={authorAvatarNoBorder} />
                       <div className="comment-body">
                         <div className="comment-meta">
                           <span className="comment-author">{authorName}</span>
@@ -257,7 +254,7 @@ export function Comments({
           ))}
           {submittedComments.map((comment) => (
             <li key={`pending-${comment.id}`} className="comment-item is-pending">
-              <Avatar name={comment.nickname} />
+              <Avatar name={comment.nickname} src={comment.avatar} />
               <div className="comment-body">
                 <div className="comment-meta">
                   <span className="comment-author">{comment.nickname}</span>

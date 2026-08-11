@@ -66,7 +66,8 @@ npm run dev                        # http://localhost:3030
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 | `QQ_MUSIC_SESSION_PATH` | QQ 扫码会话文件路径；留空时放在数据库同目录，必须持久化且不可公开访问 | `data/qq-music-session.json` |
 | `QQ_MUSIC_HEALTH_CHECK_MID` | 用于验证 QQ Cookie 真实播放授权的歌曲 MID；建议选择一首可稳定播放的歌曲 | 内置测试歌曲 |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选，Telegram Bot 管理员通知凭据；用于新评论和 QQ 音乐状态提醒 | 空（不发送） |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选，Telegram Bot 通知凭据；用于新评论和 QQ 音乐状态提醒 | 空（不发送） |
+| `TELEGRAM_ADMIN_USER_ID` | 推荐配置的管理员个人 User ID；管理命令、审核和 QQ 登录仅接受该用户的私聊操作 | 空（仅兼容通知 Chat ID 为管理员私聊的旧配置） |
 | `LLM_API_KEY` / `OPENAI_API_KEY` | 可选，文章引用 AI 摘要服务的密钥；兼容 OpenAI Chat Completions 格式 | 空（不生成摘要） |
 | `LLM_API_URL` | 可选，AI 摘要接口地址，可填服务商根地址、`/v1` 或完整的 Chat Completions 地址 | `https://api.openai.com/v1/chat/completions` |
 | `LLM_MODEL` | 可选，AI 摘要模型名 | `gpt-4o-mini` |
@@ -225,7 +226,7 @@ QQ_MUSIC_API_URL=http://127.0.0.1:3201
 
 ### 可选：Telegram 管理员提醒
 
-在博客服务器的 `.env.local` 配置 `TELEGRAM_BOT_TOKEN` 与 `TELEGRAM_CHAT_ID` 后，重启博客服务。后台“设置 → 音乐设置”会显示通知配置状态，可发送测试消息，也可手动检测一次 QQ 音乐真实播放授权。
+在博客服务器的 `.env.local` 配置 `TELEGRAM_BOT_TOKEN` 与 `TELEGRAM_CHAT_ID` 后，重启博客服务。建议额外配置你的个人 `TELEGRAM_ADMIN_USER_ID`：管理命令、评论审核和 QQ 登录二维码只接受该用户的私聊操作；若通知发到群组，群组仅接收通知而不会出现高权限按钮。后台“设置 → 音乐设置”会显示通知配置状态，可发送测试消息，也可手动检测一次 QQ 音乐真实播放授权。
 
 新评论会即时推送到 Telegram（不含评论者邮箱和 IP），QQ 音乐 Cookie 缺失、失效或本机服务不可用时会提醒；同一故障最多每 24 小时重复一次，恢复后会再发一条恢复通知。
 

@@ -3,6 +3,7 @@ import { site } from "@/lib/site";
 type TelegramConfig = {
   token: string;
   chatId: string;
+  adminUserId: string;
 };
 
 type TelegramApiResponse = {
@@ -49,7 +50,8 @@ export type TelegramCommentNotification = {
 function config(): TelegramConfig | null {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim() ?? "";
   const chatId = process.env.TELEGRAM_CHAT_ID?.trim() ?? "";
-  return token && chatId ? { token, chatId } : null;
+  const adminUserId = process.env.TELEGRAM_ADMIN_USER_ID?.trim() ?? "";
+  return token && chatId ? { token, chatId, adminUserId } : null;
 }
 
 /** Whether the server has enough private configuration to send notifications. */
@@ -57,9 +59,26 @@ export function isTelegramConfigured(): boolean {
   return config() !== null;
 }
 
-/** Callback commands are accepted only from the configured administrator chat. */
-export function isTelegramAdminChat(chatId: string): boolean {
-  return Boolean(chatId) && config()?.chatId === chatId;
+function isTelegramUserId(value: string): boolean {
+  return /^\d{1,24}$/.test(value);
+}
+
+/**
+ * 管理操作只允许管理员私聊发起：群组可以接收通知，但成员无法审核评论或接管 QQ 登录。
+ * 未设置 TELEGRAM_ADMIN_USER_ID 时，只兼容“通知 Chat ID 就是管理员私聊 ID”的旧配置。
+ */
+export function isTelegramAdminUser(input: { chatId: string; chatType: string; userId: string }): boolean {
+  const current = config();
+  if (!current || input.chatType !== "private" || !isTelegramUserId(input.userId)) return false;
+  if (current.adminUserId) return isTelegramUserId(current.adminUserId) && input.userId === current.adminUserId;
+  return isTelegramUserId(current.chatId) && input.chatId === current.chatId && input.userId === current.chatId;
+}
+
+/** 只有默认通知目标本身就是管理员私聊时，才向该通知附带高权限操作按钮。 */
+export function canManageFromNotificationChat(): boolean {
+  const current = config();
+  if (!current || !isTelegramUserId(current.chatId)) return false;
+  return !current.adminUserId || (isTelegramUserId(current.adminUserId) && current.adminUserId === current.chatId);
 }
 
 function compactText(value: string, maxLength: number): string {
@@ -178,10 +197,17 @@ export async function answerTelegramCallback(callbackId: string, text: string): 
 
 /** Register Telegram's native command menu once for the configured Bot. */
 export async function registerTelegramBotCommands(): Promise<void> {
+  // 旧版本注册在默认范围，群组也会显示菜单。先清理默认范围，再仅为私聊注册。
+  const clearResult = await telegramRequest("deleteMyCommands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ scope: { type: "default" } }),
+  });
+  requestResult(clearResult);
   const result = await telegramRequest("setMyCommands", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ commands: TELEGRAM_BOT_COMMANDS }),
+    body: JSON.stringify({ commands: TELEGRAM_BOT_COMMANDS, scope: { type: "all_private_chats" } }),
   });
   // A transient Telegram failure must not stop command polling or the blog.
   requestResult(result);
@@ -201,7 +227,7 @@ export async function notifyNewComment(input: TelegramCommentNotification): Prom
     `<a href=\"${site.url}/admin/comments\">进入后台审核 →</a>`,
   ].join("\n"), {
     parseMode: "HTML",
-    replyMarkup: { inline_keyboard: [[{ text: "通过", callback_data: `comment:approve:${input.commentId}` }, { text: "回复并通过", callback_data: `comment:reply:${input.commentId}` }]] },
+    ...(canManageFromNotificationChat() ? { replyMarkup: { inline_keyboard: [[{ text: "通过", callback_data: `comment:approve:${input.commentId}` }, { text: "回复并通过", callback_data: `comment:reply:${input.commentId}` }]] } } : {}),
   });
 }
 

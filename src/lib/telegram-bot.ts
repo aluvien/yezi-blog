@@ -21,7 +21,7 @@ import { site } from "@/lib/site";
 import {
   answerTelegramCallback,
   getTelegramUpdates,
-  isTelegramAdminChat,
+  isTelegramAdminUser,
   isTelegramConfigured,
   sendTelegramMessage,
   sendTelegramPhoto,
@@ -33,6 +33,7 @@ type JsonRecord = Record<string, unknown>;
 
 type PendingQQLogin = {
   chatId: string;
+  userId: string;
   qrsig: string;
   ptqrtoken: string;
   expiresAt: number;
@@ -89,13 +90,13 @@ function readState(): TelegramBotState {
   try {
     const raw = JSON.parse(fs.readFileSync(botStatePath(), "utf8")) as TelegramBotState;
     const pendingQQLogin = raw.pendingQQLogin;
-    const pendingCommentReplies = Object.fromEntries(Object.entries(raw.pendingCommentReplies ?? {}).flatMap(([chatId, pending]) => {
-      if (!pending || !/^[-\d]{1,24}$/.test(chatId) || !Number.isInteger(pending.commentId) || pending.commentId < 1 || !Number.isFinite(pending.expiresAt)) return [];
-      return [[chatId, { commentId: pending.commentId, expiresAt: pending.expiresAt }]];
+    const pendingCommentReplies = Object.fromEntries(Object.entries(raw.pendingCommentReplies ?? {}).flatMap(([userId, pending]) => {
+      if (!pending || !/^\d{1,24}$/.test(userId) || !Number.isInteger(pending.commentId) || pending.commentId < 1 || !Number.isFinite(pending.expiresAt)) return [];
+      return [[userId, { commentId: pending.commentId, expiresAt: pending.expiresAt }]];
     }));
     return {
       ...(Number.isInteger(raw.offset) && (raw.offset as number) > 0 ? { offset: raw.offset } : {}),
-      ...(pendingQQLogin && /^[-\d]{1,24}$/.test(pendingQQLogin.chatId) && pendingQQLogin.qrsig && pendingQQLogin.ptqrtoken && Number.isFinite(pendingQQLogin.expiresAt)
+      ...(pendingQQLogin && /^\d{1,24}$/.test(pendingQQLogin.chatId) && /^\d{1,24}$/.test(pendingQQLogin.userId) && pendingQQLogin.qrsig && pendingQQLogin.ptqrtoken && Number.isFinite(pendingQQLogin.expiresAt)
         ? { pendingQQLogin: pendingQQLogin } : {}),
       ...(Object.keys(pendingCommentReplies).length > 0 ? { pendingCommentReplies } : {}),
     };
@@ -131,6 +132,14 @@ function messageRecord(update: JsonRecord): JsonRecord | null {
 
 function messageChatId(message: JsonRecord): string {
   return isRecord(message.chat) ? stringValue(message.chat.id, 24) : "";
+}
+
+function messageChatType(message: JsonRecord): string {
+  return isRecord(message.chat) ? stringValue(message.chat.type, 32) : "";
+}
+
+function senderUserId(value: JsonRecord): string {
+  return isRecord(value.from) ? stringValue(value.from.id, 24) : "";
 }
 
 function messageDate(update: JsonRecord): number | null {
@@ -216,7 +225,7 @@ async function sendQQMusicStatus(chatId: string): Promise<void> {
   ].join("\n"), { chatId, parseMode: "HTML", replyMarkup: BOT_MENU });
 }
 
-async function beginQQLogin(state: TelegramBotState, chatId: string): Promise<void> {
+async function beginQQLogin(state: TelegramBotState, chatId: string, userId: string): Promise<void> {
   try {
     const raw = await qqMusicRequest("/getQQLoginQr", { useSession: false });
     const image = qrImage(raw);
@@ -231,7 +240,7 @@ async function beginQQLogin(state: TelegramBotState, chatId: string): Promise<vo
       await sendTelegramMessage(sent.error ?? "二维码发送失败，请稍后重试。", { chatId });
       return;
     }
-    state.pendingQQLogin = { chatId, qrsig, ptqrtoken, expiresAt: Date.now() + QR_LOGIN_TTL_MS };
+    state.pendingQQLogin = { chatId, userId, qrsig, ptqrtoken, expiresAt: Date.now() + QR_LOGIN_TTL_MS };
   } catch {
     await sendTelegramMessage("QQ 音乐服务暂不可用，暂时无法生成二维码。", { chatId });
   }
@@ -240,6 +249,10 @@ async function beginQQLogin(state: TelegramBotState, chatId: string): Promise<vo
 async function pollPendingQQLogin(state: TelegramBotState): Promise<void> {
   const pending = state.pendingQQLogin;
   if (!pending) return;
+  if (!isTelegramAdminUser({ chatId: pending.chatId, chatType: "private", userId: pending.userId })) {
+    delete state.pendingQQLogin;
+    return;
+  }
   if (pending.expiresAt <= Date.now()) {
     delete state.pendingQQLogin;
     await sendTelegramMessage("QQ 音乐二维码已过期，发送 /qqlogin 可重新获取。", { chatId: pending.chatId });
@@ -277,7 +290,9 @@ async function handleCallback(state: TelegramBotState, callback: JsonRecord): Pr
   const data = stringValue(callback.data, 80);
   const message = isRecord(callback.message) ? callback.message : null;
   const chatId = message ? messageChatId(message) : "";
-  if (!isTelegramAdminChat(chatId)) {
+  const chatType = message ? messageChatType(message) : "";
+  const userId = senderUserId(callback);
+  if (!isTelegramAdminUser({ chatId, chatType, userId })) {
     await answerTelegramCallback(callbackId, "未授权");
     return;
   }
@@ -299,7 +314,7 @@ async function handleCallback(state: TelegramBotState, callback: JsonRecord): Pr
   }
   if (data === "qq:login") {
     await answerTelegramCallback(callbackId, "正在发送二维码…");
-    await beginQQLogin(state, chatId);
+    await beginQQLogin(state, chatId, userId);
     return;
   }
 
@@ -320,14 +335,15 @@ async function handleCallback(state: TelegramBotState, callback: JsonRecord): Pr
   }
 
   state.pendingCommentReplies = state.pendingCommentReplies ?? {};
-  state.pendingCommentReplies[chatId] = { commentId, expiresAt: Date.now() + COMMENT_REPLY_TTL_MS };
+  state.pendingCommentReplies[userId] = { commentId, expiresAt: Date.now() + COMMENT_REPLY_TTL_MS };
   await answerTelegramCallback(callbackId, "请直接发送回复内容");
   await sendTelegramMessage(`请在 5 分钟内直接发送给 Bot 回复内容；收到后会自动回复并通过评论 #${commentId}。`, { chatId });
 }
 
 async function handleMessage(state: TelegramBotState, message: JsonRecord): Promise<void> {
   const chatId = messageChatId(message);
-  if (!isTelegramAdminChat(chatId)) return;
+  const userId = senderUserId(message);
+  if (!isTelegramAdminUser({ chatId, chatType: messageChatType(message), userId })) return;
   const text = stringValue(message.text, 1_000);
   if (!text) return;
   const action = command(text);
@@ -348,12 +364,12 @@ async function handleMessage(state: TelegramBotState, message: JsonRecord): Prom
     return;
   }
   if (action === "/qqlogin") {
-    await beginQQLogin(state, chatId);
+    await beginQQLogin(state, chatId, userId);
     return;
   }
   if (action === "/cancel") {
-    if (state.pendingQQLogin?.chatId === chatId) delete state.pendingQQLogin;
-    if (state.pendingCommentReplies?.[chatId]) delete state.pendingCommentReplies[chatId];
+    if (state.pendingQQLogin?.userId === userId) delete state.pendingQQLogin;
+    if (state.pendingCommentReplies?.[userId]) delete state.pendingCommentReplies[userId];
     await sendTelegramMessage("<b>操作已取消</b>\n\n当前评论回复或 QQ 登录已取消。", { chatId, parseMode: "HTML" });
     return;
   }
@@ -362,15 +378,15 @@ async function handleMessage(state: TelegramBotState, message: JsonRecord): Prom
     return;
   }
 
-  const pending = state.pendingCommentReplies?.[chatId];
+  const pending = state.pendingCommentReplies?.[userId];
   if (!pending) return;
   if (pending.expiresAt <= Date.now()) {
-    delete state.pendingCommentReplies?.[chatId];
+    delete state.pendingCommentReplies?.[userId];
     await sendTelegramMessage("评论回复已超时，请重新点击“回复并通过”。", { chatId });
     return;
   }
   const comment = getComment(pending.commentId);
-  delete state.pendingCommentReplies?.[chatId];
+  delete state.pendingCommentReplies?.[userId];
   if (!comment) {
     await sendTelegramMessage("这条评论已不存在。", { chatId });
     return;

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getQQMusicSession } from "@/lib/qq-music-session";
 import { findString, normalizeQQAudio, qqMusicRequest, unwrapData } from "@/lib/qq-music-api";
-import { escapeTelegramHtml, isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
+import { canManageFromNotificationChat, escapeTelegramHtml, isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
 
 export type QQMusicHealthStatus = "healthy" | "missing_session" | "expired" | "unavailable" | "unverified";
 
@@ -164,12 +164,12 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
       `<b>状态</b>　${statusLabel(result.status)}`,
       `<b>诊断</b>　${escapeTelegramHtml(result.detail)}`,
       "",
-      "可在下方直接获取登录二维码。",
+      canManageFromNotificationChat() ? "可在下方直接获取登录二维码。" : "请在与 Bot 的管理员私聊中发送 /qqlogin 获取登录二维码。",
     ].join("\n"), {
       parseMode: "HTML",
-      replyMarkup: {
+      ...(canManageFromNotificationChat() ? { replyMarkup: {
         inline_keyboard: [[{ text: "发送 QQ 登录二维码", callback_data: "qq:login" }]],
-      },
+      } } : {}),
     });
     if (sent.ok) {
       next.lastNotifiedStatus = result.status;

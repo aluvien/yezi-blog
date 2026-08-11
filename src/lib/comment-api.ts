@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { commentTargetExists, createComment, getMoment, getPost, getSiteSettings, lastCommentAgeByIp } from "@/lib/db";
+import { getCommentAvatar } from "@/lib/author";
 import { getClientIp } from "@/lib/request";
 import { notifyNewComment } from "@/lib/telegram";
 
@@ -69,10 +70,11 @@ export async function submitComment(request: Request): Promise<CommentResult> {
   }
 
   const comment = createComment({ target_type: targetType, target_id: targetId, nickname, email, website, content, ip });
+  const siteSettings = getSiteSettings();
   // `after` keeps the async delivery in the request lifecycle without making a
   // visitor wait for Telegram or allowing a delivery failure to reject a valid
   // comment submission.
-  if (getSiteSettings().telegram_comment_notifications_enabled !== "0") {
+  if (siteSettings.telegram_comment_notifications_enabled !== "0") {
     after(() => notifyNewComment({
       commentId: comment.id,
       nickname: comment.nickname,
@@ -87,6 +89,7 @@ export async function submitComment(request: Request): Promise<CommentResult> {
       comment: {
         id: comment.id,
         nickname: comment.nickname,
+        avatar: getCommentAvatar(comment, siteSettings),
         content: comment.content,
         created_at: comment.created_at,
         status: comment.status,

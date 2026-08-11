@@ -484,14 +484,11 @@
 }
 
 .admin-shell .admin-settings-savebar {
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  margin-top: -1px;
+  position: static;
+  margin-top: 8px;
   border-top: 1px solid var(--admin-line);
-  background: color-mix(in srgb, var(--paper) 94%, transparent);
-  padding: 12px 0 max(12px, env(safe-area-inset-bottom));
-  backdrop-filter: blur(10px);
+  background: transparent;
+  padding: 20px 0 0;
 }
 
 .admin-shell main a.text-blue-700,
@@ -537,12 +534,6 @@
     font-size: 14px;
   }
 
-  .admin-shell .admin-settings-savebar {
-    margin-right: -12px;
-    margin-left: -12px;
-    padding-right: 12px;
-    padding-left: 12px;
-  }
 }
 
 .admin-shell .admin-nav-menu-trigger {
@@ -2469,17 +2460,33 @@ textarea.comment-field {
 }
 
 .comment-avatar {
+  position: relative;
   display: flex;
   width: 40px;
   height: 40px;
   flex: 0 0 40px;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border-radius: 4px;
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   line-height: 1;
+}
+
+.comment-avatar.has-avatar {
+  background: transparent;
+}
+
+.comment-avatar.no-border {
+  border: 0;
+}
+
+.comment-avatar .site-image-media {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .comment-body {
