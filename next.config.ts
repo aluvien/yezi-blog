@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
     imageSizes: [64, 96, 128, 256, 384],
     qualities: [72, 75],
     formats: ["image/avif", "image/webp"],
+    // 附件管理允许在保持 URL 不变的前提下压缩图片，优化缓存不能无限期
+    // 复用旧派生图；一分钟后重新验证源文件即可兼顾首屏速度与更新及时性。
+    minimumCacheTTL: 60,
   },
   serverExternalPackages: ["better-sqlite3"],
   // 反代（nginx/tunnel）转发时 Host 可能变成 127.0.0.1，导致 Next 的
@@ -20,6 +23,9 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       allowedOrigins: ["yezi.biaozhu.me", "yezi.me", "www.yezi.me"],
+      // 文章 Markdown 与引用快照可能略超默认 1MB；服务端 Action 仍会把正文
+      // 严格限制在 1.5MB，额外空间仅用于 Action 序列化开销。
+      bodySizeLimit: "2mb",
     },
   },
   // Turbopack 默认向上查找 workspace root；父目录存在 lockfile 时会被误判为根，
@@ -62,16 +68,22 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          // HTML / 动态页面防缓存：避免微信等内置浏览器缓存旧页面，确保改动即时可见
-          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate" },
-          { key: "Pragma", value: "no-cache" },
-          { key: "Expires", value: "0" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
+          { key: "X-DNS-Prefetch-Control", value: "on" },
         ],
+      },
+      // 动态页面由 Next 自己决定缓存策略；后台与写接口必须明确禁止中间层缓存。
+      {
+        source: "/admin/:path*",
+        headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }],
+      },
+      {
+        source: "/api/admin/:path*",
+        headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }],
       },
       {
         source: "/uploads/(.*)",
-        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+        headers: [{ key: "Cache-Control", value: "public, max-age=60, must-revalidate" }],
       },
       {
         source: "/fonts/(.*)",

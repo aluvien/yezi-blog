@@ -1,6 +1,7 @@
 import { apiJson, apiOptions } from "@/lib/api";
 import { getMoment, getPost, getContentMetrics, recordContentInteraction, toggleContentLike, type ContentTarget, type InteractionKind } from "@/lib/db";
-import { getClientIp, getVisitorKey, hashIp } from "@/lib/request";
+import { getVisitorKey, readLimitedJson, RequestBodyError } from "@/lib/request";
+import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,19 +23,7 @@ function targetExists(targetType: ContentTarget, targetId: number): boolean {
 // standalone 多实例/重启后失效，仅作基础防护；visitor_key 去重仍是主防线。
 const INTERACTION_WINDOW_MS = 60 * 1000;
 const INTERACTION_MAX = 30;
-const interactionHits = new Map<string, number[]>();
-function allowInteraction(key: string): boolean {
-  const ts = Date.now();
-  const cutoff = ts - INTERACTION_WINDOW_MS;
-  const hits = (interactionHits.get(key) ?? []).filter((t) => t > cutoff);
-  if (hits.length >= INTERACTION_MAX) {
-    interactionHits.set(key, hits);
-    return false;
-  }
-  hits.push(ts);
-  interactionHits.set(key, hits);
-  return true;
-}
+const allowInteraction = createSlidingWindowLimiter({ windowMs: INTERACTION_WINDOW_MS, maxRequests: INTERACTION_MAX });
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -49,9 +38,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   let body: { target_type?: unknown; target_id?: unknown; kind?: unknown };
   try {
-    body = await request.json();
-  } catch {
-    return apiJson({ error: "请求格式错误" }, 400);
+    body = await readLimitedJson(request, 4 * 1024);
+  } catch (error) {
+    return apiJson({ error: error instanceof Error ? error.message : "请求格式错误" }, error instanceof RequestBodyError ? error.status : 400);
   }
 
   const targetType = parseTarget(body.target_type);
@@ -62,10 +51,8 @@ export async function POST(request: Request) {
   }
   if (!targetExists(targetType, targetId)) return apiJson({ error: "内容不存在" }, 404);
 
-  const rateKey = hashIp(getClientIp(request));
-  if (!allowInteraction(rateKey)) return apiJson({ error: "操作过于频繁，请稍后再试" }, 429);
-
   const visitorKey = getVisitorKey(request);
+  if (!allowInteraction(visitorKey)) return apiJson({ error: "操作过于频繁，请稍后再试" }, 429);
   // like 支持切换（已赞再点取消），view 仍为单向计数
   const metrics = kind === "like"
     ? toggleContentLike(targetType, targetId, visitorKey)

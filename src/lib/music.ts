@@ -127,7 +127,9 @@ export function musicContainerHtml(spec: MusicSpec): string {
   const fallback = title
     ? `<div class="music-trigger music-trigger-static"><span class="music-trigger-swipe-stage"><span class="music-trigger-swipe-slide" data-track-slot="current"><span class="music-trigger-cover${cover ? "" : " is-fallback"}">${cover ? `<img class="site-image-media site-image-loading" src="${escapeAttribute(cover)}" alt="">` : ""}</span><span class="music-trigger-info"><span class="music-trigger-name">${escapeAttribute(title)}</span><span class="music-trigger-artist"><span class="music-trigger-artist-name">${escapeAttribute(artist)}</span></span></span></span></span><span class="music-trigger-play" aria-hidden="true"></span></div>`
     : "";
-  return `<div class="blog-music" data-server="qqvip" data-id="${escapeAttribute(spec.id)}" data-type="${spec.type}" data-shuffle="${spec.shuffle ? "1" : "0"}"${snapshotAttributes}>${fallback}</div>`;
+  // Markdown 正文通过 dangerouslySetInnerHTML 注入，不属于 React 的可水合子树，
+  // 因而可以由全局初始化器立即增强。React 组件渲染的容器则会在 useEffect 后自行标记。
+  return `<div class="blog-music" data-hydrated="1" data-server="qqvip" data-id="${escapeAttribute(spec.id)}" data-type="${spec.type}" data-shuffle="${spec.shuffle ? "1" : "0"}"${snapshotAttributes}>${fallback}</div>`;
 }
 
 /** 归一化后的可播放曲目（与 APlayer 的 APlayerAudio 字段一致）。 */

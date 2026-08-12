@@ -10,6 +10,7 @@ import {
   type QQPlaylistSummary,
 } from "@/lib/qq-music-api";
 import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
+import { readLimitedJson, RequestBodyError } from "@/lib/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -118,9 +119,9 @@ export async function POST(request: Request) {
   if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
   let body: { op?: unknown; qrsig?: unknown; ptqrtoken?: unknown };
   try {
-    body = await request.json();
-  } catch {
-    return noCache({ error: "请求格式错误" }, 400);
+    body = await readLimitedJson(request, 8 * 1024);
+  } catch (error) {
+    return noCache({ error: error instanceof Error ? error.message : "请求格式错误" }, error instanceof RequestBodyError ? error.status : 400);
   }
   if (body.op !== "poll") return noCache({ error: "不支持的操作" }, 400);
   const qrsig = String(body.qrsig ?? "").trim();

@@ -7,6 +7,7 @@ import { requireAdminApi } from "@/lib/auth";
 import { createAttachment, getPost } from "@/lib/db";
 import { getUploadDir } from "@/lib/uploads";
 import { getClientIp, hashIp } from "@/lib/request";
+import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -18,20 +19,7 @@ const MAX_PIXELS = 60 * 1024 * 1024;
 // 多实例/重启后失效，仅作基础防护。
 const UPLOAD_WINDOW_MS = 60 * 1000;
 const UPLOAD_MAX = 30;
-const uploadHits = new Map<string, number[]>();
-function allowUpload(key: string): boolean {
-  const ts = Date.now();
-  const cutoff = ts - UPLOAD_WINDOW_MS;
-  const hits = (uploadHits.get(key) ?? []).filter((t) => t > cutoff);
-  if (hits.length === 0) uploadHits.delete(key);
-  if (hits.length >= UPLOAD_MAX) {
-    uploadHits.set(key, hits);
-    return false;
-  }
-  hits.push(ts);
-  uploadHits.set(key, hits);
-  return true;
-}
+const allowUpload = createSlidingWindowLimiter({ windowMs: UPLOAD_WINDOW_MS, maxRequests: UPLOAD_MAX, maxKeys: 1_000 });
 const ALLOWED: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
@@ -69,6 +57,12 @@ export async function POST(request: Request) {
   const rateKey = hashIp(getClientIp(request));
   if (!allowUpload(rateKey)) {
     return NextResponse.json({ error: "上传过于频繁，请稍后再试" }, { status: 429 });
+  }
+  const declaredLength = Number(request.headers.get("content-length"));
+  // 文件本体上限 20MB，另给 multipart 边界与字段留 1MB；先看 Content-Length，
+  // 避免 request.formData() 在发现文件过大前就把整个请求缓冲进内存。
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_SIZE + 1024 * 1024) {
+    return NextResponse.json({ error: "上传请求不能超过 21MB" }, { status: 413 });
   }
 
   let file: File | null = null;

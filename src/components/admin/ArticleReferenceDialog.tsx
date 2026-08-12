@@ -11,7 +11,11 @@ import {
 type ArticleReferenceSelection = { marker: string; snapshot: ArticleReferenceSnapshot };
 type Props = { onClose: (selection: ArticleReferenceSelection | null) => void };
 
-type PreviewResponse = { snapshot?: Partial<ArticleReferenceSnapshot>; error?: string };
+type PreviewResponse = {
+  snapshot?: Partial<ArticleReferenceSnapshot>;
+  archive?: { cached?: boolean; jobStarted?: boolean; reused?: boolean; capturedAt?: string; updated?: boolean; cachedImages?: number; aiApplied?: boolean; summaryGenerated?: boolean; aiError?: string };
+  error?: string;
+};
 type SummaryResponse = { configured?: boolean; summary?: string; keyPoints?: string[]; error?: string };
 type HistoryResponse = { references?: ArticleReferenceSnapshot[]; error?: string };
 
@@ -29,6 +33,9 @@ export function ArticleReferenceDialog({ onClose }: Props) {
   const [url, setUrl] = useState("");
   const [snapshot, setSnapshot] = useState<ArticleReferenceSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cacheReader, setCacheReader] = useState(true);
+  const [cacheImages, setCacheImages] = useState(true);
+  const [archiveMessage, setArchiveMessage] = useState("");
   const [summarizing, setSummarizing] = useState(false);
   const [error, setError] = useState("");
   const [summaryMessage, setSummaryMessage] = useState("");
@@ -98,17 +105,26 @@ export function ArticleReferenceDialog({ onClose }: Props) {
     setLoading(true);
     setError("");
     setSummaryMessage("");
+    setArchiveMessage("");
     setSnapshot(null);
     try {
       const response = await fetch("/api/admin/article-references/preview", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: value }),
+        body: JSON.stringify({ url: value, cacheReader, cacheImages }),
       });
       const data = await response.json().catch(() => ({})) as PreviewResponse;
       if (!response.ok || !data.snapshot) throw new Error(data.error || "读取文章信息失败");
       const next = normalizeArticleReferenceSnapshot(data.snapshot);
       setSnapshot(next);
+      if (data.archive?.cached) {
+        const action = data.archive.updated ? "已更新本地阅读快照" : "已保存本地阅读快照";
+        const imageNote = cacheImages ? `，已缓存 ${data.archive.cachedImages ?? 0} 张正文图片` : "，图片仍通过本站代理读取";
+        const aiNote = data.archive.summaryGenerated ? "，AI 摘要已更新" : data.archive.aiApplied ? "，AI 已筛除无关内容" : data.archive.aiError ? `，AI 暂未处理：${data.archive.aiError}` : "";
+        setArchiveMessage(`${action}${imageNote}${aiNote}，仅后台可读。`);
+      } else if (data.archive?.jobStarted) {
+        setArchiveMessage(data.archive.reused ? "已复用正在进行的阅读缓存任务，可直接插入引用。" : "已开始后台缓存正文、图片与 AI 摘要，可直接插入引用。");
+      }
       // 摘要是可选增强：有配置时后台自动生成，没有配置时不阻塞插入。
       void generateSummary(next);
     } catch (reason) {
@@ -132,7 +148,7 @@ export function ArticleReferenceDialog({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[85] flex items-center justify-center bg-neutral-900/30 p-4 backdrop-blur-[2px]"
+      className="admin-reference-dialog fixed inset-0 z-[85] flex items-center justify-center bg-neutral-900/30 p-4 backdrop-blur-[2px]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose(null);
       }}
@@ -153,6 +169,7 @@ export function ArticleReferenceDialog({ onClose }: Props) {
               setUrl(event.target.value);
               setSnapshot(null);
               setError("");
+              setArchiveMessage("");
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -167,6 +184,14 @@ export function ArticleReferenceDialog({ onClose }: Props) {
             {loading ? "读取中…" : "读取信息"}
           </button>
         </div>
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs leading-5 text-neutral-500">
+          <input type="checkbox" checked={cacheReader} onChange={(event) => setCacheReader(event.target.checked)} className="h-3.5 w-3.5 accent-neutral-900" />
+          同时缓存清洗后的阅读正文与原始快照（仅后台可读）
+        </label>
+        <label className={`mt-1 flex cursor-pointer items-center gap-2 text-xs leading-5 ${cacheReader ? "text-neutral-500" : "text-neutral-300"}`}>
+          <input type="checkbox" checked={cacheImages} disabled={!cacheReader} onChange={(event) => setCacheImages(event.target.checked)} className="h-3.5 w-3.5 accent-neutral-900 disabled:opacity-50" />
+          缓存正文图片到服务器 `data/ref/`（默认开启）
+        </label>
 
         <section className="mt-5 border-t border-neutral-200 pt-4" aria-label="历史引用">
           <div className="flex items-center justify-between gap-3">
@@ -245,10 +270,11 @@ export function ArticleReferenceDialog({ onClose }: Props) {
                 {!summarizing && !snapshot.summary && snapshot.keyPoints.length === 0 && summaryMessage && <p className="mt-1 text-xs leading-5 text-neutral-500">{summaryMessage}</p>}
               </div>
             )}
+            {archiveMessage && <p className="mt-3 text-xs text-green-700">{archiveMessage}</p>}
           </div>
         )}
 
-        <p className="mt-3 text-xs leading-5 text-neutral-400">标题可直接打开原文；引用卡片只保存标题、来源、封面和摘要快照，正文访问时不会再次请求原网页。</p>
+        <p className="mt-3 text-xs leading-5 text-neutral-400">公开引用卡片只保存标题、来源、封面和摘要；勾选后会在本地保存阅读快照，正文不会对访客公开，AI 摘要也会优先使用该快照。</p>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={() => onClose(null)} className="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm text-neutral-600 hover:bg-neutral-50">取消</button>
           {snapshot && !summarizing && !snapshot.summary && <button type="button" onClick={() => void generateSummary(snapshot)} className="rounded-lg border border-accent/40 px-3.5 py-2 text-sm text-accent hover:bg-accent/5">生成 AI 摘要</button>}

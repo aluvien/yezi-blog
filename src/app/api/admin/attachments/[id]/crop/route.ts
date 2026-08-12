@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { requireAdminApi } from "@/lib/auth";
 import { createAttachment, getAttachment } from "@/lib/db";
 import { getUploadDir, uploadAbsolutePath } from "@/lib/uploads";
+import { readLimitedJson, RequestBodyError } from "@/lib/request";
 
 export const runtime = "nodejs";
 
@@ -23,9 +24,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   let body: { x?: number; y?: number; width?: number; height?: number };
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
+    body = await readLimitedJson(request, 4 * 1024);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "请求格式错误" }, { status: error instanceof RequestBodyError ? error.status : 400 });
   }
   const values = [body.x, body.y, body.width, body.height];
   if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) {

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3030",
-    "build": "TURBOPACK= NEXT_RSPACK= IS_TURBOPACK_TEST= IS_WEBPACK_TEST= next build --webpack",
+    "build": "node scripts/build.mjs",
     "start": "node scripts/start-standalone.mjs",
     "seed": "node scripts/seed.mjs",
     "demo:taxonomy": "node scripts/demo-taxonomy.mjs",
@@ -13,8 +13,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "aplayer": "^1.10.1",
     "better-sqlite3": "^13.0.2",
+    "linkedom": "^0.18.13",
     "marked": "^18.0.7",
     "next": "16.3.0",
     "pinyin-pro": "^3.28.2",

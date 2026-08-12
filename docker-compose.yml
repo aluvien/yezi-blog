@@ -3,19 +3,26 @@ services:
     build:
       context: .
       args:
-        # TODO: 改成你的正式域名（决定 sitemap/RSS/SEO 里的链接，改完要重新构建才会生效）
-        NEXT_PUBLIC_SITE_URL: https://你的域名.com
-        # 国内服务器构建依赖更快，国外服务器可删掉这行
-        NPM_REGISTRY: https://registry.npmmirror.com
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://yezi.me}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: yezi-blog
     ports:
-      - "3030:3030"
+      # 只允许本机 Nginx/反向代理访问，防止绕过 HTTPS 与真实 IP 边界。
+      - "127.0.0.1:3030:3030"
     environment:
-      # TODO: 改成你的后台登录密码
-      ADMIN_PASSWORD: 改成你的密码
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请在 .env 中设置 ADMIN_PASSWORD}
       SESSION_COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+      BLOG_ROOT: /app
+      BLOG_DB_PATH: /app/data/blog.db
     volumes:
-      # 数据库和上传文件都在卷里，容器删了也不丢（用 1Panel 的卷备份做定期备份）
+      # 数据库、上传、引用归档与本地服务状态全部在同一个卷里。
       - blog-data:/app/data
-      - blog-uploads:/app/public/uploads
-    restart: always
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+volumes:
+  blog-data:

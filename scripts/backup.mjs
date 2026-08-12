@@ -10,12 +10,14 @@ if (!fs.existsSync(source)) {
 }
 
 const backupDir = path.join(root, "data", "backups");
-fs.mkdirSync(backupDir, { recursive: true });
+fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+fs.chmodSync(backupDir, 0o700);
 const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
 const target = path.join(backupDir, `blog-${stamp}.db`);
 const db = new Database(source, { readonly: true });
 try {
   await db.backup(target);
+  fs.chmodSync(target, 0o600);
   console.log(`备份完成：${target}`);
 } finally {
   db.close();

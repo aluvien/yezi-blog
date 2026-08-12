@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
-import { fetchReferenceDocument } from "@/lib/article-reference-server";
+import { getArticleReferenceArchive } from "@/lib/db";
+import { fetchReferenceDocument, normalizeReferenceUrl } from "@/lib/article-reference-server";
+import { readLimitedJson, RequestBodyError } from "@/lib/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +39,7 @@ function parseSummary(value: string): { summary: string; keyPoints: string[] } {
 }
 
 const DEFAULT_LLM_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+const LLM_TIMEOUT_MS = 180_000;
 
 /** 兼容填写服务商根地址、/v1 地址和完整 Chat Completions 地址。 */
 function resolveLlmEndpoint(input: string): string {
@@ -60,9 +63,9 @@ export async function POST(request: Request) {
   if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
   let body: { url?: unknown };
   try {
-    body = await request.json();
-  } catch {
-    return noCache({ error: "请求格式错误" }, 400);
+    body = await readLimitedJson(request, 8 * 1024);
+  } catch (error) {
+    return noCache({ error: error instanceof Error ? error.message : "请求格式错误" }, error instanceof RequestBodyError ? error.status : 400);
   }
 
   const apiKey = process.env.LLM_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim();
@@ -70,12 +73,27 @@ export async function POST(request: Request) {
   if (!apiKey) return noCache({ configured: false, summary: "", keyPoints: [] });
 
   try {
-    const document = await fetchReferenceDocument(String(body.url ?? ""));
+    const inputUrl = normalizeReferenceUrl(String(body.url ?? ""));
+    const archive = getArticleReferenceArchive(inputUrl);
+    // 已保存阅读快照时不再重新访问第三方网页：内容稳定，也避开防盗链与临时不可用。
+    const document = archive?.reader_text
+      ? {
+        title: archive.title,
+        source: archive.source_name,
+        text: archive.reader_text,
+        description: "",
+      }
+      : await fetchReferenceDocument(inputUrl).then((value) => ({
+        title: value.snapshot.title,
+        source: value.snapshot.source,
+        text: value.text,
+        description: value.snapshot.description,
+      }));
     const endpoint = resolveLlmEndpoint(process.env.LLM_API_URL || "");
     const model = process.env.LLM_MODEL?.trim() || "gpt-4o-mini";
-    const sourceText = (document.text || document.snapshot.description || document.snapshot.title).slice(0, 14_000);
+    const sourceText = (document.text || document.description || document.title).slice(0, 14_000);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 45_000);
+    const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
     let response: Response;
     try {
       response = await fetch(endpoint, {
@@ -93,7 +111,7 @@ export async function POST(request: Request) {
             },
             {
               role: "user",
-              content: `标题：${document.snapshot.title}\n来源：${document.snapshot.source}\n网页正文：\n${sourceText}`,
+              content: `标题：${document.title}\n来源：${document.source}\n网页正文：\n${sourceText}`,
             },
           ],
         }),

@@ -27,6 +27,8 @@ process.chdir(root);
 if (!process.env.BLOG_ROOT) process.env.BLOG_ROOT = root;
 loadEnvFile(path.join(root, ".env.local"));
 loadEnvFile(path.join(root, ".env"));
+if (!process.env.PORT) process.env.PORT = "3030";
+if (!process.env.HOSTNAME) process.env.HOSTNAME = "0.0.0.0";
 
 // standalone server 启动后可能把 cwd 切到 .next/standalone，数据库必须固定在项目根目录，
 // 否则本地数据和运行中的网站会各自使用一份 blog.db。
@@ -80,7 +82,43 @@ function copyIfChanged(source, target) {
   fs.writeFileSync(marker, signature, { mode: 0o600 });
 }
 
-copyIfChanged(staticSource, staticTarget);
+// standalone 不会携带 .next/static；缺失时 HTML 仍可服务，但所有 Client Component
+// 都不会水合，表现为“后台按钮全部点不动”。静态资源是构建产物，启动前直接完整
+// 替换，避免旧 marker 或半完成复制让新 HTML 指向不存在的 chunk。
+function copyStaticAssets() {
+  if (!fs.existsSync(staticSource)) throw new Error(`未找到 Next 静态资源目录：${staticSource}`);
+  const nonce = `${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
+  const staging = `${staticTarget}.staging-${nonce}`;
+  const previous = `${staticTarget}.previous-${nonce}`;
+  let movedPrevious = false;
+  try {
+    // 先在同一文件系统完整复制并校验，旧资源在此期间继续可用。直接先删旧目录
+    // 会在复制中断时造成 HTML 正常、CSS/客户端脚本全部 404 的半部署状态。
+    fs.cpSync(staticSource, staging, { recursive: true, force: true });
+    const chunks = path.join(staging, "chunks");
+    if (!fs.existsSync(chunks) || fs.readdirSync(chunks).length === 0) {
+      throw new Error(`Next 静态资源校验失败：${staging}`);
+    }
+    fs.mkdirSync(path.dirname(staticTarget), { recursive: true });
+    if (fs.existsSync(staticTarget)) {
+      fs.renameSync(staticTarget, previous);
+      movedPrevious = true;
+    }
+    fs.renameSync(staging, staticTarget);
+    if (movedPrevious) fs.rmSync(previous, { recursive: true, force: true });
+  } catch (error) {
+    if (movedPrevious && !fs.existsSync(staticTarget) && fs.existsSync(previous)) {
+      fs.renameSync(previous, staticTarget);
+    }
+    throw error;
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
+    // 成功路径会删除，异常且已恢复时也清理；若恢复失败则保留 previous 供人工救援。
+    if (fs.existsSync(staticTarget)) fs.rmSync(previous, { recursive: true, force: true });
+  }
+}
+
+copyStaticAssets();
 copyIfChanged(publicSource, publicTarget);
 
 // PM2 重启或容器停止时尽快退出。standalone server.js 不暴露 http 句柄，

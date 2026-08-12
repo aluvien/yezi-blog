@@ -228,7 +228,15 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
       // 只有依赖清单变化或 node_modules 不完整时重装，避免每次同步都长时间 npm ci。
       await runCommand("npm", ["ci", "--include=dev", "--no-audit", "--no-fund"], projectDir, 300_000, env);
     }
-    await runCommand("npm", ["run", "build"], projectDir, 300_000, env);
+    // 构建需要读取站点数据生成 sitemap/metadata，但不应迁移、清理或写入正式库。
+    // 运行时重启不继承这个临时标记，正式服务仍使用可写数据库。
+    const buildEnv = {
+      ...env,
+      BLOG_BUILD_READONLY: "true",
+      BLOG_DB_PATH: databasePath,
+      BLOG_ROOT: projectDir,
+    };
+    await runCommand("npm", ["run", "build"], projectDir, 300_000, buildEnv);
     const processName = await findPm2Name(projectDir);
     if (!processName) return { ok: false, error: "代码同步并构建成功，但没有找到对应的 PM2 进程" };
     schedulePm2Restart(projectDir, processName);

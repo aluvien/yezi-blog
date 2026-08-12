@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { commentTargetExists, createComment, getMoment, getPost, getSiteSettings, lastCommentAgeByIp } from "@/lib/db";
 import { getCommentAvatar } from "@/lib/author";
-import { getClientIp } from "@/lib/request";
+import { getClientIp, readLimitedJson, RequestBodyError } from "@/lib/request";
 import { notifyNewComment } from "@/lib/telegram";
 
 export type CommentResult = { data: unknown; status: number };
@@ -26,9 +26,9 @@ function commentTargetLabel(targetType: "post" | "moment", targetId: number): st
 export async function submitComment(request: Request): Promise<CommentResult> {
   let body: Record<string, unknown>;
   try {
-    body = await request.json();
-  } catch {
-    return { data: { error: "请求格式错误" }, status: 400 };
+    body = await readLimitedJson<Record<string, unknown>>(request, 16 * 1024);
+  } catch (error) {
+    return { data: { error: error instanceof Error ? error.message : "请求格式错误" }, status: error instanceof RequestBodyError ? error.status : 400 };
   }
 
   const targetType = body?.target_type;

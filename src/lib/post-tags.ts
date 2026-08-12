@@ -4,6 +4,7 @@ export function normalizePostTags(input: string | string[] | null | undefined): 
   return [...new Set(
     values
       .map((tag) => String(tag).trim().replace(/^#+/, ""))
+      .map((tag) => tag.slice(0, 80).trim())
       .filter(Boolean),
   )].slice(0, 12);
 }

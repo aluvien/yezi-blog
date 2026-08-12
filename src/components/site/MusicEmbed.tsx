@@ -1,5 +1,8 @@
+"use client";
+
 /* eslint-disable @next/next/no-img-element -- QQ cover URLs are external dynamic assets. */
 
+import { useEffect, useRef } from "react";
 import { compactMusicCoverUrl, type MusicSpec } from "@/lib/music";
 
 /**
@@ -8,9 +11,22 @@ import { compactMusicCoverUrl, type MusicSpec } from "@/lib/music";
  * MusicInitializer replaces this shell with the interactive player card.
  */
 export function MusicEmbed({ spec }: { spec: MusicSpec }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const hasSnapshot = spec.server === "qqvip" && Boolean(spec.title);
+  useEffect(() => {
+    // 全局初始化器只能在这张 Client Component 完成水合后改写其 DOM。
+    // 否则流式 SSR 较慢时会抢先插入播放器，React 随后看到额外节点并触发 #418。
+    const container = containerRef.current;
+    if (!container) return;
+    container.dataset.hydrated = "1";
+    container.dispatchEvent(new CustomEvent("yezi:music-hydrated", { bubbles: true }));
+    return () => {
+      delete container.dataset.hydrated;
+    };
+  }, []);
   return (
     <div
+      ref={containerRef}
       className="blog-music"
       data-server={spec.server}
       data-id={spec.id}

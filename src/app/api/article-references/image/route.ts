@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { normalizeReferenceUrl } from "@/lib/article-reference-server";
+import { requireAdminApi } from "@/lib/auth";
+import { isKnownArticleReferenceCover } from "@/lib/db";
+import { detectSafeRasterImageMime } from "@/lib/image-signature";
+import { createSlidingWindowLimiter } from "@/lib/rate-limit";
+import { assertPublicRemoteUrl } from "@/lib/remote-url";
+import { getClientIp, hashIp } from "@/lib/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,6 +12,7 @@ export const dynamic = "force-dynamic";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 12_000;
 const MAX_REDIRECTS = 3;
+const allowImageRequest = createSlidingWindowLimiter({ windowMs: 60_000, maxRequests: 120, maxKeys: 2_000 });
 
 function imageError(message: string, status = 404): NextResponse {
   return new NextResponse(message, {
@@ -54,19 +60,29 @@ async function readImageBytes(response: Response): Promise<Uint8Array> {
 }
 
 export async function GET(request: Request) {
+  if (!allowImageRequest(hashIp(getClientIp(request)))) return imageError("请求过于频繁", 429);
+
   const requestUrl = new URL(request.url);
   let current: string;
   let referer = "";
   try {
-    current = normalizeReferenceUrl(requestUrl.searchParams.get("url") || "");
+    current = await assertPublicRemoteUrl(requestUrl.searchParams.get("url") || "");
     const rawReferer = requestUrl.searchParams.get("referer") || "";
-    referer = rawReferer ? normalizeReferenceUrl(rawReferer) : "";
+    referer = rawReferer ? await assertPublicRemoteUrl(rawReferer) : "";
   } catch {
     return imageError("图片地址无效");
   }
 
+  // 登录管理员可预览尚未保存的引用；公开访问只代理数据库中已经保存的引用封面。
+  const knownPublicCover = isKnownArticleReferenceCover(current);
+  const admin = knownPublicCover ? null : await requireAdminApi();
+  if (!knownPublicCover && !admin) {
+    return imageError("图片未被引用", 403);
+  }
+
   try {
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
+      current = await assertPublicRemoteUrl(current);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       let response: Response;
@@ -76,9 +92,8 @@ export async function GET(request: Request) {
           redirect: "manual",
           signal: controller.signal,
           headers: {
-            accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            accept: "image/avif,image/webp,image/apng,image/png,image/jpeg,image/gif,image/x-icon,*/*;q=0.1",
             referer: referer || current,
-            // 部分公众号图片会校验 Referer 和 User-Agent。
             "user-agent": "Mozilla/5.0 (compatible; YeziBlogReference/1.0; +https://yezi.me)",
           },
         });
@@ -92,20 +107,22 @@ export async function GET(request: Request) {
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
         if (!location || redirect === MAX_REDIRECTS) throw new Error("图片跳转次数过多");
-        current = normalizeReferenceUrl(new URL(location, current).toString());
+        current = await assertPublicRemoteUrl(new URL(location, current).toString());
         continue;
       }
       if (!response.ok) throw new Error(`图片返回 ${response.status}`);
 
-      const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() || "";
-      if (contentType && !contentType.startsWith("image/")) throw new Error("返回内容不是图片");
       const bytes = await readImageBytes(response);
+      const contentType = detectSafeRasterImageMime(bytes);
+      if (!contentType) throw new Error("返回内容不是受支持的安全图片");
       const body = new ArrayBuffer(bytes.byteLength);
       new Uint8Array(body).set(bytes);
       return new NextResponse(body, {
         headers: {
-          "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
-          "content-type": contentType || "image/jpeg",
+          "cache-control": knownPublicCover
+            ? "public, max-age=86400, stale-while-revalidate=604800"
+            : "private, no-store, max-age=0",
+          "content-type": contentType,
           "x-content-type-options": "nosniff",
         },
       });

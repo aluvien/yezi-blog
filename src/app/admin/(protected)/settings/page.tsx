@@ -12,10 +12,10 @@ export default function AdminSettingsPage() {
       <AdminPageHeader
         eyebrow="SITE SETTINGS"
         title="站点设置"
-        description="集中管理站点信息、个人资料、音乐和文章显示方式。"
+        description="集中管理站点信息、个人资料、社交信息、文章显示与 Telegram 通知。"
         actions={<SyncGithubButton trailingAction={<LogoutButton />} />}
       />
-      <SiteSettingsForm initialValues={getSiteSettings()} />
+      <SiteSettingsForm initialValues={getSiteSettings()} section="site" />
     </div>
   );
 }

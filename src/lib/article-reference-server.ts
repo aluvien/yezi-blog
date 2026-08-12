@@ -3,6 +3,9 @@ import {
   normalizeArticleReferenceSnapshot,
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
+import { getAuthorAvatar } from "@/lib/author";
+import { getSiteSettings } from "@/lib/db";
+import { assertPublicRemoteUrl, isBlockedNetworkAddress } from "@/lib/remote-url";
 
 // 引用卡片只需要网页头部元信息和正文的一小段内容。保留读取上限，
 // 但不要因为网页声明了较大的 Content-Length 就直接拒绝；不少站点会把
@@ -16,19 +19,19 @@ export interface ArticleReferenceDocument {
   text: string;
 }
 
+/** 仅供服务端归档逻辑使用，绝不能直接回传给前台。 */
+export interface ArticleReferenceArchiveDocument extends ArticleReferenceDocument {
+  html: string;
+  finalUrl: string;
+}
+
 function blockedHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
   if (["metadata.google.internal", "metadata.google", "instance-data.ec2.internal"].includes(host)) return true;
 
   const ipVersion = isIP(host);
-  if (ipVersion === 6) return true; // 文章元信息不需要访问 IPv6 字面量，直接避免本地 IPv6 绕过。
-  if (ipVersion !== 4) return false;
-  const octets = host.split(".").map(Number);
-  if (octets.length !== 4 || octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return true;
-  const [a, b] = octets;
-  return a === 0 || a === 10 || a === 127 || a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31
-    || a === 192 && b === 168 || a === 198 && (b === 18 || b === 19) || a >= 224;
+  return ipVersion > 0 ? isBlockedNetworkAddress(host) : false;
 }
 
 export function normalizeReferenceUrl(input: unknown): string {
@@ -91,6 +94,9 @@ async function readLimitedText(response: Response): Promise<string> {
 async function fetchHtml(input: string): Promise<{ html: string; finalUrl: string }> {
   let current = normalizeReferenceUrl(input);
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
+    // 文本检查挡不住“公网域名解析到 127.0.0.1/内网”的 SSRF 绕过；
+    // 每次请求和每次跳转前都重新校验 DNS 解析结果。
+    current = await assertPublicRemoteUrl(current);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response: Response;
@@ -166,6 +172,16 @@ function readCanonical(html: string): string {
   return "";
 }
 
+function readLink(html: string, relations: string[]): string {
+  const expected = new Set(relations.map((relation) => relation.toLowerCase()));
+  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
+    const attrs = parseAttributes(match[0]);
+    const rel = (attrs.rel || "").toLowerCase().split(/\s+/).filter(Boolean);
+    if (rel.some((value) => expected.has(value)) && attrs.href) return attrs.href.trim();
+  }
+  return "";
+}
+
 function readScriptValue(html: string, name: string): string {
   const pattern = new RegExp(`(?:var\\s+)?${name}\\s*=\\s*["']([\\s\\S]*?)["']`, "i");
   const match = html.match(pattern);
@@ -194,6 +210,74 @@ function resolveHttpUrl(value: string, base: string): string {
   }
 }
 
+type JsonLdArticleInfo = {
+  title: string;
+  source: string;
+  author: string;
+  publishedAt: string;
+  cover: string;
+  description: string;
+};
+
+function readJsonLdArticleInfo(html: string, baseUrl: string): JsonLdArticleInfo {
+  const candidates: Record<string, unknown>[] = [];
+  const append = (value: unknown) => {
+    if (Array.isArray(value)) value.forEach(append);
+    else if (value && typeof value === "object") {
+      const object = value as Record<string, unknown>;
+      candidates.push(object);
+      append(object["@graph"]);
+    }
+  };
+  for (const match of html.matchAll(/<script\b[^>]*type\s*=\s*(?:"application\/ld\+json"|'application\/ld\+json'|application\/ld\+json)[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      append(JSON.parse(match[1]));
+    } catch {
+      // 第三方页面的 JSON-LD 可能不完整，跳过而不是影响正常 meta 解析。
+    }
+  }
+  const isArticle = (value: Record<string, unknown>) => {
+    const rawType = value["@type"];
+    const types = Array.isArray(rawType) ? rawType : [rawType];
+    return types.some((type) => /article|newsarticle|blogposting/i.test(String(type ?? "")));
+  };
+  const article = candidates.find(isArticle) ?? candidates.find((value) => Boolean(value.headline || value.articleBody)) ?? {};
+  const nameOf = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) return nameOf(value[0]);
+    if (value && typeof value === "object") return String((value as Record<string, unknown>).name ?? "");
+    return "";
+  };
+  const imageOf = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) return imageOf(value[0]);
+    if (value && typeof value === "object") {
+      const object = value as Record<string, unknown>;
+      return String(object.url ?? object.contentUrl ?? object["@id"] ?? "");
+    }
+    return "";
+  };
+  return {
+    title: String(article.headline ?? article.name ?? ""),
+    source: nameOf(article.publisher) || nameOf(article.isPartOf),
+    author: nameOf(article.author),
+    publishedAt: String(article.datePublished ?? article.dateCreated ?? ""),
+    cover: resolveHttpUrl(imageOf(article.image ?? article.thumbnailUrl), baseUrl),
+    description: String(article.description ?? ""),
+  };
+}
+
+function fallbackSiteIcon(baseUrl: string, html: string): string {
+  const icon = readLink(html, ["icon", "shortcut", "apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon"]);
+  if (icon) return resolveHttpUrl(icon, baseUrl);
+  try {
+    const origin = new URL(baseUrl).origin;
+    return `${origin}/favicon.ico`;
+  } catch {
+    return "";
+  }
+}
+
 function extractArticleText(html: string): string {
   // 微信正文通常位于 #js_content；若页面结构不同，退回到整个 HTML 的可读文本。
   const contentMatch = html.match(/<[^>]+id\s*=\s*["']js_content["'][^>]*>([\s\S]{0,240000})/i);
@@ -201,18 +285,22 @@ function extractArticleText(html: string): string {
   return stripHtml(source).slice(0, 20_000);
 }
 
-export async function fetchReferenceDocument(input: string): Promise<ArticleReferenceDocument> {
+async function fetchReferenceSource(input: string): Promise<ArticleReferenceArchiveDocument> {
   const requestedUrl = normalizeReferenceUrl(input);
   const { html, finalUrl } = await fetchHtml(requestedUrl);
   const parsedUrl = new URL(finalUrl);
+  const jsonLd = readJsonLdArticleInfo(html, finalUrl);
   const titleTag = stripHtml(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
-  const title = readMeta(html, ["og:title", "twitter:title"]) || readScriptValue(html, "msg_title") || titleTag;
-  const source = readMeta(html, ["og:site_name", "application-name"]) || readScriptValue(html, "nickname") || (parsedUrl.hostname.includes("weixin.qq.com") || parsedUrl.hostname.includes("weixin.com") ? "微信公众号" : parsedUrl.hostname);
-  const description = readMeta(html, ["og:description", "twitter:description", "description"]) || readScriptValue(html, "msg_desc");
-  const cover = resolveHttpUrl(readMeta(html, ["og:image", "twitter:image"]) || readScriptValue(html, "msg_cdn_url"), finalUrl);
-  const author = readMeta(html, ["author", "article:author"]) || readScriptValue(html, "author");
-  const publishedAt = stripHtml(html.match(/id\s*=\s*["']publish_time["'][^>]*>([\s\S]*?)<\//i)?.[1] ?? "") || readMeta(html, ["article:published_time", "date"]) || readScriptValue(html, "ct");
+  const title = readMeta(html, ["og:title", "twitter:title"]) || readScriptValue(html, "msg_title") || jsonLd.title || titleTag;
+  const source = readMeta(html, ["og:site_name", "application-name", "twitter:site"]) || readScriptValue(html, "nickname") || jsonLd.source || (parsedUrl.hostname.includes("weixin.qq.com") || parsedUrl.hostname.includes("weixin.com") ? "微信公众号" : parsedUrl.hostname);
+  const description = readMeta(html, ["og:description", "twitter:description", "description"]) || readScriptValue(html, "msg_desc") || jsonLd.description;
+  const parsedCover = resolveHttpUrl(readMeta(html, ["og:image", "twitter:image", "image"]) || readScriptValue(html, "msg_cdn_url") || jsonLd.cover, finalUrl);
+  const author = readMeta(html, ["author", "article:author", "twitter:creator", "parsely-author"]) || readScriptValue(html, "author") || jsonLd.author;
+  const publishedAt = stripHtml(html.match(/id\s*=\s*["']publish_time["'][^>]*>([\s\S]*?)<\//i)?.[1] ?? "") || readMeta(html, ["article:published_time", "date", "datepublished"]) || readScriptValue(html, "ct") || jsonLd.publishedAt;
   const canonical = resolveHttpUrl(readCanonical(html) || readMeta(html, ["og:url"]), finalUrl) || finalUrl;
+  // 非公众号页优先使用网站图标；极少数没有图标的网站才回退本站作者头像，
+  // 这样每张引用卡片都有稳定封面，且不会把第三方缺图显示成破图。
+  const cover = parsedCover || fallbackSiteIcon(finalUrl, html) || getAuthorAvatar(getSiteSettings()) || "";
   const snapshot = normalizeArticleReferenceSnapshot({
     url: requestedUrl,
     canonicalUrl: canonical,
@@ -223,5 +311,16 @@ export async function fetchReferenceDocument(input: string): Promise<ArticleRefe
     cover,
     description,
   });
-  return { snapshot, text: extractArticleText(html) };
+  return { snapshot, text: extractArticleText(html), html, finalUrl };
+}
+
+/** 读取用于卡片和 AI 摘要的安全文本；不将第三方原始 HTML 暴露给调用方。 */
+export async function fetchReferenceDocument(input: string): Promise<ArticleReferenceDocument> {
+  const document = await fetchReferenceSource(input);
+  return { snapshot: document.snapshot, text: document.text };
+}
+
+/** 私有阅读归档使用，调用方必须确保结果只留在服务器本地。 */
+export async function fetchReferenceArchiveDocument(input: string): Promise<ArticleReferenceArchiveDocument> {
+  return fetchReferenceSource(input);
 }

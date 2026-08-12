@@ -19,6 +19,13 @@ function sleepSync(ms: number): void {
 }
 
 function createDb(): Database.Database {
+  const buildReadonly = process.env.BLOG_BUILD_READONLY === "true";
+  if (buildReadonly) {
+    const readonlyDb = new Database(DB_PATH, { readonly: true, fileMustExist: true, timeout: 5000 });
+    readonlyDb.pragma("busy_timeout = 5000");
+    readonlyDb.pragma("foreign_keys = ON");
+    return readonlyDb;
+  }
   fs.mkdirSync(DB_DIR, { recursive: true });
   // build 期多个 worker 进程会同时加载本模块、并发建库建表，
   // busy_timeout 无法覆盖所有锁定路径（如 WAL 切换），失败时整体重试
@@ -27,6 +34,8 @@ function createDb(): Database.Database {
     try {
       const db = new Database(DB_PATH, { timeout: 5000 });
       db.pragma("journal_mode = WAL");
+      db.pragma("synchronous = NORMAL");
+      db.pragma("busy_timeout = 5000");
       db.pragma("foreign_keys = ON");
       db.exec(`
     CREATE TABLE IF NOT EXISTS posts (
@@ -57,6 +66,41 @@ function createDb(): Database.Database {
       updated_at TEXT NOT NULL,
       UNIQUE(post_id, canonical_url),
       FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS article_reference_archives (
+      canonical_url TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      source_name TEXT NOT NULL DEFAULT '',
+      author TEXT NOT NULL DEFAULT '',
+      published_at TEXT NOT NULL DEFAULT '',
+      reader_html TEXT NOT NULL DEFAULT '',
+      reader_markdown TEXT NOT NULL DEFAULT '',
+      reader_text TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      key_points TEXT NOT NULL DEFAULT '[]',
+      ai_cleaned_at TEXT NOT NULL DEFAULT '',
+      raw_path TEXT NOT NULL DEFAULT '',
+      content_hash TEXT NOT NULL DEFAULT '',
+      cache_report TEXT NOT NULL DEFAULT '{}',
+      captured_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    -- 独立引用资料库：不再要求一条引用必须属于某篇本地文章。
+    CREATE TABLE IF NOT EXISTS reference_library (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      url TEXT NOT NULL,
+      canonical_url TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL DEFAULT '',
+      source_name TEXT NOT NULL DEFAULT '',
+      author TEXT NOT NULL DEFAULT '',
+      published_at TEXT NOT NULL DEFAULT '',
+      cover TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      key_points TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS moments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,11 +144,14 @@ function createDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_comments_ip_time ON comments (ip, created_at);
     CREATE INDEX IF NOT EXISTS idx_attachments_post ON attachments (post_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_article_references_post ON article_references (post_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_article_reference_archives_updated ON article_reference_archives (updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_reference_library_updated ON reference_library (updated_at DESC);
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       created_at TEXT NOT NULL,
       expires_at INTEGER NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);
     CREATE TABLE IF NOT EXISTS login_attempts (
       ip TEXT PRIMARY KEY,
       failed_count INTEGER NOT NULL DEFAULT 0,
@@ -159,9 +206,23 @@ function createDb(): Database.Database {
       ensureColumn("comments", "replied_at", "TEXT");
       ensureColumn("comments", "website", "TEXT");
       ensureColumn("comments", "ip_address", "TEXT NOT NULL DEFAULT ''");
+      ensureColumn("article_reference_archives", "summary", "TEXT NOT NULL DEFAULT ''");
+      ensureColumn("article_reference_archives", "key_points", "TEXT NOT NULL DEFAULT '[]'");
+      ensureColumn("article_reference_archives", "ai_cleaned_at", "TEXT NOT NULL DEFAULT ''");
+      ensureColumn("article_reference_archives", "reader_markdown", "TEXT NOT NULL DEFAULT ''");
+      ensureColumn("article_reference_archives", "cache_report", "TEXT NOT NULL DEFAULT '{}'");
       db.prepare("UPDATE moments SET updated_at = created_at WHERE updated_at IS NULL").run();
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_status_time ON posts (status, created_at DESC)");
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_category ON posts (category COLLATE NOCASE)");
+
+      // 将旧版“文章内引用”迁入独立资料库。INSERT OR IGNORE 使迁移可重复执行，
+      // 且不会覆盖后来单独更新过的库内信息。
+      db.exec(`
+        INSERT OR IGNORE INTO reference_library
+          (url, canonical_url, title, source_name, author, published_at, cover, description, summary, key_points, created_at, updated_at)
+        SELECT url, canonical_url, title, source_name, author, published_at, cover, description, summary, key_points, created_at, updated_at
+        FROM article_references
+      `);
 
       // QQ VIP 是唯一音乐源，清理已经废弃的旧音乐配置。
       db.prepare("DELETE FROM site_settings WHERE key = 'meting_api'").run();
@@ -225,6 +286,54 @@ export interface ArticleReferenceWithPost extends ArticleReference {
   post_title: string;
   post_slug: string;
   post_status: "draft" | "published";
+  archive_captured_at: string | null;
+  archive_updated_at: string | null;
+}
+
+/** 可独立保存、可选关联本地文章的站外引用。 */
+export interface ReferenceLibraryItem {
+  id: number;
+  url: string;
+  canonical_url: string;
+  title: string;
+  source_name: string;
+  author: string;
+  published_at: string;
+  cover: string;
+  description: string;
+  summary: string;
+  key_points: string;
+  created_at: string;
+  updated_at: string;
+  archive_captured_at: string | null;
+  archive_updated_at: string | null;
+  archive_cache_report: string | null;
+  linked_post_count: number;
+  linked_post_titles: string | null;
+}
+
+/**
+ * 引用文章的私有阅读归档。正文和原始 HTML 都只供管理员后台使用，
+ * 前台文章继续只使用元信息和 AI 摘要卡片。
+ */
+export interface ArticleReferenceArchive {
+  canonical_url: string;
+  url: string;
+  title: string;
+  source_name: string;
+  author: string;
+  published_at: string;
+  reader_html: string;
+  reader_markdown: string;
+  reader_text: string;
+  summary: string;
+  key_points: string;
+  ai_cleaned_at: string;
+  raw_path: string;
+  content_hash: string;
+  cache_report: string;
+  captured_at: string;
+  updated_at: string;
 }
 
 export interface Moment {
@@ -522,6 +631,7 @@ export function syncArticleReferences(postId: number, snapshots: ArticleReferenc
     `);
     const timestamp = now();
     for (const snapshot of unique.values()) {
+      upsertReferenceLibrarySnapshot(snapshot, timestamp);
       upsert.run(
         postId,
         snapshot.url,
@@ -548,10 +658,163 @@ export function syncArticleReferences(postId: number, snapshots: ArticleReferenc
   transaction();
 }
 
+/** 保存或更新独立引用库；同一 canonical URL 只保留一条资料。 */
+export function upsertReferenceLibrarySnapshot(input: ArticleReferenceSnapshot, timestamp = now()): ReferenceLibraryItem {
+  const snapshot = normalizeArticleReferenceSnapshot(input);
+  const canonicalUrl = snapshot.canonicalUrl || snapshot.url;
+  if (!canonicalUrl) throw new Error("引用网址无效");
+  db.prepare(`
+    INSERT INTO reference_library
+      (url, canonical_url, title, source_name, author, published_at, cover, description, summary, key_points, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(canonical_url) DO UPDATE SET
+      url = excluded.url,
+      title = CASE WHEN excluded.title != '' THEN excluded.title ELSE reference_library.title END,
+      source_name = CASE WHEN excluded.source_name != '' THEN excluded.source_name ELSE reference_library.source_name END,
+      author = CASE WHEN excluded.author != '' THEN excluded.author ELSE reference_library.author END,
+      published_at = CASE WHEN excluded.published_at != '' THEN excluded.published_at ELSE reference_library.published_at END,
+      cover = CASE WHEN excluded.cover != '' THEN excluded.cover ELSE reference_library.cover END,
+      description = CASE WHEN excluded.description != '' THEN excluded.description ELSE reference_library.description END,
+      summary = CASE WHEN excluded.summary != '' THEN excluded.summary ELSE reference_library.summary END,
+      key_points = CASE WHEN excluded.key_points != '[]' THEN excluded.key_points ELSE reference_library.key_points END,
+      updated_at = excluded.updated_at
+  `).run(
+    snapshot.url,
+    canonicalUrl,
+    snapshot.title,
+    snapshot.source,
+    snapshot.author,
+    snapshot.publishedAt,
+    snapshot.cover,
+    snapshot.description,
+    snapshot.summary,
+    JSON.stringify(snapshot.keyPoints),
+    timestamp,
+    timestamp,
+  );
+  return getReferenceLibraryItemByCanonicalUrl(canonicalUrl)!;
+}
+
+export function getReferenceLibraryItem(id: number): ReferenceLibraryItem | undefined {
+  if (!Number.isInteger(id) || id <= 0) return undefined;
+  return db.prepare(`
+    SELECT rl.*, ara.captured_at AS archive_captured_at, ara.updated_at AS archive_updated_at, ara.cache_report AS archive_cache_report,
+      COUNT(ar.id) AS linked_post_count,
+      GROUP_CONCAT(DISTINCT p.title) AS linked_post_titles
+    FROM reference_library rl
+    LEFT JOIN article_reference_archives ara ON ara.canonical_url = rl.canonical_url OR ara.url = rl.url
+    LEFT JOIN article_references ar ON ar.canonical_url = rl.canonical_url OR ar.url = rl.url
+    LEFT JOIN posts p ON p.id = ar.post_id
+    WHERE rl.id = ?
+    GROUP BY rl.id
+  `).get(id) as ReferenceLibraryItem | undefined;
+}
+
+function getReferenceLibraryItemByCanonicalUrl(canonicalUrl: string): ReferenceLibraryItem | undefined {
+  return db.prepare(`
+    SELECT rl.*, ara.captured_at AS archive_captured_at, ara.updated_at AS archive_updated_at, ara.cache_report AS archive_cache_report,
+      COUNT(ar.id) AS linked_post_count,
+      GROUP_CONCAT(DISTINCT p.title) AS linked_post_titles
+    FROM reference_library rl
+    LEFT JOIN article_reference_archives ara ON ara.canonical_url = rl.canonical_url OR ara.url = rl.url
+    LEFT JOIN article_references ar ON ar.canonical_url = rl.canonical_url OR ar.url = rl.url
+    LEFT JOIN posts p ON p.id = ar.post_id
+    WHERE rl.canonical_url = ? OR rl.url = ?
+    GROUP BY rl.id
+  `).get(canonicalUrl, canonicalUrl) as ReferenceLibraryItem | undefined;
+}
+
+export function listReferenceLibrary(): ReferenceLibraryItem[] {
+  return db.prepare(`
+    SELECT rl.*, ara.captured_at AS archive_captured_at, ara.updated_at AS archive_updated_at, ara.cache_report AS archive_cache_report,
+      COUNT(ar.id) AS linked_post_count,
+      GROUP_CONCAT(DISTINCT p.title) AS linked_post_titles
+    FROM reference_library rl
+    LEFT JOIN article_reference_archives ara ON ara.canonical_url = rl.canonical_url OR ara.url = rl.url
+    LEFT JOIN article_references ar ON ar.canonical_url = rl.canonical_url OR ar.url = rl.url
+    LEFT JOIN posts p ON p.id = ar.post_id
+    GROUP BY rl.id
+    ORDER BY rl.updated_at DESC, rl.id DESC
+  `).all() as ReferenceLibraryItem[];
+}
+
 export function listArticleReferencesForPost(postId: number): ArticleReference[] {
   return db
     .prepare("SELECT * FROM article_references WHERE post_id = ? ORDER BY id ASC")
     .all(postId) as ArticleReference[];
+}
+
+export function getArticleReference(id: number): ArticleReference | undefined {
+  if (!Number.isInteger(id) || id <= 0) return undefined;
+  return db.prepare("SELECT * FROM article_references WHERE id = ?").get(id) as ArticleReference | undefined;
+}
+
+export function getArticleReferenceArchive(canonicalUrl: string): ArticleReferenceArchive | undefined {
+  const value = canonicalUrl.trim();
+  if (!value) return undefined;
+  return db
+    .prepare("SELECT * FROM article_reference_archives WHERE canonical_url = ? OR url = ? ORDER BY updated_at DESC LIMIT 1")
+    .get(value, value) as ArticleReferenceArchive | undefined;
+}
+
+export function upsertArticleReferenceArchive(data: Omit<ArticleReferenceArchive, "captured_at" | "updated_at">): ArticleReferenceArchive {
+  const timestamp = now();
+  db.prepare(`
+    INSERT INTO article_reference_archives
+      (canonical_url, url, title, source_name, author, published_at, reader_html, reader_markdown, reader_text, summary, key_points, ai_cleaned_at, raw_path, content_hash, cache_report, captured_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(canonical_url) DO UPDATE SET
+      url = excluded.url,
+      title = excluded.title,
+      source_name = excluded.source_name,
+      author = excluded.author,
+      published_at = excluded.published_at,
+      reader_html = excluded.reader_html,
+      reader_markdown = excluded.reader_markdown,
+      reader_text = excluded.reader_text,
+      summary = excluded.summary,
+      key_points = excluded.key_points,
+      ai_cleaned_at = excluded.ai_cleaned_at,
+      raw_path = excluded.raw_path,
+      content_hash = excluded.content_hash,
+      cache_report = excluded.cache_report,
+      updated_at = excluded.updated_at
+  `).run(
+    data.canonical_url,
+    data.url,
+    data.title,
+    data.source_name,
+    data.author,
+    data.published_at,
+    data.reader_html,
+    data.reader_markdown,
+    data.reader_text,
+    data.summary,
+    data.key_points,
+    data.ai_cleaned_at,
+    data.raw_path,
+    data.content_hash,
+    data.cache_report,
+    timestamp,
+    timestamp,
+  );
+  return getArticleReferenceArchive(data.canonical_url)!;
+}
+
+/** 同一篇站外文章可能被多个本地文章引用；AI 摘要应保持一致更新。 */
+export function updateArticleReferenceSummary(canonicalUrl: string, summary: string, keyPoints: string[]): void {
+  const normalized = canonicalUrl.trim();
+  if (!normalized) return;
+  db.prepare(`
+    UPDATE article_references
+    SET summary = ?, key_points = ?, updated_at = ?
+    WHERE canonical_url = ? OR url = ?
+  `).run(summary, JSON.stringify(keyPoints), now(), normalized, normalized);
+  db.prepare(`
+    UPDATE reference_library
+    SET summary = ?, key_points = ?, updated_at = ?
+    WHERE canonical_url = ? OR url = ?
+  `).run(summary, JSON.stringify(keyPoints), now(), normalized, normalized);
 }
 
 export function articleReferenceRowToSnapshot(reference: ArticleReference): ArticleReferenceSnapshot {
@@ -581,14 +844,16 @@ export function listArticleReferenceSnapshotsForPost(postId: number): ArticleRef
 }
 
 export function countArticleReferences(): number {
-  return Number((db.prepare("SELECT COUNT(*) AS count FROM article_references").get() as { count: number }).count);
+  return Number((db.prepare("SELECT COUNT(*) AS count FROM reference_library").get() as { count: number }).count);
 }
 
 export function listArticleReferences(): ArticleReferenceWithPost[] {
   return db.prepare(`
-    SELECT ar.*, p.title AS post_title, p.slug AS post_slug, p.status AS post_status
+    SELECT ar.*, p.title AS post_title, p.slug AS post_slug, p.status AS post_status,
+      ara.captured_at AS archive_captured_at, ara.updated_at AS archive_updated_at
     FROM article_references ar
     INNER JOIN posts p ON p.id = ar.post_id
+    LEFT JOIN article_reference_archives ara ON ara.canonical_url = ar.canonical_url OR ara.url = ar.url
     ORDER BY ar.updated_at DESC, ar.id DESC
   `).all() as ArticleReferenceWithPost[];
 }
@@ -600,23 +865,15 @@ export function listArticleReferences(): ArticleReferenceWithPost[] {
 export function listRecentArticleReferences(keyword = "", limit = 5): ArticleReference[] {
   const safeLimit = Math.min(20, Math.max(1, Math.trunc(limit)));
   const needle = keyword.trim().toLocaleLowerCase();
-  const rows = db
-    .prepare("SELECT * FROM article_references ORDER BY updated_at DESC, id DESC")
-    .all() as ArticleReference[];
-  const seen = new Set<string>();
+  const rows = db.prepare("SELECT * FROM reference_library ORDER BY updated_at DESC, id DESC").all() as Array<Omit<ArticleReference, "post_id">>;
   return rows
     .filter((row) => {
       if (!needle) return true;
       return [row.title, row.source_name, row.author, row.url, row.canonical_url, row.description, row.summary, row.key_points]
         .some((value) => value.toLocaleLowerCase().includes(needle));
     })
-    .filter((row) => {
-      const key = row.canonical_url || row.url;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, safeLimit);
+    .slice(0, safeLimit)
+    .map((row) => ({ ...row, post_id: 0 }));
 }
 
 // ---------- attachments ----------
@@ -646,9 +903,26 @@ export function getPostAttachments(postId: number): Attachment[] {
 
 export function attachAttachmentsToPost(ids: number[], postId: number): void {
   const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))].slice(0, 100);
-  if (uniqueIds.length === 0) return;
-  const placeholders = uniqueIds.map(() => "?").join(",");
-  db.prepare(`UPDATE attachments SET post_id = ? WHERE id IN (${placeholders})`).run(postId, ...uniqueIds);
+  const transaction = db.transaction(() => {
+    // 提交的附件列表是当前文章的完整状态；先解绑已移除项，避免附件管理长期显示旧关联。
+    db.prepare("UPDATE attachments SET post_id = NULL WHERE post_id = ?").run(postId);
+    if (uniqueIds.length === 0) return;
+    const placeholders = uniqueIds.map(() => "?").join(",");
+    db.prepare(`UPDATE attachments SET post_id = ? WHERE id IN (${placeholders})`).run(postId, ...uniqueIds);
+  });
+  transaction();
+}
+
+/** 公共封面代理只允许读取已经保存到引用库/文章引用中的远程封面。 */
+export function isKnownArticleReferenceCover(coverUrl: string): boolean {
+  const value = coverUrl.trim();
+  if (!value) return false;
+  return Boolean(db.prepare(`
+    SELECT 1 FROM reference_library WHERE cover = ?
+    UNION ALL
+    SELECT 1 FROM article_references WHERE cover = ?
+    LIMIT 1
+  `).get(value, value));
 }
 
 export function listAttachments(): AttachmentWithUsage[] {

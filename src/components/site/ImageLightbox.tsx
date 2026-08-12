@@ -15,6 +15,8 @@ export function LightboxOverlay({
 }) {
   const hasMultiple = images.length > 1;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const [active, setActive] = useState(index);
   // 记录指针按下位置，用于区分“点击”和“拖动滑动”：拖动后不触发关闭
   const downPos = useRef<{ x: number; y: number } | null>(null);
@@ -66,11 +68,14 @@ export function LightboxOverlay({
   );
 
   useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.addEventListener("keydown", handleKeyDown);
+    closeButtonRef.current?.focus({ preventScroll: true });
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
+      previousFocusRef.current?.focus({ preventScroll: true });
     };
   }, [handleKeyDown]);
 
@@ -172,6 +177,7 @@ export function LightboxOverlay({
         </>
       )}
       <button
+        ref={closeButtonRef}
         type="button"
         aria-label="关闭"
         onClick={(e) => {

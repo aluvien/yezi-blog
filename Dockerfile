@@ -1,5 +1,5 @@
 # ---------- 构建阶段 ----------
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # better-sqlite3 原生模块编译依赖
@@ -22,11 +22,13 @@ ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 RUN npm run build
 
 # ---------- 运行阶段 ----------
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3030
 ENV HOSTNAME=0.0.0.0
+ENV BLOG_ROOT=/app
+ENV BLOG_DB_PATH=/app/data/blog.db
 
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 
@@ -35,11 +37,14 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# 数据（sqlite）与上传文件目录：运行时用卷持久化
-#   docker run -v blog-data:/app/data -v blog-uploads:/app/public/uploads ...
-RUN mkdir -p /app/data /app/public/uploads && chown -R nextjs:nodejs /app/data /app/public/uploads
+# SQLite、上传、引用归档和 QQ/Telegram 状态统一在 /app/data；只挂一个卷，
+# 避免旧 public/uploads 卷与程序实际 data/uploads 路径再次分叉。
+RUN mkdir -p /app/data/uploads && chown -R nextjs:nodejs /app/data
 
 USER nextjs
 EXPOSE 3030
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget --spider -q http://127.0.0.1:3030/ || exit 1
 
 CMD ["node", "server.js"]

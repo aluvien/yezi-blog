@@ -62,7 +62,7 @@ export default function AdminReferenceSummary({ summary, points }: Props) {
   }, [open]);
 
   return (
-    <>
+    <div className="admin-reference-summary-control">
       <button
         type="button"
         ref={summaryRef}
@@ -73,14 +73,19 @@ export default function AdminReferenceSummary({ summary, points }: Props) {
         aria-controls={summaryId}
         className="admin-reference-summary-trigger cursor-pointer text-accent"
       >
-        查看摘要
+        {open ? "收起摘要" : "查看摘要"}
       </button>
       {open && (
-        <div id={summaryId} className="admin-reference-summary-body rounded-lg bg-neutral-50 p-3 leading-5 text-neutral-600">
-          {summary && <p>{summary}</p>}
-          {points.length > 0 && <p className="mt-1">要点：{points.join(" · ")}</p>}
-        </div>
+        <section id={summaryId} className="admin-reference-summary-body" aria-label="AI 摘要内容">
+          <div className="admin-reference-summary-heading">AI 摘要</div>
+          {summary && <p className="admin-reference-summary-text">{summary}</p>}
+          {points.length > 0 && (
+            <ul className="admin-reference-summary-points">
+              {points.map((point, index) => <li key={`${index}-${point}`}>{point}</li>)}
+            </ul>
+          )}
+        </section>
       )}
-    </>
+    </div>
   );
 }

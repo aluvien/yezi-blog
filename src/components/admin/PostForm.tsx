@@ -48,7 +48,7 @@ function isSafeMarkdownUrl(value: string) {
   }
 }
 
-export default function PostForm({ post, initialAttachments = [], initialReferences = [], categories = [], usedTags = [] }: { post?: Post; initialAttachments?: Attachment[]; initialReferences?: ArticleReferenceSnapshot[]; categories?: string[]; usedTags?: Array<{ tag: string; count: number }> }) {
+export default function PostForm({ post, initialAttachments = [], initialReferences = [], categories = [], usedTags = [], openReferenceDialog = false }: { post?: Post; initialAttachments?: Attachment[]; initialReferences?: ArticleReferenceSnapshot[]; categories?: string[]; usedTags?: Array<{ tag: string; count: number }>; openReferenceDialog?: boolean }) {
   const router = useRouter();
   const [title, setTitle] = useState(post?.title ?? "");
   const [slug, setSlug] = useState(post?.slug ?? "");
@@ -65,7 +65,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   const [markdownDialog, setMarkdownDialog] = useState<"link" | "image" | null>(null);
   const [musicDialog, setMusicDialog] = useState(false);
   const [videoDialog, setVideoDialog] = useState(false);
-  const [referenceDialog, setReferenceDialog] = useState(false);
+  const [referenceDialog, setReferenceDialog] = useState(openReferenceDialog);
   const [dialogText, setDialogText] = useState("");
   const [dialogUrl, setDialogUrl] = useState("");
   const [dialogError, setDialogError] = useState("");

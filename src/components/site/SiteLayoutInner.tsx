@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { getSiteAuthor, site, parseSocialLinks } from "@/lib/site";
 import { NAV_ITEMS } from "@/components/site/SiteNav";
 import { NavIcon } from "@/components/site/NavIcon";
@@ -18,7 +18,36 @@ import { SiteScrollManager } from "@/components/site/SiteScrollManager";
 export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [] }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }> }) {
   const pathname = usePathname();
   const isPost = pathname.startsWith("/posts/");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuState, setMenuState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
+  const menuOpen = menuState.pathname === pathname && menuState.open;
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+
+  // 状态绑定当前路径；布局在客户端路由间常驻时，新路径自然视为关闭，
+  // 无需在 Effect 里同步 setState，也不会让返回/前进留下旧抽屉。
+  const setMenuOpen = useCallback((next: boolean | ((current: boolean) => boolean)) => {
+    setMenuState((current) => {
+      const currentOpen = current.pathname === pathname && current.open;
+      return { pathname, open: typeof next === "function" ? next(currentOpen) : next };
+    });
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    drawerRef.current?.focus({ preventScroll: true });
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      menuTriggerRef.current?.focus({ preventScroll: true });
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [menuOpen, setMenuOpen]);
 
   // 主题由 <html data-theme> 驱动（RootLayout 内联脚本在首帧前设置）。
   // 按钮图标用 CSS 按 data-theme 显隐，服务端与客户端渲染永远一致，避免水合错位。
@@ -87,6 +116,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
             <SiteSearch />
             {/* 深色模式切换：仅桌面显示，位于搜索图标右侧（需求 F3） */}
             <button
+              ref={menuTriggerRef}
               type="button"
               onClick={toggleTheme}
               aria-label="切换深浅色主题"
@@ -149,7 +179,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
 
       {menuOpen && (
         <div className="site-mobile-menu md:hidden" role="dialog" aria-modal="true" aria-label="移动端菜单" onClick={() => setMenuOpen(false)}>
-          <aside className="site-mobile-drawer" onClick={(e) => e.stopPropagation()}>
+          <aside ref={drawerRef} tabIndex={-1} className="site-mobile-drawer outline-none" onClick={(e) => e.stopPropagation()}>
             <div className="site-mobile-menu-head">
               <span className="site-mobile-menu-title">MENU</span>
               <button type="button" aria-label="关闭菜单" onClick={() => setMenuOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted hover:border-accent hover:text-accent">

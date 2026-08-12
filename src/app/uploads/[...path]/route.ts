@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { promises as fsPromises } from "node:fs";
 import { Readable } from "node:stream";
+import crypto from "node:crypto";
 import { uploadAbsolutePath } from "@/lib/uploads";
 
 export const runtime = "nodejs";
@@ -43,13 +44,23 @@ export async function GET(request: Request) {
   if (!stat.isFile()) return new Response("Not Found", { status: 404 });
   const ext = path.extname(abs).toLowerCase();
   const mime = MIME[ext] || "application/octet-stream";
+  const etag = `"${crypto.createHash("sha1").update(`${stat.size}:${stat.mtimeMs}`).digest("base64url")}"`;
+  const ifNoneMatch = request.headers.get("if-none-match");
+  const ifModifiedSince = request.headers.get("if-modified-since");
+  if (ifNoneMatch === etag || (!ifNoneMatch && ifModifiedSince && new Date(ifModifiedSince).getTime() >= Math.floor(stat.mtimeMs / 1000) * 1000)) {
+    return new Response(null, {
+      status: 304,
+      headers: { ETag: etag, "Cache-Control": "public, max-age=60, must-revalidate" },
+    });
+  }
   const stream = Readable.toWeb(fs.createReadStream(abs)) as ReadableStream<Uint8Array>;
   return new Response(stream, {
     headers: {
       "Content-Type": mime,
       "Content-Length": String(stat.size),
       "Last-Modified": stat.mtime.toUTCString(),
-      "Cache-Control": "public, max-age=31536000, immutable",
+      ETag: etag,
+      "Cache-Control": "public, max-age=60, must-revalidate",
     },
   });
 }

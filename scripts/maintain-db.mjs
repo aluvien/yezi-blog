@@ -16,6 +16,7 @@ if (fs.existsSync(dbPath)) {
       db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now);
       db.prepare("DELETE FROM login_attempts WHERE first_failed_at < ?").run(now - 24 * 60 * 60 * 1000);
     })();
+    db.pragma("optimize");
   } catch (error) {
     // Maintenance is best-effort; the application can still start and perform
     // per-request expiry checks when a database is temporarily busy.

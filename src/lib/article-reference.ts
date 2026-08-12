@@ -35,6 +35,8 @@ function text(value: unknown, maxLength: number): string {
 /** 微信的 ct 字段是 Unix 时间戳，不能直接作为文章日期展示。 */
 export function formatArticleReferenceDate(value: unknown): string {
   const raw = String(value ?? "").trim();
+  // 部分普通网站以 0/null 表示“没有发布时间”，不能把占位值直接展示给读者。
+  if (!raw || /^0+$/.test(raw) || /^(?:null|undefined)$/i.test(raw)) return "";
   if (!/^\d{10,13}$/.test(raw)) return raw;
   const numeric = Number(raw);
   const date = new Date(raw.length === 13 ? numeric : numeric * 1_000);
@@ -60,7 +62,7 @@ function decodeBase64Url(value: string): string {
 
 function normalizeUrl(value: unknown): string {
   const raw = String(value ?? "").trim();
-  if (!raw) return "";
+  if (!raw || raw.length > 2_000) return "";
   try {
     const url = new URL(raw);
     if (url.protocol !== "http:" && url.protocol !== "https:") return "";

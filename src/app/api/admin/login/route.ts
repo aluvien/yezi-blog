@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { login } from "@/lib/auth";
-import { getClientIp } from "@/lib/request";
+import { getClientIp, readLimitedJson, RequestBodyError } from "@/lib/request";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   let password = "";
   try {
-    const body = await request.json();
+    const body = await readLimitedJson<{ password?: unknown }>(request, 4 * 1024);
     password = String(body?.password ?? "");
-  } catch {
-    return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "请求格式错误" }, { status });
   }
+  if (!password || password.length > 512) return NextResponse.json({ error: "密码格式错误" }, { status: 400 });
   if (!process.env.ADMIN_PASSWORD) {
     return NextResponse.json({ error: "服务器未配置 ADMIN_PASSWORD" }, { status: 500 });
   }

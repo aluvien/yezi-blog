@@ -39,10 +39,11 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: [
-    { media: "(max-width: 699px)", color: "#ffffff" },
-    { media: "(min-width: 700px)", color: "#f7f7f9" },
+    { media: "(prefers-color-scheme: light) and (max-width: 699px)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: light) and (min-width: 700px)", color: "#f7f7f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#1d1d22" },
   ],
-  colorScheme: "light",
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
@@ -68,10 +69,14 @@ export default function RootLayout({
       suppressHydrationWarning
       className="h-full antialiased"
     >
-      {/* eslint-disable-next-line @next/next/no-css-tags */}
-      <link rel="stylesheet" href="/fonts/chiron/css/vf.css" />
-      <body className="min-h-full flex flex-col">
+      <head>
+        {/* 静态字体样式必须位于 head 内；作为 html/body 的同级节点会生成无效文档结构，
+            React 在生产环境接管页面时会因此触发 hydration mismatch (#418)。 */}
+        {/* eslint-disable-next-line @next/next/no-css-tags */}
+        <link rel="stylesheet" href="/fonts/chiron/css/vf.css" />
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="min-h-full flex flex-col">
         <ViewportZoomLock />
         {children}
       </body>

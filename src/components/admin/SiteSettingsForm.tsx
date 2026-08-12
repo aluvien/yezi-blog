@@ -8,9 +8,22 @@ import ImageUpload from "./ImageUpload";
 import QQMusicPanel from "./QQMusicPanel";
 import TelegramNotifyPanel from "./TelegramNotifyPanel";
 
-type Props = { initialValues: Record<string, string> };
+export type SettingsSection = "site" | "music" | "appearance";
 
-export default function SiteSettingsForm({ initialValues }: Props) {
+type Props = { initialValues: Record<string, string>; section?: SettingsSection };
+
+const SECTION_KEYS: Record<SettingsSection, string[]> = {
+  site: [
+    "site_name", "site_subtitle", "site_logo", "site_logo_no_border", "footer_text", "social_links",
+    "show_related_posts", "show_more_posts", "show_table_of_contents", "author_name", "author_email",
+    "gravatar_mirror", "author_avatar", "author_avatar_no_border", "qq_music_health_check_enabled",
+    "qq_music_health_check_interval_hours", "telegram_comment_notifications_enabled",
+  ],
+  music: ["default_music", "default_music_shuffle", "music_float_enabled", "music_float_info_enabled", "music_position"],
+  appearance: ["theme", "layout_theme", "dark_mode"],
+};
+
+export default function SiteSettingsForm({ initialValues, section = "site" }: Props) {
   const router = useRouter();
   const [values, setValues] = useState({
     site_name: initialValues.site_name ?? "",
@@ -53,7 +66,8 @@ export default function SiteSettingsForm({ initialValues }: Props) {
     setMessage("");
     setError("");
     startTransition(async () => {
-      const result = await updateSiteSettingsAction(values);
+      const submittedValues = Object.fromEntries(SECTION_KEYS[section].map((key) => [key, values[key as keyof typeof values]]));
+      const result = await updateSiteSettingsAction(submittedValues);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -65,6 +79,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
 
   return (
     <form onSubmit={submit} className="space-y-5">
+      {section === "site" && <>
       <div className="grid gap-5 xl:grid-cols-12">
       <section className="admin-card rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
         <div className="mb-4">
@@ -141,23 +156,36 @@ export default function SiteSettingsForm({ initialValues }: Props) {
 
       <section className="admin-card rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
         <div className="mb-4">
-          <h2 className="text-base font-semibold text-neutral-800">社交与关于</h2>
-          <p className="mt-1 text-xs text-neutral-500">配置个人链接和关于页的 Markdown 内容。</p>
+          <h2 className="text-base font-semibold text-neutral-800">社交信息</h2>
+          <p className="mt-1 text-xs text-neutral-500">配置显示在前台的个人链接。</p>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div>
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">社交链接（每行：名称 | URL）</label>
           <textarea value={values.social_links} onChange={(event) => update("social_links", event.target.value)} rows={5} className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm" placeholder="GitHub | https://github.com/..." />
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-neutral-700">关于页内容（Markdown，留空用默认）</label>
-          <textarea value={values.about_content} onChange={(event) => update("about_content", event.target.value)} rows={5} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm leading-6" placeholder="支持 Markdown 语法，留空显示默认关于页。" />
-        </div>
         </div>
       </section>
       </div>
+      <TelegramNotifyPanel
+        healthCheckEnabled={values.qq_music_health_check_enabled === "1"}
+        healthCheckIntervalHours={values.qq_music_health_check_interval_hours}
+        onHealthCheckEnabledChange={(enabled) => update("qq_music_health_check_enabled", enabled ? "1" : "0")}
+        onHealthCheckIntervalHoursChange={(hours) => update("qq_music_health_check_interval_hours", hours)}
+        commentNotificationsEnabled={values.telegram_comment_notifications_enabled === "1"}
+        onCommentNotificationsEnabledChange={(enabled) => update("telegram_comment_notifications_enabled", enabled ? "1" : "0")}
+      />
+      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:p-5">
+        <legend className="px-1 text-sm font-medium text-neutral-700">文章与列表显示</legend>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_related_posts !== "0"} onChange={(event) => update("show_related_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章页“继续阅读”</label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_more_posts !== "0"} onChange={(event) => update("show_more_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章列表页“查看更多文章”</label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_table_of_contents !== "0"} onChange={(event) => update("show_table_of_contents", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章右侧目录</label>
+        </div>
+      </fieldset>
+      </>}
 
-      <section className="admin-card space-y-5 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      {section === "music" && <section className="admin-card space-y-5 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
         <div>
         <div>
           <h2 className="text-base font-semibold text-neutral-800">音乐设置</h2>
@@ -184,15 +212,6 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         <QQMusicPanel
           defaultMusic={values.default_music}
           onDefaultMusicChange={(value) => update("default_music", value)}
-        />
-
-        <TelegramNotifyPanel
-          healthCheckEnabled={values.qq_music_health_check_enabled === "1"}
-          healthCheckIntervalHours={values.qq_music_health_check_interval_hours}
-          onHealthCheckEnabledChange={(enabled) => update("qq_music_health_check_enabled", enabled ? "1" : "0")}
-          onHealthCheckIntervalHoursChange={(hours) => update("qq_music_health_check_interval_hours", hours)}
-          commentNotificationsEnabled={values.telegram_comment_notifications_enabled === "1"}
-          onCommentNotificationsEnabledChange={(enabled) => update("telegram_comment_notifications_enabled", enabled ? "1" : "0")}
         />
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -230,9 +249,9 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
         <p className="text-xs text-neutral-400 md:col-span-2">关闭图标按钮后，播放器仍可由文章音乐触发；选择“底部展开播放器”时不显示悬浮图标，播放器面板会固定展开在页面底部。歌曲名和歌词只显示在桌面端左下角悬浮图标旁。</p>
         </div>
-      </section>
+      </section>}
 
-      <div className="grid gap-5 xl:grid-cols-12">
+      {section === "appearance" && <div className="grid gap-5 xl:grid-cols-12">
       <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-8 sm:p-5">
         <legend className="px-1 text-sm font-medium text-neutral-700">外观主题</legend>
         <div>
@@ -308,24 +327,7 @@ export default function SiteSettingsForm({ initialValues }: Props) {
         </div>
       </fieldset>
 
-      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-4 xl:self-start sm:p-5">
-        <legend className="px-1 text-sm font-medium text-neutral-700">文章与列表显示</legend>
-        <div className="grid gap-3 md:grid-cols-3">
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700">
-            <input type="checkbox" checked={values.show_related_posts !== "0"} onChange={(event) => update("show_related_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />
-            显示文章页“继续阅读”
-          </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700">
-            <input type="checkbox" checked={values.show_more_posts !== "0"} onChange={(event) => update("show_more_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />
-            显示文章列表页“查看更多文章”
-          </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700">
-            <input type="checkbox" checked={values.show_table_of_contents !== "0"} onChange={(event) => update("show_table_of_contents", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />
-            显示文章右侧目录
-          </label>
-        </div>
-      </fieldset>
-      </div>
+      </div>}
 
       <div className="admin-settings-savebar flex flex-wrap items-center gap-4">
         <button type="submit" disabled={pending} className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>

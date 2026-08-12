@@ -494,6 +494,8 @@ export function MusicInitializer() {
 
     function initContainer(el: HTMLElement) {
       if (el.dataset.init === "1") return;
+      // React 渲染的想法卡片必须等自身完成水合；Markdown HTML 容器在服务端已标记。
+      if (el.dataset.hydrated !== "1") return;
       const server = el.dataset.server;
       const id = el.dataset.id;
       const type = el.dataset.type;
@@ -644,6 +646,11 @@ export function MusicInitializer() {
     }
 
     const contentRoot = document.querySelector("main") ?? document.body;
+    const onMusicHydrated = (event: Event) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.classList.contains("blog-music")) scan(target);
+    };
+    contentRoot.addEventListener("yezi:music-hydrated", onMusicHydrated);
     scan(contentRoot);
     const cleanupDisconnectedCards = () => {
       for (const [card, cleanup] of cardSwipeCleanups) {
@@ -675,6 +682,7 @@ export function MusicInitializer() {
     });
 
     return () => {
+      contentRoot.removeEventListener("yezi:music-hydrated", onMusicHydrated);
       observer.disconnect();
       metadataObserver?.disconnect();
       unsubscribeState();

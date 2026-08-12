@@ -22,6 +22,8 @@ function isLocalImage(src: string): boolean {
   return src.startsWith("/") && !src.startsWith("//") && !src.startsWith("/_next/");
 }
 
+const FALLBACK_IMAGE = "/placeholder.svg";
+
 /**
  * 前台图片统一入口：本地上传图交给 Next Image 按需缩放，外部 URL 保留原生 img 兼容性。
  * fill 模式下由调用方提供 relative 容器，避免图片加载前撑开布局。
@@ -42,7 +44,8 @@ export function SiteImage({
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const resolvedLoading = priority ? "eager" : (loading ?? "lazy");
-  const loaded = loadedSrc === src;
+  const renderedSrc = failedSrc === src ? FALLBACK_IMAGE : src;
+  const loaded = loadedSrc === renderedSrc || failedSrc === src;
   const failed = failedSrc === src;
   const imageClassName = [
     "site-image-media",
@@ -50,9 +53,10 @@ export function SiteImage({
     fill && !isLocalImage(src) ? "absolute inset-0" : "",
     className,
   ].filter(Boolean).join(" ");
-  const handleLoaded = () => setLoadedSrc(src);
+  const handleLoaded = () => setLoadedSrc(renderedSrc);
   const handleError = () => {
-    setLoadedSrc(src);
+    if (renderedSrc === FALLBACK_IMAGE) return;
+    setLoadedSrc(FALLBACK_IMAGE);
     setFailedSrc(src);
   };
 
@@ -99,7 +103,7 @@ export function SiteImage({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={src}
+      src={renderedSrc}
       alt={alt}
       width={width}
       height={height}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getClientIp, hashIp } from "@/lib/request";
+import { getVisitorKey } from "@/lib/request";
+import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 import {
   findRecord,
   findString,
@@ -17,20 +18,7 @@ export const dynamic = "force-dynamic";
 
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 24;
-const visitorHits = new Map<string, number[]>();
-
-function allowed(request: Request): boolean {
-  const key = hashIp(getClientIp(request));
-  const cutoff = Date.now() - WINDOW_MS;
-  const recent = (visitorHits.get(key) ?? []).filter((time) => time > cutoff);
-  if (recent.length >= MAX_REQUESTS) {
-    visitorHits.set(key, recent);
-    return false;
-  }
-  recent.push(Date.now());
-  visitorHits.set(key, recent);
-  return true;
-}
+const allowQQMusicRequest = createSlidingWindowLimiter({ windowMs: WINDOW_MS, maxRequests: MAX_REQUESTS, maxKeys: 5_000 });
 
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status, headers: { "cache-control": "no-store" } });
@@ -217,12 +205,16 @@ async function resolvePlaylist(disstid: string) {
   }
   if (tracks.length === 0) throw new Error("歌单中的歌曲暂时都无法播放，请检查 QQ 音乐登录或会员状态");
   const data = { tracks, total: songs.length, skipped: songs.length - tracks.length };
+  for (const [key, value] of playlistCache) {
+    if (value.expiresAt <= Date.now()) playlistCache.delete(key);
+  }
+  while (playlistCache.size >= 100) playlistCache.delete(playlistCache.keys().next().value as string);
   playlistCache.set(disstid, { expiresAt: Date.now() + PLAYLIST_CACHE_MS, data });
   return data;
 }
 
 export async function GET(request: Request) {
-  if (!allowed(request)) return jsonError("请求过于频繁，请稍后再试", 429);
+  if (!allowQQMusicRequest(getVisitorKey(request))) return jsonError("请求过于频繁，请稍后再试", 429);
   const url = new URL(request.url);
   const kind = url.searchParams.get("type") ?? "track";
   const identifier = (url.searchParams.get("id") ?? url.searchParams.get("mid") ?? "").trim();

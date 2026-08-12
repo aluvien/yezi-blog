@@ -13,14 +13,14 @@ import { parseVideoBlock, videoContainerHtml } from "@/lib/video";
 // 只保留文章实际用到的标签与属性；data-* 为 music 播放器容器所需。
 const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
-    "h2", "h3", "h4", "p", "br", "strong", "em", "del", "blockquote", "code", "pre",
+    "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "strong", "em", "del", "blockquote", "code", "pre",
     "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "aside", "details", "summary", "time", "iframe",
   ],
   allowedAttributes: {
     a: ["href", "title", "target", "rel", "class"],
     img: ["src", "srcset", "sizes", "alt", "title", "loading", "decoding", "class", "data-original-src"],
     code: ["class"],
-    div: ["class", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover"],
+    div: ["class", "data-hydrated", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover"],
     h3: ["class"],
     p: ["class"],
     ul: ["class"],
