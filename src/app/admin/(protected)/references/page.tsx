@@ -6,6 +6,9 @@ import AdminReferenceSummary from "@/components/admin/AdminReferenceSummary";
 import { ArticleReferenceArchiveActions } from "@/components/admin/ArticleReferenceArchiveActions";
 import AdminReferenceAddButton from "@/components/admin/AdminReferenceAddButton";
 import { parseArchiveReport } from "@/lib/article-reference-archive";
+import DeleteButton from "@/components/admin/DeleteButton";
+import { deleteReferenceLibraryAction } from "@/lib/actions/references";
+import { ReferenceSelectionCheckbox, ReferenceSelectionProvider } from "@/components/admin/ReferenceSelectionControls";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +46,7 @@ export default function AdminReferencesPage() {
       {references.length === 0 ? (
         <p className="rounded-2xl bg-white py-12 text-center text-sm text-neutral-400">还没有保存文章引用</p>
       ) : (
+        <ReferenceSelectionProvider ids={references.map((reference) => reference.id)}>
         <ul className="flex flex-col gap-3">
           {references.map((reference) => {
             const points = parseKeyPoints(reference.key_points);
@@ -52,6 +56,13 @@ export default function AdminReferencesPage() {
             const qualityLabel = report.quality === "good" ? "质量良好" : report.quality === "poor" ? "建议检查" : "质量一般";
             return (
               <li key={reference.id} className="admin-reference-item admin-card admin-content-card rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <ReferenceSelectionCheckbox id={reference.id} />
+                  <DeleteButton
+                    action={deleteReferenceLibraryAction.bind(null, reference.id)}
+                    confirmText="确定从引用资料库删除这条记录？不会修改已关联文章正文。"
+                  />
+                </div>
                 <div className="admin-reference-main">
                   {reference.cover ? (
                     // 引用封面统一走服务端代理，避免公众号图片防盗链。
@@ -118,6 +129,7 @@ export default function AdminReferencesPage() {
             );
           })}
         </ul>
+        </ReferenceSelectionProvider>
       )}
     </div>
   );

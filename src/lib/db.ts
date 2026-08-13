@@ -766,6 +766,23 @@ export function listReferenceLibrary(): ReferenceLibraryItem[] {
   `).all() as ReferenceLibraryItem[];
 }
 
+/**
+ * 从独立引用资料库移除一条记录。文章正文中的快照和关联关系保留，
+ * 避免管理页清理资料库时意外改写已经发布的文章。
+ */
+export function deleteReferenceLibrary(id: number): boolean {
+  if (!Number.isInteger(id) || id <= 0) return false;
+  return db.prepare("DELETE FROM reference_library WHERE id = ?").run(id).changes > 0;
+}
+
+/** 批量移除引用资料库记录；只处理正整数 ID，重复 ID 会自动去重。 */
+export function deleteReferenceLibraryMany(ids: number[]): number {
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))].slice(0, 100);
+  if (uniqueIds.length === 0) return 0;
+  const placeholders = uniqueIds.map(() => "?").join(",");
+  return db.prepare(`DELETE FROM reference_library WHERE id IN (${placeholders})`).run(...uniqueIds).changes;
+}
+
 export function listArticleReferencesForPost(postId: number): ArticleReference[] {
   return db
     .prepare("SELECT * FROM article_references WHERE post_id = ? ORDER BY id ASC")

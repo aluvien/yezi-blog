@@ -54,7 +54,7 @@ export function ArticleReferenceArchiveActions({ referenceId, url, cached, varia
         setNotice(data.job.state === "queued" ? "正在排队读取原文…" : "正在读取原文、缓存图片并生成 AI 摘要…");
         continue;
       }
-      if (data.job.state === "failed") throw new Error(data.job.error || "缓存阅读正文失败");
+      if (data.job.state === "failed") throw new Error(data.job.error || "读取文章失败，请检查网址是否可访问");
       return data.job;
     }
     throw new Error("归档仍在进行中，请稍后刷新页面查看结果");
@@ -73,7 +73,7 @@ export function ArticleReferenceArchiveActions({ referenceId, url, cached, varia
       });
       const data = await readResponse(response);
       if (!response.ok || !data.job?.id) throw new Error(data.error || `创建归档任务失败（HTTP ${response.status}）`);
-      setNotice(data.reused ? "正在继续已有的更新任务…" : "已开始后台更新，可留在当前页面等待结果…");
+      setNotice(data.reused ? "正在继续已有的后台更新，可留在当前页面等待结果…" : "已开始后台更新，可留在当前页面等待结果…");
       const job = await waitForJob(data.job.id);
       const action = job.unchanged ? "原文没有变化，已复用现有缓存" : job.created ? "已保存阅读缓存" : "正文已更新";
       const aiNote = job.ai?.summaryGenerated ? "，AI 摘要已更新" : job.ai?.applied ? "，AI 已筛除无关内容" : job.ai?.error ? `，AI 未处理：${job.ai.error}` : "";

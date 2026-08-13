@@ -1,7 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import { Readable } from "node:stream";
-import type { LookupOptions } from "node:dns";
+import type { LookupAddress, LookupOptions } from "node:dns";
 import { assertPublicRemoteUrl, resolvePublicAddresses } from "@/lib/remote-url";
 
 type SafeRemoteFetchOptions = {
@@ -10,7 +10,7 @@ type SafeRemoteFetchOptions = {
   timeoutMs?: number;
 };
 
-type LookupCallback = (error: NodeJS.ErrnoException | null, address: string, family: number) => void;
+type LookupCallback = (error: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
 
 /**
  * Node's built-in fetch does not expose a per-request DNS lookup callback.
@@ -22,11 +22,16 @@ function publicLookup(hostname: string, options: LookupOptions, callback: Lookup
   void resolvePublicAddresses(hostname)
     .then((addresses) => {
       const requestedFamily = options.family === "IPv4" ? 4 : options.family === "IPv6" ? 6 : typeof options.family === "number" ? options.family : undefined;
-      const selected = addresses.find((item) => !requestedFamily || requestedFamily === item.family) ?? addresses[0];
+      const filtered = addresses.filter((item) => !requestedFamily || requestedFamily === item.family);
+      const selected = filtered[0];
       if (!selected) {
         const error = new Error("这个网址解析到了不允许访问的网络地址") as NodeJS.ErrnoException;
         error.code = "EHOSTUNREACH";
         callback(error, "", 0);
+        return;
+      }
+      if (options.all) {
+        callback(null, filtered);
         return;
       }
       callback(null, selected.address, selected.family);

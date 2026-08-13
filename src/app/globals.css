@@ -510,6 +510,21 @@ html[data-theme="dark"] .admin-shell {
   color: #16a34a;
 }
 
+.admin-shell .admin-reference-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 0.85rem;
+  background: var(--paper);
+  padding: 0.55rem 0.75rem;
+}
+
+.admin-shell .admin-reference-bulk-toolbar .admin-action-link-danger {
+  margin-left: auto;
+}
+
 @media (max-width: 699px) {
   .admin-shell .admin-reference-source-line {
     align-items: flex-start;
