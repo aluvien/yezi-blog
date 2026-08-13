@@ -84,7 +84,7 @@ export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
         >
           <span>{label}</span><MenuChevron />
         </button>
-        <div id={menuId} hidden={!expanded} className="admin-nav-submenu absolute left-1/2 top-[calc(100%+8px)] z-20 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col gap-1 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg" role="menu">
+        <div id={menuId} aria-hidden={!expanded} className={`admin-nav-submenu absolute left-1/2 top-[calc(100%+8px)] z-20 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col gap-1 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg${expanded ? " is-visible" : ""}`} role="menu">
           {items.map((item) => {
             const itemActive = isActive(pathname, item.href, item.exact);
             return (

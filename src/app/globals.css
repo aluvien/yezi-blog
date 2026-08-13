@@ -831,13 +831,24 @@ html[data-theme="dark"] .admin-shell {
   transform: rotate(180deg);
 }
 
+.admin-shell .admin-nav-menu.is-open {
+  z-index: 100;
+}
+
+.admin-shell .admin-header,
+.admin-shell .admin-header-inner,
+.admin-shell .admin-nav {
+  overflow: visible;
+}
+
 .admin-shell .admin-nav-submenu {
   border-color: var(--admin-line);
   background: var(--paper);
   box-shadow: 0 12px 28px rgb(0 0 0 / 10%);
 }
 
-.admin-shell .admin-nav-submenu[hidden] {
+.admin-shell .admin-nav-submenu[hidden],
+.admin-shell .admin-nav-submenu:not(.is-visible) {
   display: none;
 }
 
@@ -4588,6 +4599,15 @@ textarea.comment-field {
 .global-player-collapse:focus-visible {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* 按钮平时保持隐形，但始终保留一个真实可点击的命中区域；桌面鼠标
+ * 悬停面板时显示，移动端首次触摸顶部区域后由 show-collapse 显示。 */
+.global-player-panel.is-open .global-player-collapse {
+  pointer-events: auto;
+}
+.global-player-panel.is-open:hover .global-player-collapse {
+  opacity: 1;
 }
 
 /* 当前歌曲只用底色和轻边框提示，封面左侧不再增加装饰竖杠。 */

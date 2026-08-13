@@ -15,7 +15,7 @@ type Props = {
 
 export default function SyncGithubButton({ trailingAction }: Props) {
   const [pending, startTransition] = useTransition();
-  const [status, setStatus] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [status, setStatus] = useState<{ kind: "pending" | "success" | "error"; text: string } | null>(null);
   const [version, setVersion] = useState<GithubVersionStatus | null>(null);
   const [checkingVersion, setCheckingVersion] = useState(true);
 
@@ -49,34 +49,43 @@ export default function SyncGithubButton({ trailingAction }: Props) {
   }, []);
 
   function sync() {
-    setStatus(null);
+    // Server Action 会依次执行备份、拉取、构建和 PM2 重启，可能持续几十秒。
+    // 先更新本地状态，让用户能立即确认点击已经生效，不把反馈留到请求结束后。
+    setStatus({ kind: "pending", text: "正在备份数据库并同步 GitHub，构建完成后自动重启…" });
     startTransition(async () => {
-      const result = await syncLatestGithubAction();
-      if (!result.ok) {
-        setStatus({ kind: "error", text: result.error });
-        return;
-      }
-      setStatus({ kind: "success", text: `${result.message} 正在确认重启状态…` });
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1500));
-        let deploy: Awaited<ReturnType<typeof getGithubDeployStatusAction>>;
-        try {
-          deploy = await getGithubDeployStatusAction();
-        } catch {
-          continue;
-        }
-        if (deploy.status === "success") {
-          setStatus({ kind: "success", text: "同步、构建和 PM2 重启均已成功。" });
-          await checkVersion();
+      try {
+        const result = await syncLatestGithubAction();
+        if (!result.ok) {
+          setStatus({ kind: "error", text: result.error });
           return;
         }
-        if (deploy.status === "failed") {
-          setStatus({ kind: "error", text: `代码已构建，但 PM2 重启失败：${deploy.error || "未知错误"}` });
-          return;
+        setStatus({ kind: "success", text: `${result.message} 正在确认重启状态…` });
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+          let deploy: Awaited<ReturnType<typeof getGithubDeployStatusAction>>;
+          try {
+            deploy = await getGithubDeployStatusAction();
+          } catch {
+            continue;
+          }
+          if (deploy.status === "success") {
+            setStatus({ kind: "success", text: "同步、构建和 PM2 重启均已成功。" });
+            await checkVersion();
+            return;
+          }
+          if (deploy.status === "failed") {
+            setStatus({ kind: "error", text: `代码已构建，但 PM2 重启失败：${deploy.error || "未知错误"}` });
+            return;
+          }
         }
+        setStatus({ kind: "success", text: "代码已同步并完成构建，PM2 正在重启，请稍后刷新页面确认。" });
+        await checkVersion();
+      } catch (error) {
+        setStatus({
+          kind: "error",
+          text: error instanceof Error ? `同步请求未完成：${error.message}` : "同步请求未完成，请刷新后重试",
+        });
       }
-      setStatus({ kind: "success", text: "代码已同步并完成构建，PM2 正在重启，请稍后刷新页面确认。" });
-      await checkVersion();
     });
   }
 
@@ -92,7 +101,7 @@ export default function SyncGithubButton({ trailingAction }: Props) {
           {pending ? "同步中…" : "同步 GitHub"}
         </button>
         <div className="h-10 min-w-0 flex-1 overflow-hidden text-left text-xs leading-5" aria-live="polite">
-          {status && <p className={`line-clamp-2 ${status.kind === "success" ? "text-green-600" : "text-red-600"}`}>{status.text}</p>}
+          {status && <p className={`line-clamp-2 ${status.kind === "success" ? "text-green-600" : status.kind === "pending" ? "text-amber-600" : "text-red-600"}`}>{status.text}</p>}
         </div>
         {trailingAction}
       </div>

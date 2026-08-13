@@ -644,6 +644,18 @@ export function GlobalMusicPlayer({
     event.stopPropagation();
   }
 
+  function handleCollapsePointerDown(event: ReactPointerEvent<HTMLButtonElement>): void {
+    // 最小化按钮位于可下拉区域内，但它本身必须优先作为按钮处理，不能被
+    // 面板的 pointer capture 抢走，否则桌面端鼠标点击会只触发拖拽逻辑。
+    event.stopPropagation();
+    revealCollapseHint();
+  }
+
+  function handleCollapseClick(event: ReactMouseEvent<HTMLButtonElement>): void {
+    event.stopPropagation();
+    minimizePlayer();
+  }
+
   const panelStyle = { "--player-drag-y": `${panelDragOffset}px` } as CSSProperties;
   const showFloatInfo = musicFloatInfoEnabled && playerPosition === "left" && playing && Boolean(currentTrack);
 
@@ -691,7 +703,7 @@ export function GlobalMusicPlayer({
         onClickCapture={suppressClickAfterPanelDrag}
       >
         {open && playerPosition !== "bottom" && (
-          <button type="button" className="global-player-collapse" aria-label="最小化播放器" title="最小化播放器" onClick={minimizePlayer}>
+          <button type="button" className="global-player-collapse" aria-label="最小化播放器" title="最小化播放器" onPointerDown={handleCollapsePointerDown} onClick={handleCollapseClick}>
             <span className="global-player-collapse-handle" aria-hidden="true" />
           </button>
         )}
