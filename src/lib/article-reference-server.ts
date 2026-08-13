@@ -1,8 +1,10 @@
 import { isIP } from "node:net";
+import { marked } from "marked";
 import {
   normalizeArticleReferenceSnapshot,
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
+import { parseXStatusUrl, type XStatusUrl } from "@/lib/article-reference-url";
 import { assertPublicRemoteUrl, isBlockedNetworkAddress } from "@/lib/remote-url";
 import { safeRemoteFetch } from "@/lib/remote-fetch";
 
@@ -44,6 +46,8 @@ export function normalizeReferenceUrl(input: unknown): string {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("引用网址只支持 http 或 https");
   if (url.username || url.password || blockedHost(url.hostname)) throw new Error("这个网址不允许读取");
+  const xStatus = parseXStatusUrl(url.toString());
+  if (xStatus) return xStatus.canonicalUrl;
   url.hash = "";
   return url.toString();
 }
@@ -130,6 +134,451 @@ async function fetchHtml(input: string): Promise<{ html: string; finalUrl: strin
     return { html: await readLimitedText(response), finalUrl: current };
   }
   throw new Error("读取文章失败");
+}
+
+type XEntityLink = { url: string; expandedUrl: string; displayUrl: string };
+type XStatusData = {
+  id: string;
+  text: string;
+  title: string;
+  articleHtml: string;
+  author: string;
+  username: string;
+  authorAvatar: string;
+  publishedAt: string;
+  links: XEntityLink[];
+  media: string[];
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringValue(record: Record<string, unknown> | null, keys: string[]): string {
+  if (!record) return "";
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return "";
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character] || character);
+}
+
+function normalizeExternalDate(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const numeric = /^\d{10,13}$/.test(raw)
+    ? Number(raw) * (raw.length === 10 ? 1_000 : 1)
+    : Number.NaN;
+  const timestamp = Number.isFinite(numeric) ? numeric : Date.parse(raw);
+  if (!Number.isFinite(timestamp)) return raw;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestamp));
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return year && month && day ? `${year}-${month}-${day}` : raw;
+}
+
+function collectXEntityLinks(tweet: Record<string, unknown>): XEntityLink[] {
+  const entities = asRecord(tweet.entities);
+  const candidates: unknown[] = [];
+  if (entities) {
+    candidates.push(entities.urls);
+    // FxTwitter places facets and URL entities in slightly different shapes;
+    // accepting both keeps the text readable when one provider changes format.
+    candidates.push(entities.media);
+  }
+  const rawText = asRecord(tweet.raw_text);
+  if (rawText) candidates.push(rawText.facets);
+  const links: XEntityLink[] = [];
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+    for (const item of candidate) {
+      const record = asRecord(item);
+      if (!record) continue;
+      const url = stringValue(record, ["url", "original"]);
+      const expandedCandidate = stringValue(record, ["expanded_url", "replacement", "display_url"]);
+      const expandedUrl = /^https?:\/\//i.test(expandedCandidate) ? expandedCandidate : url;
+      const displayUrl = stringValue(record, ["display_url", "display"]) || expandedUrl;
+      if (/^https?:\/\//i.test(url) && /^https?:\/\//i.test(expandedUrl)) links.push({ url, expandedUrl, displayUrl });
+    }
+  }
+  return [...new Map(links.map((link) => [link.url, link])).values()];
+}
+
+function trimUrlPunctuation(value: string): { url: string; suffix: string } {
+  const match = value.match(/[),.!?，。！？；：、】》]+$/u);
+  if (!match) return { url: value, suffix: "" };
+  return { url: value.slice(0, -match[0].length), suffix: match[0] };
+}
+
+function xInlineHtml(value: string, links: XEntityLink[]): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  const urlPattern = /https?:\/\/[^\s<]+/giu;
+  for (const match of value.matchAll(urlPattern)) {
+    const index = match.index ?? 0;
+    const raw = match[0];
+    const trimmed = trimUrlPunctuation(raw);
+    parts.push(escapeHtml(value.slice(cursor, index)));
+    const entity = links.find((link) => link.url === trimmed.url || link.expandedUrl === trimmed.url);
+    const href = entity?.expandedUrl || trimmed.url;
+    const label = entity?.displayUrl || trimmed.url;
+    parts.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`);
+    parts.push(escapeHtml(trimmed.suffix));
+    cursor = index + raw.length;
+  }
+  parts.push(escapeHtml(value.slice(cursor)));
+  return parts.join("");
+}
+
+function xTextHtml(text: string, links: XEntityLink[]): string {
+  const paragraphs = text
+    .split(/\n{2,}/u)
+    .map((paragraph) => paragraph.split(/\r?\n/u).map((line) => xInlineHtml(line, links)).join("<br>"))
+    .filter(Boolean);
+  return paragraphs.map((paragraph) => `<p>${paragraph}</p>`).join("");
+}
+
+type XArticleEntity = Record<string, unknown>;
+
+function xArticleEntityMap(value: unknown): Map<string, XArticleEntity> {
+  const map = new Map<string, XArticleEntity>();
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const record = asRecord(item);
+      const key = stringValue(record, ["key"]);
+      const entity = asRecord(record?.value);
+      if (key && entity) map.set(key, entity);
+    }
+    return map;
+  }
+  const record = asRecord(value);
+  if (!record) return map;
+  for (const [key, entityValue] of Object.entries(record)) {
+    const entity = asRecord(entityValue);
+    if (entity) map.set(key, entity);
+  }
+  return map;
+}
+
+function xArticleMediaMap(article: Record<string, unknown>): Map<string, string> {
+  const map = new Map<string, string>();
+  const append = (value: unknown) => {
+    const record = asRecord(value);
+    if (!record) return;
+    const info = asRecord(record.media_info);
+    const id = stringValue(record, ["media_id", "id"]);
+    const url = stringValue(info, ["original_img_url", "media_url_https", "media_url", "url"])
+      || stringValue(record, ["url", "media_url_https", "media_url"]);
+    if (id && /^https?:\/\//i.test(url)) map.set(id, url);
+  };
+  append(article.cover_media);
+  if (Array.isArray(article.media_entities)) article.media_entities.forEach(append);
+  return map;
+}
+
+function xArticleMediaUrls(article: Record<string, unknown>): string[] {
+  const urls: string[] = [];
+  const append = (value: unknown) => {
+    const record = asRecord(value);
+    if (!record) return;
+    const info = asRecord(record.media_info);
+    const url = stringValue(info, ["original_img_url", "media_url_https", "media_url", "url"])
+      || stringValue(record, ["url", "media_url_https", "media_url"]);
+    if (/^https?:\/\//i.test(url)) urls.push(url);
+  };
+  append(article.cover_media);
+  if (Array.isArray(article.media_entities)) article.media_entities.forEach(append);
+  return [...new Set(urls)].slice(0, 30);
+}
+
+function xArticleBlockEntity(block: Record<string, unknown>, entities: Map<string, XArticleEntity>): XArticleEntity | null {
+  const ranges = Array.isArray(block.entityRanges) ? block.entityRanges : [];
+  const first = asRecord(ranges[0]);
+  const key = stringValue(first, ["key"]);
+  return key ? entities.get(key) || null : null;
+}
+
+function xBlockInlineHtml(
+  block: Record<string, unknown>,
+  entities: Map<string, XArticleEntity>,
+  links: XEntityLink[],
+): string {
+  const text = stringValue(block, ["text"]);
+  if (!text) return "";
+  const entityRanges = (Array.isArray(block.entityRanges) ? block.entityRanges : [])
+    .map(asRecord)
+    .filter((range): range is Record<string, unknown> => Boolean(range));
+  const styleRanges = (Array.isArray(block.inlineStyleRanges) ? block.inlineStyleRanges : [])
+    .map(asRecord)
+    .filter((range): range is Record<string, unknown> => Boolean(range));
+  const boundaries = new Set<number>([0, text.length]);
+  for (const range of [...entityRanges, ...styleRanges]) {
+    const offset = Number(range.offset);
+    const length = Number(range.length);
+    if (!Number.isInteger(offset) || !Number.isInteger(length) || length <= 0) continue;
+    boundaries.add(Math.max(0, Math.min(text.length, offset)));
+    boundaries.add(Math.max(0, Math.min(text.length, offset + length)));
+  }
+  const points = [...boundaries].sort((a, b) => a - b);
+  const output: string[] = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    const segment = text.slice(start, end);
+    if (!segment) continue;
+    const entityRange = entityRanges.find((range) => {
+      const offset = Number(range.offset);
+      const length = Number(range.length);
+      return start >= offset && start < offset + length;
+    });
+    const entity = entityRange ? entities.get(stringValue(entityRange, ["key"])) : null;
+    const entityData = asRecord(entity?.data);
+    const entityUrl = stringValue(entityData, ["url"]);
+    let rendered = entity?.type === "LINK" && /^https?:\/\//i.test(entityUrl)
+      ? `<a href="${escapeHtml(entityUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(segment)}</a>`
+      : xInlineHtml(segment, links);
+    const activeStyles = styleRanges
+      .filter((range) => {
+        const offset = Number(range.offset);
+        const length = Number(range.length);
+        return start >= offset && start < offset + length;
+      })
+      .map((range) => stringValue(range, ["style"]).toLowerCase());
+    if (activeStyles.some((style) => style.includes("bold"))) rendered = `<strong>${rendered}</strong>`;
+    if (activeStyles.some((style) => style.includes("italic"))) rendered = `<em>${rendered}</em>`;
+    if (activeStyles.some((style) => style.includes("strike"))) rendered = `<del>${rendered}</del>`;
+    if (activeStyles.some((style) => style === "code" || style.includes("monospace"))) rendered = `<code>${rendered}</code>`;
+    output.push(rendered);
+  }
+  return output.join("");
+}
+
+function xArticleMarkdownEntityHtml(markdown: string): string {
+  if (!markdown.trim()) return "";
+  // X 长文的 MARKDOWN entity 主要承载代码块；统一交给同一个 GFM 解析器，
+  // 后续仍会经过归档白名单清洗，并最终转回本站的 reader_markdown。
+  return String(marked.parse(markdown, { async: false, gfm: true, breaks: false }));
+}
+
+function renderXArticle(article: Record<string, unknown>, links: XEntityLink[]): { html: string; text: string; media: string[] } {
+  const content = asRecord(article.content);
+  const blocks = Array.isArray(content?.blocks)
+    ? content.blocks.map(asRecord).filter((block): block is Record<string, unknown> => Boolean(block))
+    : [];
+  if (blocks.length === 0) return { html: "", text: "", media: xArticleMediaUrls(article) };
+  const entities = xArticleEntityMap(content?.entityMap);
+  const mediaById = xArticleMediaMap(article);
+  const html: string[] = [];
+  const text: string[] = [];
+  const media: string[] = [];
+  const appendMedia = (entity: XArticleEntity | null) => {
+    const data = asRecord(entity?.data);
+    const items = Array.isArray(data?.mediaItems) ? data.mediaItems : [];
+    for (const item of items) {
+      const mediaItem = asRecord(item);
+      const url = mediaById.get(stringValue(mediaItem, ["mediaId", "media_id"]));
+      if (!url || media.includes(url)) continue;
+      media.push(url);
+      html.push(`<figure><img src="${escapeHtml(url)}" alt="X 图片 ${media.length}"></figure>`);
+    }
+  };
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const type = stringValue(block, ["type"]).toLowerCase();
+    if (type === "atomic") {
+      const entity = xArticleBlockEntity(block, entities);
+      const entityType = stringValue(entity, ["type"]).toUpperCase();
+      if (entityType === "DIVIDER") html.push("<hr>");
+      else if (entityType === "MARKDOWN") {
+        const markdown = stringValue(asRecord(entity?.data), ["markdown"]);
+        if (markdown) {
+          html.push(xArticleMarkdownEntityHtml(markdown));
+          text.push(markdown.replace(/```[\w+-]*\s*/g, "").replace(/```/g, "").trim());
+        }
+      } else if (entityType === "MEDIA") appendMedia(entity);
+      continue;
+    }
+    if (type === "unordered-list-item" || type === "ordered-list-item") {
+      const tag = type === "ordered-list-item" ? "ol" : "ul";
+      const items: string[] = [];
+      while (index < blocks.length && stringValue(blocks[index], ["type"]).toLowerCase() === type) {
+        const itemText = stringValue(blocks[index], ["text"]);
+        if (itemText.trim()) {
+          items.push(`<li>${xBlockInlineHtml(blocks[index], entities, links)}</li>`);
+          text.push(itemText);
+        }
+        index += 1;
+      }
+      index -= 1;
+      if (items.length > 0) html.push(`<${tag}>${items.join("")}</${tag}>`);
+      continue;
+    }
+    const blockText = stringValue(block, ["text"]);
+    if (!blockText.trim()) continue;
+    const tag = type === "header-one" ? "h1"
+      : type === "header-two" ? "h2"
+        : type === "header-three" ? "h3"
+          : type === "header-four" ? "h4"
+            : type === "blockquote" ? "blockquote" : "p";
+    html.push(`<${tag}>${xBlockInlineHtml(block, entities, links)}</${tag}>`);
+    text.push(blockText);
+  }
+  return { html: html.join(""), text: text.join("\n\n").trim(), media: [...new Set([...xArticleMediaUrls(article), ...media])].slice(0, 30) };
+}
+
+function collectXMedia(tweet: Record<string, unknown>): string[] {
+  const media = asRecord(tweet.media);
+  const candidates = [tweet.photos, tweet.mediaDetails, tweet.media, media?.all, media?.photos, media?.external];
+  const urls: string[] = [];
+  const add = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(add);
+      return;
+    }
+    if (typeof value === "string") {
+      if (/^https?:\/\//i.test(value)) urls.push(value);
+      return;
+    }
+    const record = asRecord(value);
+    if (!record) return;
+    const type = stringValue(record, ["type", "media_type"]).toLowerCase();
+    const source = /video|gif/.test(type)
+      ? stringValue(record, ["thumbnail_url", "preview_image_url", "media_url_https", "media_url", "url"])
+      : stringValue(record, ["url", "media_url_https", "media_url", "thumbnail_url"]);
+    if (/^https?:\/\//i.test(source)) urls.push(source);
+  };
+  candidates.forEach(add);
+  return [...new Set(urls)].slice(0, 4);
+}
+
+function parseXStatusPayload(payload: unknown, fallback: XStatusUrl): XStatusData | null {
+  const root = asRecord(payload);
+  const tweet = asRecord(root?.tweet) || root;
+  if (!tweet) return null;
+  const user = asRecord(tweet.user) || asRecord(tweet.author) || asRecord(root?.author);
+  const rawText = asRecord(tweet.raw_text);
+  const statusText = stringValue(tweet, ["text", "full_text"]) || stringValue(rawText, ["text"]);
+  const article = asRecord(tweet.article);
+  const articleTitle = stringValue(article, ["title", "name"]);
+  const articlePreview = stringValue(article, ["preview_text", "description"]);
+  const articleContent = article ? renderXArticle(article, collectXEntityLinks(tweet)) : { html: "", text: "", media: [] };
+  const text = articleContent.text || [articleTitle, articlePreview, statusText].filter(Boolean).join("\n\n");
+  if (!text) return null;
+  const username = stringValue(user, ["screen_name", "username", "handle"]) || fallback.username;
+  const authorName = stringValue(user, ["name", "display_name"]) || (username ? `@${username}` : "X 用户");
+  const authorAvatar = stringValue(user, ["profile_image_url_https", "profile_image_url", "avatar_url", "avatar"]);
+  const publishedAt = normalizeExternalDate(
+    stringValue(tweet, ["created_at", "created_timestamp", "date"]) || stringValue(article, ["created_at", "created_timestamp", "date"]),
+  );
+  const media = articleContent.media.length > 0 ? articleContent.media : collectXMedia(tweet);
+  return {
+    id: stringValue(tweet, ["id_str", "id"]) || fallback.id,
+    text,
+    title: articleTitle,
+    articleHtml: articleContent.html,
+    author: authorName,
+    username,
+    authorAvatar,
+    publishedAt,
+    links: collectXEntityLinks(tweet),
+    media,
+  };
+}
+
+async function fetchRemoteJson(input: string): Promise<unknown> {
+  await assertPublicRemoteUrl(input);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await safeRemoteFetch(input, {
+      signal: controller.signal,
+      headers: {
+        accept: "application/json,text/plain;q=0.9,*/*;q=0.1",
+        "user-agent": "Mozilla/5.0 (compatible; YeziBlogReference/1.0; +https://yezi.me)",
+      },
+    });
+    if (!response.ok) throw new Error(`远程接口返回 ${response.status}`);
+    return JSON.parse(await readLimitedText(response)) as unknown;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function xSyndicationToken(id: string): string {
+  const numeric = Number(id);
+  return Number.isFinite(numeric) ? (numeric / 1e15 * Math.PI).toString(36) : "";
+}
+
+async function fetchXStatusData(status: XStatusUrl): Promise<XStatusData> {
+  const token = xSyndicationToken(status.id);
+  const syndicationUrl = `https://cdn.syndication.twimg.com/tweet-result?id=${status.id}&lang=zh-cn${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+  const apiUrl = `https://api.fxtwitter.com/${encodeURIComponent(status.username || "i")}/status/${status.id}`;
+  const errors: string[] = [];
+  let degraded: XStatusData | null = null;
+  for (const endpoint of [syndicationUrl, apiUrl]) {
+    try {
+      const parsed = parseXStatusPayload(await fetchRemoteJson(endpoint), status);
+      if (parsed) {
+        // Syndication API 能返回普通短帖和长文元信息，但长文正文只在部分响应中提供；
+        // 保留一个可显示的降级结果，同时继续请求 FxTwitter 获取完整 blocks/图片。
+        if (parsed.articleHtml || !parsed.title) return parsed;
+        degraded ||= parsed;
+      }
+      errors.push("响应中没有动态正文");
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : "接口读取失败");
+    }
+  }
+  if (degraded) return degraded;
+  throw new Error(`X 动态读取失败，请稍后重试（${errors[errors.length - 1] || "公开接口无响应"}）`);
+}
+
+async function fetchXReferenceSource(status: XStatusUrl): Promise<ArticleReferenceArchiveDocument> {
+  const data = await fetchXStatusData(status);
+  const username = data.username || status.username;
+  const canonicalUrl = username
+    ? `https://x.com/${encodeURIComponent(username)}/status/${data.id}`
+    : status.canonicalUrl;
+  const title = data.title || data.text.split(/\r?\n/u).map((line) => line.trim()).find(Boolean) || `${data.author} 的 X 动态`;
+  // Provider payloads are intentionally parsed into a small, trusted shape above;
+  // this HTML is only an intermediate representation for the existing sanitizer
+  // and HTML-to-Markdown archive pipeline.
+  const body = data.articleHtml || xTextHtml(data.text, data.links);
+  const cover = data.media[0] && !body.includes(data.media[0])
+    ? `<figure><img src="${escapeHtml(data.media[0])}" alt="X 文章封面"></figure>`
+    : "";
+  const media = data.articleHtml
+    ? cover
+    : data.media.map((url, index) => `<figure><img src="${escapeHtml(url)}" alt="X 图片 ${index + 1}"></figure>`).join("");
+  const html = `<article>${body}${cover && data.articleHtml ? cover : media}<p><a href="${escapeHtml(canonicalUrl)}">查看 X 原文 ↗</a></p></article>`;
+  const snapshot = normalizeArticleReferenceSnapshot({
+    url: canonicalUrl,
+    canonicalUrl,
+    title,
+    source: "X",
+    author: data.author + (username ? ` (@${username})` : ""),
+    publishedAt: data.publishedAt,
+    cover: data.media[0] || data.authorAvatar,
+    description: data.text,
+  });
+  return { snapshot, text: data.text, html, finalUrl: canonicalUrl };
 }
 
 function decodeEntities(value: string): string {
@@ -352,6 +801,8 @@ function extractArticleText(html: string): string {
 
 async function fetchReferenceSource(input: string): Promise<ArticleReferenceArchiveDocument> {
   const requestedUrl = normalizeReferenceUrl(input);
+  const xStatus = parseXStatusUrl(requestedUrl);
+  if (xStatus) return fetchXReferenceSource(xStatus);
   const { html, finalUrl } = await fetchHtml(requestedUrl);
   const parsedUrl = new URL(finalUrl);
   const jsonLd = readJsonLdArticleInfo(html, finalUrl);

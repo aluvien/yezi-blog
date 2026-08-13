@@ -24,7 +24,7 @@ const IMAGE_TIMEOUT_MS = 12_000;
 const IMAGE_REDIRECT_LIMIT = 3;
 const IMAGE_CACHE_CONCURRENCY = 3;
 // 解析规则变化时必须提升版本，否则“更新正文”会因来源 HTML 未变化而复用旧缓存。
-const REFERENCE_ARCHIVE_PIPELINE_VERSION = 4;
+const REFERENCE_ARCHIVE_PIPELINE_VERSION = 5;
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/avif": "avif",

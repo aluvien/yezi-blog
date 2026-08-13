@@ -178,7 +178,7 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
                 void loadPreview();
               }
             }}
-            placeholder="https://mp.weixin.qq.com/s/..."
+            placeholder="公众号、网页或 X 链接，例如 https://x.com/.../status/..."
             className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
           />
           <button type="button" disabled={loading} onClick={() => void loadPreview()} className="shrink-0 rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">
