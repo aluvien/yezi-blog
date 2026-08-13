@@ -10,7 +10,8 @@
     "demo:taxonomy": "node scripts/demo-taxonomy.mjs",
     "backup": "node scripts/backup.mjs",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

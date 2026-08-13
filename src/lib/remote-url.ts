@@ -134,6 +134,23 @@ async function resolveAddresses(hostname: string): Promise<string[]> {
 }
 
 /**
+ * Resolve a hostname for the actual socket connection and reject every
+ * private, loopback, link-local or otherwise non-public answer.  This is kept
+ * separate from `assertPublicRemoteUrl`: checking a hostname before calling
+ * fetch is not sufficient because DNS can change between the check and the
+ * connection.  The remote request helper passes this function to Node's
+ * socket lookup hook so the validated address is the one that gets dialled.
+ */
+export async function resolvePublicAddresses(hostname: string): Promise<Array<{ address: string; family: 4 | 6 }>> {
+  const result = await lookup(hostname, { all: true, verbatim: true });
+  const addresses = result
+    .map((item) => ({ address: item.address, family: item.family as 4 | 6 }))
+    .filter((item) => !isBlockedNetworkAddress(item.address));
+  if (addresses.length === 0) throw new Error("这个网址解析到了不允许访问的网络地址");
+  return addresses;
+}
+
+/**
  * Validate a remote URL immediately before every outbound request.
  *
  * URL text checks alone cannot stop a public-looking hostname from resolving to

@@ -16,7 +16,7 @@ const SECTION_KEYS: Record<SettingsSection, string[]> = {
   site: [
     "site_name", "site_subtitle", "site_logo", "site_logo_no_border", "footer_text", "social_links",
     "show_related_posts", "show_more_posts", "show_table_of_contents", "author_name", "author_email",
-    "gravatar_mirror", "author_avatar", "author_avatar_no_border", "qq_music_health_check_enabled",
+    "gravatar_enabled", "gravatar_mirror", "author_avatar", "author_avatar_no_border", "qq_music_health_check_enabled",
     "qq_music_health_check_interval_hours", "telegram_comment_notifications_enabled",
   ],
   music: ["default_music", "default_music_shuffle", "music_float_enabled", "music_float_info_enabled", "music_position"],
@@ -37,6 +37,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
     show_table_of_contents: initialValues.show_table_of_contents ?? "1",
     author_name: initialValues.author_name ?? "",
     author_email: initialValues.author_email ?? "",
+    gravatar_enabled: initialValues.gravatar_enabled ?? "0",
     gravatar_mirror: initialValues.gravatar_mirror ?? "",
     author_avatar: initialValues.author_avatar ?? "",
     author_avatar_no_border: initialValues.author_avatar_no_border ?? "0",
@@ -130,6 +131,18 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         </div>
         <div className="admin-settings-subsection space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
           <p className="text-sm font-medium text-neutral-700">头像与 Gravatar</p>
+          <label className="flex cursor-pointer items-start gap-2 text-xs text-neutral-600">
+            <input
+              type="checkbox"
+              checked={values.gravatar_enabled === "1"}
+              onChange={(event) => update("gravatar_enabled", event.target.checked ? "1" : "0")}
+              className="mt-0.5 h-3.5 w-3.5 accent-neutral-700"
+            />
+            <span>
+              允许将邮箱哈希发送给 Gravatar（默认关闭）
+              <span className="mt-0.5 block text-[11px] text-neutral-500">关闭时作者和评论头像使用本地生成头像；自定义上传头像仍优先。</span>
+            </span>
+          </label>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs text-neutral-600">作者邮箱（用于 Gravatar 默认头像）</label>

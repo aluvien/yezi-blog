@@ -5,11 +5,13 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     // 后台同步的构建阶段只读正式数据库，不能顺带启动定时任务或 Telegram 轮询。
     if (process.env.BLOG_BUILD_READONLY === "true") return;
-    const [{ startQQMusicHealthScheduler }, { startTelegramBotScheduler }] = await Promise.all([
+    const [{ startQQMusicHealthScheduler }, { startTelegramBotScheduler }, { resumeArticleReferenceArchiveJobs }] = await Promise.all([
       import("./lib/qq-music-scheduler"),
       import("./lib/telegram-bot-scheduler"),
+      import("./lib/article-reference-archive-jobs"),
     ]);
     startQQMusicHealthScheduler();
     startTelegramBotScheduler();
+    resumeArticleReferenceArchiveJobs();
   }
 }

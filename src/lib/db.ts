@@ -86,6 +86,22 @@ function createDb(): Database.Database {
       captured_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS article_reference_archive_jobs (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('queued','running','completed','failed')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      result_json TEXT NOT NULL DEFAULT '',
+      error TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_article_reference_archive_jobs_state_time
+      ON article_reference_archive_jobs (state, updated_at ASC);
+    CREATE INDEX IF NOT EXISTS idx_article_reference_archive_jobs_url
+      ON article_reference_archive_jobs (url, updated_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_article_reference_archive_jobs_active_url
+      ON article_reference_archive_jobs (url)
+      WHERE state IN ('queued', 'running');
     -- 独立引用资料库：不再要求一条引用必须属于某篇本地文章。
     CREATE TABLE IF NOT EXISTS reference_library (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -334,6 +350,18 @@ export interface ArticleReferenceArchive {
   cache_report: string;
   captured_at: string;
   updated_at: string;
+}
+
+export type ArticleReferenceArchiveJobState = "queued" | "running" | "completed" | "failed";
+
+export interface ArticleReferenceArchiveJobRecord {
+  id: string;
+  url: string;
+  state: ArticleReferenceArchiveJobState;
+  created_at: string;
+  updated_at: string;
+  result_json: string;
+  error: string;
 }
 
 export interface Moment {
@@ -799,6 +827,88 @@ export function upsertArticleReferenceArchive(data: Omit<ArticleReferenceArchive
     timestamp,
   );
   return getArticleReferenceArchive(data.canonical_url)!;
+}
+
+// ---------- article reference archive jobs ----------
+
+export function getArticleReferenceArchiveJobRecord(id: string): ArticleReferenceArchiveJobRecord | undefined {
+  return db.prepare("SELECT * FROM article_reference_archive_jobs WHERE id = ?").get(id) as ArticleReferenceArchiveJobRecord | undefined;
+}
+
+export function findActiveArticleReferenceArchiveJob(url: string): ArticleReferenceArchiveJobRecord | undefined {
+  return db
+    .prepare("SELECT * FROM article_reference_archive_jobs WHERE url = ? AND state IN ('queued', 'running') ORDER BY created_at ASC LIMIT 1")
+    .get(url) as ArticleReferenceArchiveJobRecord | undefined;
+}
+
+export function countActiveArticleReferenceArchiveJobs(): number {
+  return Number(
+    (db.prepare("SELECT COUNT(*) AS count FROM article_reference_archive_jobs WHERE state IN ('queued', 'running')").get() as { count: number }).count,
+  );
+}
+
+export function createArticleReferenceArchiveJobRecord(id: string, url: string): ArticleReferenceArchiveJobRecord {
+  const timestamp = now();
+  db.prepare(`
+    INSERT INTO article_reference_archive_jobs (id, url, state, created_at, updated_at, result_json, error)
+    VALUES (?, ?, 'queued', ?, ?, '', '')
+  `).run(id, url, timestamp, timestamp);
+  return getArticleReferenceArchiveJobRecord(id)!;
+}
+
+export function claimArticleReferenceArchiveJob(id: string): boolean {
+  return db
+    .prepare("UPDATE article_reference_archive_jobs SET state = 'running', updated_at = ? WHERE id = ? AND state = 'queued'")
+    .run(now(), id).changes > 0;
+}
+
+export function completeArticleReferenceArchiveJob(id: string, result: unknown): void {
+  db.prepare(`
+    UPDATE article_reference_archive_jobs
+    SET state = 'completed', updated_at = ?, result_json = ?, error = ''
+    WHERE id = ?
+  `).run(now(), JSON.stringify(result), id);
+}
+
+export function failArticleReferenceArchiveJob(id: string, error: string): void {
+  db.prepare(`
+    UPDATE article_reference_archive_jobs
+    SET state = 'failed', updated_at = ?, error = ?
+    WHERE id = ?
+  `).run(now(), error.slice(0, 2_000), id);
+}
+
+export function listQueuedArticleReferenceArchiveJobs(limit = 3): ArticleReferenceArchiveJobRecord[] {
+  const safeLimit = Math.max(0, Math.min(20, Math.trunc(limit)));
+  if (safeLimit === 0) return [];
+  return db
+    .prepare("SELECT * FROM article_reference_archive_jobs WHERE state = 'queued' ORDER BY created_at ASC LIMIT ?")
+    .all(safeLimit) as ArticleReferenceArchiveJobRecord[];
+}
+
+export function recoverStaleArticleReferenceArchiveJobs(staleBefore: string): number {
+  return db
+    .prepare("UPDATE article_reference_archive_jobs SET state = 'queued', updated_at = ? WHERE state = 'running' AND updated_at < ?")
+    .run(now(), staleBefore).changes;
+}
+
+export function pruneArticleReferenceArchiveJobs(maxRetained = 30, retentionMs = 24 * 60 * 60 * 1000): void {
+  const retentionCutoff = new Date(Date.now() - Math.max(0, retentionMs)).toISOString();
+  db.prepare("DELETE FROM article_reference_archive_jobs WHERE state IN ('completed', 'failed') AND updated_at < ?").run(retentionCutoff);
+  const safeMax = Math.max(0, Math.trunc(maxRetained));
+  const staleRows = db
+    .prepare(`
+      SELECT id FROM article_reference_archive_jobs
+      WHERE state IN ('completed', 'failed')
+      ORDER BY updated_at DESC
+      LIMIT -1 OFFSET ?
+    `)
+    .all(safeMax) as Array<{ id: string }>;
+  const remove = db.prepare("DELETE FROM article_reference_archive_jobs WHERE id = ? AND state IN ('completed', 'failed')");
+  const transaction = db.transaction((ids: string[]) => {
+    for (const id of ids) remove.run(id);
+  });
+  transaction(staleRows.map((row) => row.id));
 }
 
 /** 同一篇站外文章可能被多个本地文章引用；AI 摘要应保持一致更新。 */

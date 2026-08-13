@@ -121,13 +121,6 @@ function copyStaticAssets() {
 copyStaticAssets();
 copyIfChanged(publicSource, publicTarget);
 
-// PM2 重启或容器停止时尽快退出。standalone server.js 不暴露 http 句柄，
-// 无法优雅 drain in-flight 请求；如需真正优雅退出需改用自定义 server。
-function shutdown(signal) {
-  console.log(`收到 ${signal}，正在退出…`);
-  process.exit(0);
-}
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
-
+// 不在包装脚本里 process.exit：Next standalone server 会接管 SIGTERM/SIGINT，
+// 让 in-flight 请求和 after() 任务拥有自己的优雅退出窗口。
 await import("../.next/standalone/server.js");

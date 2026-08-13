@@ -196,7 +196,7 @@ function greet(name: string): string {
   insertComment.run("post", p1, "老朋友们", null, "终于有自己的站了，恭喜恭喜。", "127.0.0.1", "approved", ts(48));
   insertComment.run("post", p2, "排版控", null, "引用块和代码块的样式真不错。", "127.0.0.1", "approved", ts(12));
   insertComment.run("moment", m2, "摄影爱好者", null, "等你的真图！", "127.0.0.1", "approved", ts(20));
-  insertComment.run("post", p1, "待审核用户", null, "这条评论默认待审核，前台不可见。", "127.0.0.1", "pending", ts(1));
+  insertComment.run("post", p1, "待审核用户", null, "这条评论用于演示审核流程，审核后展示。", "127.0.0.1", "pending", ts(1));
 });
 
 seed();

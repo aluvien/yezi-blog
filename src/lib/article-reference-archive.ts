@@ -12,6 +12,7 @@ import { getProjectRoot } from "@/lib/uploads";
 import { fetchReferenceArchiveDocument, normalizeReferenceUrl } from "@/lib/article-reference-server";
 import { detectSafeRasterImageMime } from "@/lib/image-signature";
 import { assertPublicRemoteUrl } from "@/lib/remote-url";
+import { safeRemoteFetch } from "@/lib/remote-fetch";
 
 const MAX_READER_HTML_LENGTH = 2 * 1024 * 1024;
 const MAX_READER_TEXT_LENGTH = 200_000;
@@ -662,9 +663,7 @@ async function downloadReferenceImage(input: string, referer: string): Promise<{
     const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(current, {
-        cache: "no-store",
-        redirect: "manual",
+      response = await safeRemoteFetch(current, {
         signal: controller.signal,
         headers: {
           accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
