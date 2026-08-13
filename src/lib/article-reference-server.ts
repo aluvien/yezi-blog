@@ -3,8 +3,6 @@ import {
   normalizeArticleReferenceSnapshot,
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
-import { getConfiguredAuthorAvatar } from "@/lib/author";
-import { getSiteSettings } from "@/lib/db";
 import { assertPublicRemoteUrl, isBlockedNetworkAddress } from "@/lib/remote-url";
 import { safeRemoteFetch } from "@/lib/remote-fetch";
 
@@ -188,6 +186,26 @@ function readScriptValue(html: string, name: string): string {
   return decodeEntities(match[1].replace(/\\(['"\\])/g, "$1").replace(/\\n/g, " ").trim());
 }
 
+function readImageSource(attributes: Record<string, string>): string {
+  const srcset = attributes["data-srcset"] || attributes.srcset || "";
+  const srcsetUrl = srcset.split(",")[0]?.trim().split(/\s+/)[0] || "";
+  return attributes["data-src"] || attributes["data-original"] || attributes["data-lazy-src"]
+    || attributes["data-actualsrc"] || attributes["data-url"] || attributes.src || srcsetUrl;
+}
+
+function readAuthorAvatarFromMarkup(html: string, baseUrl: string): string {
+  for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
+    const attributes = parseAttributes(match[0]);
+    const hint = [attributes.class, attributes.id, attributes.alt, attributes.title, attributes.itemprop]
+      .filter(Boolean)
+      .join(" ");
+    if (!/(?:author|avatar|profile|head[_-]?(?:img|image)|user[_-]?image)/i.test(hint)) continue;
+    const source = resolveHttpUrl(readImageSource(attributes), baseUrl);
+    if (source) return source;
+  }
+  return "";
+}
+
 function stripHtml(value: string): string {
   return decodeEntities(value
     .replace(/<!--[\s\S]*?-->/g, " ")
@@ -213,6 +231,7 @@ type JsonLdArticleInfo = {
   title: string;
   source: string;
   author: string;
+  authorAvatar: string;
   publishedAt: string;
   cover: string;
   description: string;
@@ -256,10 +275,25 @@ function readJsonLdArticleInfo(html: string, baseUrl: string): JsonLdArticleInfo
     }
     return "";
   };
+  const authorImageOf = (value: unknown): string => {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const image = authorImageOf(item);
+        if (image) return image;
+      }
+      return "";
+    }
+    if (value && typeof value === "object") {
+      const object = value as Record<string, unknown>;
+      return imageOf(object.image ?? object.avatar ?? object.photo ?? object.thumbnailUrl);
+    }
+    return "";
+  };
   return {
     title: String(article.headline ?? article.name ?? ""),
     source: nameOf(article.publisher) || nameOf(article.isPartOf),
     author: nameOf(article.author),
+    authorAvatar: resolveHttpUrl(authorImageOf(article.author), baseUrl),
     publishedAt: String(article.datePublished ?? article.dateCreated ?? ""),
     cover: resolveHttpUrl(imageOf(article.image ?? article.thumbnailUrl), baseUrl),
     description: String(article.description ?? ""),
@@ -295,11 +329,21 @@ async function fetchReferenceSource(input: string): Promise<ArticleReferenceArch
   const description = readMeta(html, ["og:description", "twitter:description", "description"]) || readScriptValue(html, "msg_desc") || jsonLd.description;
   const parsedCover = resolveHttpUrl(readMeta(html, ["og:image", "twitter:image", "image"]) || readScriptValue(html, "msg_cdn_url") || jsonLd.cover, finalUrl);
   const author = readMeta(html, ["author", "article:author", "twitter:creator", "parsely-author"]) || readScriptValue(html, "author") || jsonLd.author;
+  const authorAvatar = resolveHttpUrl(
+    readMeta(html, ["author:image", "article:author:image", "author_image", "author-avatar", "profile:image", "profile_image"])
+      || readScriptValue(html, "profile_avatar")
+      || readScriptValue(html, "author_avatar")
+      || readScriptValue(html, "ori_head_img_url")
+      || readScriptValue(html, "round_head_img_url")
+      || jsonLd.authorAvatar
+      || readAuthorAvatarFromMarkup(html, finalUrl),
+    finalUrl,
+  );
   const publishedAt = stripHtml(html.match(/id\s*=\s*["']publish_time["'][^>]*>([\s\S]*?)<\//i)?.[1] ?? "") || readMeta(html, ["article:published_time", "date", "datepublished"]) || readScriptValue(html, "ct") || jsonLd.publishedAt;
   const canonical = resolveHttpUrl(readCanonical(html) || readMeta(html, ["og:url"]), finalUrl) || finalUrl;
-  // 第三方页面没有明确封面时，优先使用后台设置的作者头像，再回退到网站图标，
-  // 这样引用卡片的默认视觉更统一，也不会把第三方缺图显示成破图。
-  const cover = parsedCover || getConfiguredAuthorAvatar(getSiteSettings()) || fallbackSiteIcon(finalUrl, html) || "";
+  // 第三方页面没有明确封面时，优先使用目标页面作者头像，再回退到目标网站图标，
+  // 不使用本站后台作者头像，避免不同来源的引用卡片被错误地标成本站作者。
+  const cover = parsedCover || authorAvatar || fallbackSiteIcon(finalUrl, html) || "";
   const snapshot = normalizeArticleReferenceSnapshot({
     url: requestedUrl,
     canonicalUrl: canonical,
