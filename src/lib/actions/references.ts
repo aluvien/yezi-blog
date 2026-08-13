@@ -2,12 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { deleteReferenceLibrary, deleteReferenceLibraryMany } from "@/lib/db";
+import { deleteReferenceLibrary, deleteReferenceLibraryMany, updateReferenceLibraryCategory } from "@/lib/db";
 import type { ActionResult } from "@/lib/actions/posts";
 
 function refreshReferencePages(): void {
   revalidatePath("/admin/references");
+  revalidatePath("/references");
   revalidatePath("/admin");
+}
+
+/** 更新独立引用的分类，不影响文章正文中的引用快照。 */
+export async function updateReferenceLibraryCategoryAction(id: number, formData: FormData): Promise<void> {
+  await requireAdmin();
+  const category = String(formData.get("category") ?? "").trim();
+  if (category.length > 80) return;
+  if (!updateReferenceLibraryCategory(id, category)) return;
+  refreshReferencePages();
 }
 
 /** 只删除引用资料库记录，不改动已关联文章正文。 */

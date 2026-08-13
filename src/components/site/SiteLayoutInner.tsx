@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { getSiteAuthor, site, parseSocialLinks } from "@/lib/site";
-import { NAV_ITEMS } from "@/components/site/SiteNav";
+import { getVisibleNavItems } from "@/components/site/SiteNav";
 import { NavIcon } from "@/components/site/NavIcon";
 import { SiteSearch } from "@/components/site/SiteSearch";
 import { ReadingProgress } from "@/components/site/ReadingProgress";
@@ -76,6 +76,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
   const hideSiteLogoBorder = siteSettings.site_logo_no_border === "1";
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
   const socialLinks = parseSocialLinks(siteSettings.social_links, 6);
+  const navItems = getVisibleNavItems(siteSettings);
 
   return (
     <div className="site-canvas flex min-h-full flex-1 flex-col">
@@ -100,7 +101,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
           </Link>
           <div className="flex items-center gap-2">
             <nav className="hidden items-center gap-0.5 md:flex" aria-label="主导航">
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -189,7 +190,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
             <section className="site-mobile-menu-card">
               <h2>◉ IN SITE</h2>
               <nav className="site-mobile-menu-grid" aria-label="站内导航">
-                {NAV_ITEMS.map((item) => (
+                {navItems.map((item) => (
                   <Link key={item.href} href={item.href} onClick={() => setMenuOpen(false)}>{item.label}</Link>
                 ))}
                 <Link href="/rss.xml" onClick={() => setMenuOpen(false)}>RSS</Link>

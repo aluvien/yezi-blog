@@ -25,6 +25,7 @@ const SETTING_KEYS = [
   "show_related_posts",
   "show_more_posts",
   "show_table_of_contents",
+  "show_references_page",
   "author_name",
   "author_email",
   "gravatar_enabled",

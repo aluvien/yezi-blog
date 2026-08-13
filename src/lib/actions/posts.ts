@@ -191,12 +191,15 @@ export async function attachArticleReferenceToPostAction(postId: number, input: 
 }
 
 /** 将站外文章保存到独立引用资料库；无需先关联本地文章。 */
-export async function saveReferenceLibraryAction(input: ArticleReferenceSnapshot): Promise<ActionResult> {
+export async function saveReferenceLibraryAction(input: ArticleReferenceSnapshot, category = ""): Promise<ActionResult> {
   await requireAdmin();
   const snapshot = normalizeArticleReferenceSnapshot(input);
   if (!snapshot.url) return { ok: false, error: "引用网址无效" };
-  upsertReferenceLibrarySnapshot(snapshot);
+  const normalizedCategory = String(category ?? "").trim();
+  if (normalizedCategory.length > 80) return { ok: false, error: "分类名称不能超过 80 个字符" };
+  upsertReferenceLibrarySnapshot(snapshot, normalizedCategory);
   revalidatePath("/admin/references");
+  revalidatePath("/references");
   revalidatePath("/admin");
   return { ok: true, message: "已保存到引用资料库" };
 }

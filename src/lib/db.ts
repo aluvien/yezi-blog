@@ -115,6 +115,7 @@ function createDb(): Database.Database {
       description TEXT NOT NULL DEFAULT '',
       summary TEXT NOT NULL DEFAULT '',
       key_points TEXT NOT NULL DEFAULT '[]',
+      category TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -227,9 +228,11 @@ function createDb(): Database.Database {
       ensureColumn("article_reference_archives", "ai_cleaned_at", "TEXT NOT NULL DEFAULT ''");
       ensureColumn("article_reference_archives", "reader_markdown", "TEXT NOT NULL DEFAULT ''");
       ensureColumn("article_reference_archives", "cache_report", "TEXT NOT NULL DEFAULT '{}'");
+      ensureColumn("reference_library", "category", "TEXT NOT NULL DEFAULT ''");
       db.prepare("UPDATE moments SET updated_at = created_at WHERE updated_at IS NULL").run();
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_status_time ON posts (status, created_at DESC)");
       db.exec("CREATE INDEX IF NOT EXISTS idx_posts_category ON posts (category COLLATE NOCASE)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_reference_library_category ON reference_library (category COLLATE NOCASE)");
 
       // 将旧版“文章内引用”迁入独立资料库。INSERT OR IGNORE 使迁移可重复执行，
       // 且不会覆盖后来单独更新过的库内信息。
@@ -319,6 +322,7 @@ export interface ReferenceLibraryItem {
   description: string;
   summary: string;
   key_points: string;
+  category: string;
   created_at: string;
   updated_at: string;
   archive_captured_at: string | null;
@@ -659,7 +663,7 @@ export function syncArticleReferences(postId: number, snapshots: ArticleReferenc
     `);
     const timestamp = now();
     for (const snapshot of unique.values()) {
-      upsertReferenceLibrarySnapshot(snapshot, timestamp);
+      upsertReferenceLibrarySnapshot(snapshot, "", timestamp);
       upsert.run(
         postId,
         snapshot.url,
@@ -687,14 +691,15 @@ export function syncArticleReferences(postId: number, snapshots: ArticleReferenc
 }
 
 /** 保存或更新独立引用库；同一 canonical URL 只保留一条资料。 */
-export function upsertReferenceLibrarySnapshot(input: ArticleReferenceSnapshot, timestamp = now()): ReferenceLibraryItem {
+export function upsertReferenceLibrarySnapshot(input: ArticleReferenceSnapshot, category = "", timestamp = now()): ReferenceLibraryItem {
   const snapshot = normalizeArticleReferenceSnapshot(input);
   const canonicalUrl = snapshot.canonicalUrl || snapshot.url;
   if (!canonicalUrl) throw new Error("引用网址无效");
+  const normalizedCategory = String(category ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
   db.prepare(`
     INSERT INTO reference_library
-      (url, canonical_url, title, source_name, author, published_at, cover, description, summary, key_points, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (url, canonical_url, title, source_name, author, published_at, cover, description, summary, key_points, category, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(canonical_url) DO UPDATE SET
       url = excluded.url,
       title = CASE WHEN excluded.title != '' THEN excluded.title ELSE reference_library.title END,
@@ -705,6 +710,7 @@ export function upsertReferenceLibrarySnapshot(input: ArticleReferenceSnapshot, 
       description = CASE WHEN excluded.description != '' THEN excluded.description ELSE reference_library.description END,
       summary = CASE WHEN excluded.summary != '' THEN excluded.summary ELSE reference_library.summary END,
       key_points = CASE WHEN excluded.key_points != '[]' THEN excluded.key_points ELSE reference_library.key_points END,
+      category = CASE WHEN excluded.category != '' THEN excluded.category ELSE reference_library.category END,
       updated_at = excluded.updated_at
   `).run(
     snapshot.url,
@@ -717,6 +723,7 @@ export function upsertReferenceLibrarySnapshot(input: ArticleReferenceSnapshot, 
     snapshot.description,
     snapshot.summary,
     JSON.stringify(snapshot.keyPoints),
+    normalizedCategory,
     timestamp,
     timestamp,
   );
@@ -752,7 +759,33 @@ function getReferenceLibraryItemByCanonicalUrl(canonicalUrl: string): ReferenceL
   `).get(canonicalUrl, canonicalUrl) as ReferenceLibraryItem | undefined;
 }
 
-export function listReferenceLibrary(): ReferenceLibraryItem[] {
+export function listReferenceLibrary(options: { keyword?: string; category?: string } = {}): ReferenceLibraryItem[] {
+  const keyword = String(options.keyword ?? "").trim().slice(0, 120);
+  const category = String(options.category ?? "").trim().slice(0, 80);
+  const conditions: string[] = [];
+  const parameters: string[] = [];
+  if (category) {
+    if (category === "__uncategorized") {
+      conditions.push("trim(rl.category) = ''");
+    } else {
+      conditions.push("rl.category = ?");
+      parameters.push(category);
+    }
+  }
+  if (keyword) {
+    conditions.push(`(
+      instr(lower(rl.title), lower(?)) > 0
+      OR instr(lower(rl.source_name), lower(?)) > 0
+      OR instr(lower(rl.author), lower(?)) > 0
+      OR instr(lower(rl.url), lower(?)) > 0
+      OR instr(lower(rl.description), lower(?)) > 0
+      OR instr(lower(rl.summary), lower(?)) > 0
+      OR instr(lower(rl.key_points), lower(?)) > 0
+      OR instr(lower(rl.category), lower(?)) > 0
+    )`);
+    parameters.push(...Array.from({ length: 8 }, () => keyword));
+  }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   return db.prepare(`
     SELECT rl.*, ara.captured_at AS archive_captured_at, ara.updated_at AS archive_updated_at, ara.cache_report AS archive_cache_report,
       COUNT(ar.id) AS linked_post_count,
@@ -761,9 +794,26 @@ export function listReferenceLibrary(): ReferenceLibraryItem[] {
     LEFT JOIN article_reference_archives ara ON ara.canonical_url = rl.canonical_url OR ara.url = rl.url
     LEFT JOIN article_references ar ON ar.canonical_url = rl.canonical_url OR ar.url = rl.url
     LEFT JOIN posts p ON p.id = ar.post_id
+    ${where}
     GROUP BY rl.id
     ORDER BY rl.updated_at DESC, rl.id DESC
-  `).all() as ReferenceLibraryItem[];
+  `).all(...parameters) as ReferenceLibraryItem[];
+}
+
+export function listReferenceLibraryCategories(): Array<{ category: string; count: number }> {
+  return db.prepare(`
+    SELECT category, COUNT(*) AS count
+    FROM reference_library
+    WHERE trim(category) != ''
+    GROUP BY category COLLATE NOCASE
+    ORDER BY category COLLATE NOCASE ASC
+  `).all() as Array<{ category: string; count: number }>;
+}
+
+export function updateReferenceLibraryCategory(id: number, category: string): boolean {
+  if (!Number.isInteger(id) || id <= 0) return false;
+  const normalizedCategory = String(category ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return db.prepare("UPDATE reference_library SET category = ?, updated_at = ? WHERE id = ?").run(normalizedCategory, now(), id).changes > 0;
 }
 
 /**

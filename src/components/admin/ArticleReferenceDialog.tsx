@@ -8,8 +8,8 @@ import {
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
 
-type ArticleReferenceSelection = { marker: string; snapshot: ArticleReferenceSnapshot };
-type Props = { onClose: (selection: ArticleReferenceSelection | null) => void };
+type ArticleReferenceSelection = { marker: string; snapshot: ArticleReferenceSnapshot; category?: string };
+type Props = { onClose: (selection: ArticleReferenceSelection | null) => void; showCategory?: boolean; categoryOptions?: string[] };
 
 type PreviewResponse = {
   snapshot?: Partial<ArticleReferenceSnapshot>;
@@ -29,12 +29,13 @@ async function fetchReferenceHistory(keyword: string): Promise<ArticleReferenceS
   return data.references ?? [];
 }
 
-export function ArticleReferenceDialog({ onClose }: Props) {
+export function ArticleReferenceDialog({ onClose, showCategory = false, categoryOptions = [] }: Props) {
   const [url, setUrl] = useState("");
   const [snapshot, setSnapshot] = useState<ArticleReferenceSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [cacheReader, setCacheReader] = useState(true);
   const [cacheImages, setCacheImages] = useState(true);
+  const [category, setCategory] = useState("");
   const [archiveMessage, setArchiveMessage] = useState("");
   const [summarizing, setSummarizing] = useState(false);
   const [error, setError] = useState("");
@@ -136,7 +137,7 @@ export function ArticleReferenceDialog({ onClose }: Props) {
 
   function insert() {
     if (!snapshot) return;
-    onClose({ marker: encodeArticleReferenceMarker(snapshot), snapshot });
+    onClose({ marker: encodeArticleReferenceMarker(snapshot), snapshot, ...(showCategory ? { category: category.trim() } : {}) });
   }
 
   function selectHistory(item: ArticleReferenceSnapshot) {
@@ -156,8 +157,8 @@ export function ArticleReferenceDialog({ onClose }: Props) {
       <div role="dialog" aria-modal="true" aria-labelledby="article-reference-dialog-title" className="max-h-[min(760px,calc(100dvh-2rem))] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id="article-reference-dialog-title" className="text-base font-semibold text-neutral-900">引用文章</h2>
-            <p className="mt-1 text-xs leading-5 text-neutral-500">粘贴公众号或网页文章链接，读取标题、来源和封面后插入引用卡片。</p>
+            <h2 id="article-reference-dialog-title" className="text-base font-semibold text-neutral-900">{showCategory ? "收藏文章" : "引用文章"}</h2>
+            <p className="mt-1 text-xs leading-5 text-neutral-500">粘贴公众号或网页文章链接，读取标题、来源和封面后{showCategory ? "保存到收藏库" : "插入引用卡片"}。</p>
           </div>
           <button type="button" aria-label="关闭对话框" onClick={() => onClose(null)} className="rounded-full p-1 text-xl leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">×</button>
         </div>
@@ -192,6 +193,24 @@ export function ArticleReferenceDialog({ onClose }: Props) {
           <input type="checkbox" checked={cacheImages} disabled={!cacheReader} onChange={(event) => setCacheImages(event.target.checked)} className="h-3.5 w-3.5 accent-neutral-900 disabled:opacity-50" />
           缓存正文图片到服务器 `data/ref/`（默认开启）
         </label>
+
+        {showCategory && (
+          <div className="mt-3">
+            <label htmlFor="reference-category" className="mb-1 block text-xs text-neutral-500">收藏分类（可选）</label>
+            <input
+              id="reference-category"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              list="reference-category-options"
+              maxLength={80}
+              placeholder="例如：阅读、技术、灵感"
+              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+            <datalist id="reference-category-options">
+              {categoryOptions.map((item) => <option key={item} value={item} />)}
+            </datalist>
+          </div>
+        )}
 
         <section className="mt-5 border-t border-neutral-200 pt-4" aria-label="历史引用">
           <div className="flex items-center justify-between gap-3">
@@ -274,11 +293,11 @@ export function ArticleReferenceDialog({ onClose }: Props) {
           </div>
         )}
 
-        <p className="mt-3 text-xs leading-5 text-neutral-400">公开引用卡片只保存标题、来源、封面和摘要；勾选后会在本地保存阅读快照，正文不会对访客公开，AI 摘要也会优先使用该快照。</p>
+        <p className="mt-3 text-xs leading-5 text-neutral-400">{showCategory ? "收藏库只公开展示标题、来源、封面和摘要；阅读快照仅后台可读。" : "公开引用卡片只保存标题、来源、封面和摘要；勾选后会在本地保存阅读快照，正文不会对访客公开，AI 摘要也会优先使用该快照。"}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={() => onClose(null)} className="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm text-neutral-600 hover:bg-neutral-50">取消</button>
           {snapshot && !summarizing && !snapshot.summary && <button type="button" onClick={() => void generateSummary(snapshot)} className="rounded-lg border border-accent/40 px-3.5 py-2 text-sm text-accent hover:bg-accent/5">生成 AI 摘要</button>}
-          <button type="button" disabled={!snapshot} onClick={insert} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40">插入引用</button>
+          <button type="button" disabled={!snapshot} onClick={insert} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40">{showCategory ? "保存收藏" : "插入引用"}</button>
         </div>
       </div>
     </div>
