@@ -231,6 +231,7 @@ html[data-theme="dark"] .admin-shell {
 @media (max-width: 699px) {
   .admin-header-inner {
     gap: 2px;
+    justify-content: space-between;
     flex-wrap: nowrap;
     padding-right: 8px;
     padding-left: 8px;
@@ -240,9 +241,13 @@ html[data-theme="dark"] .admin-shell {
 
   .admin-nav {
     gap: 0;
-    justify-content: space-between;
+    display: contents;
     flex-wrap: nowrap;
     overflow: visible;
+  }
+
+  .admin-header-actions {
+    display: contents;
   }
 
   .admin-header-actions {
@@ -778,7 +783,6 @@ html[data-theme="dark"] .admin-shell {
 
   .admin-shell .admin-nav {
     gap: 0;
-    justify-content: space-between;
   }
 
   .admin-shell .admin-nav-link {

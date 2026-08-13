@@ -68,6 +68,17 @@ export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
     };
   }, [setOpenMenu]);
 
+  // 后台使用独立的 .admin-shell 滚动容器；客户端切换路由时，
+  // 浏览器不会自动重置这个容器，因此这里主动回到新页面顶部。
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const shell = document.querySelector<HTMLElement>(".admin-shell");
+      if (shell) shell.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pathname]);
+
   function renderMenu(key: MenuKey, label: string, items: Array<{ href: string; label: string; exact?: boolean; pending?: boolean }>) {
     const active = items.some((item) => isActive(pathname, item.href, item.exact));
     const expanded = openMenu === key;

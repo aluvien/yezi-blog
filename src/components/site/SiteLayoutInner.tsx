@@ -150,7 +150,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
         </header>
 
         <div className={`site-frame-body ${isPost ? "site-frame-body-post" : ""}`}>
-          <main className={`site-main w-full flex-1 ${isPost ? "px-2.5 pb-6 md:px-10 md:pb-8 md:pt-10" : "px-4 pb-8 md:px-6 md:pb-16"}`}>
+          <main className={`site-main w-full flex-1 ${isPost ? "px-2.5 pb-6 md:px-10 md:pb-8 md:pt-6" : "px-4 pb-8 md:px-6 md:pb-16"}`}>
             {children}
           </main>
           <aside className="site-sidebar hidden min-[820px]:block" aria-label="站点菜单">

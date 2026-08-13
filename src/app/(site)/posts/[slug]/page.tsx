@@ -68,7 +68,7 @@ export default async function PostPage({ params }: Props) {
         enabled={isAuthorized}
         zoneClassName="article-edit-zone article-detail-edit-zone"
       >
-      <article className="article-shell mx-auto min-h-[70vh] max-w-none pb-6 pt-0 md:pb-8 md:pt-12">
+      <article className="article-shell mx-auto min-h-[70vh] max-w-none pb-6 pt-0 md:pb-8 md:pt-4">
         <header className="mx-auto max-w-[800px]">
           <p className="mb-3 text-[12px] font-medium tracking-[0.12em] text-accent">{articleCategory}</p>
           <h1 className="article-title text-[26px] font-bold leading-[1.35] tracking-[-0.025em] md:text-[30px]">{post.title}</h1>
