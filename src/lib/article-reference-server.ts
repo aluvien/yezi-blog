@@ -3,9 +3,10 @@ import {
   normalizeArticleReferenceSnapshot,
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
-import { getAuthorAvatar } from "@/lib/author";
+import { getConfiguredAuthorAvatar } from "@/lib/author";
 import { getSiteSettings } from "@/lib/db";
 import { assertPublicRemoteUrl, isBlockedNetworkAddress } from "@/lib/remote-url";
+import { safeRemoteFetch } from "@/lib/remote-fetch";
 
 // 引用卡片只需要网页头部元信息和正文的一小段内容。保留读取上限，
 // 但不要因为网页声明了较大的 Content-Length 就直接拒绝；不少站点会把
@@ -101,9 +102,7 @@ async function fetchHtml(input: string): Promise<{ html: string; finalUrl: strin
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(current, {
-        cache: "no-store",
-        redirect: "manual",
+      response = await safeRemoteFetch(current, {
         signal: controller.signal,
         headers: {
           accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
@@ -298,9 +297,9 @@ async function fetchReferenceSource(input: string): Promise<ArticleReferenceArch
   const author = readMeta(html, ["author", "article:author", "twitter:creator", "parsely-author"]) || readScriptValue(html, "author") || jsonLd.author;
   const publishedAt = stripHtml(html.match(/id\s*=\s*["']publish_time["'][^>]*>([\s\S]*?)<\//i)?.[1] ?? "") || readMeta(html, ["article:published_time", "date", "datepublished"]) || readScriptValue(html, "ct") || jsonLd.publishedAt;
   const canonical = resolveHttpUrl(readCanonical(html) || readMeta(html, ["og:url"]), finalUrl) || finalUrl;
-  // 非公众号页优先使用网站图标；极少数没有图标的网站才回退本站作者头像，
-  // 这样每张引用卡片都有稳定封面，且不会把第三方缺图显示成破图。
-  const cover = parsedCover || fallbackSiteIcon(finalUrl, html) || getAuthorAvatar(getSiteSettings()) || "";
+  // 第三方页面没有明确封面时，优先使用后台设置的作者头像，再回退到网站图标，
+  // 这样引用卡片的默认视觉更统一，也不会把第三方缺图显示成破图。
+  const cover = parsedCover || getConfiguredAuthorAvatar(getSiteSettings()) || fallbackSiteIcon(finalUrl, html) || "";
   const snapshot = normalizeArticleReferenceSnapshot({
     url: requestedUrl,
     canonicalUrl: canonical,

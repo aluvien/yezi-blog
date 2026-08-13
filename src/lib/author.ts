@@ -16,16 +16,26 @@ function gravatarAvatar(email: string, siteSettings: Record<string, string>): st
 }
 
 /**
- * 解析作者头像 URL：自定义上传 > Gravatar（基于 email）> null（回退首字母）。
- * 在 Server Component 内调用（用到了 node:crypto）。
+ * 解析作者头像 URL：自定义上传 >（明确开启时）Gravatar > 本地生成头像。
+ * Gravatar 默认关闭，避免把邮箱哈希发送给第三方服务。
  */
 export function getAuthorAvatar(siteSettings: Record<string, string>): string | null {
-  const custom = siteSettings.author_avatar?.trim();
-  if (custom && (custom.startsWith("/uploads/") || /^https:\/\//i.test(custom))) return custom;
-  return gravatarAvatar(siteSettings.author_email ?? "", siteSettings);
+  return getConfiguredAuthorAvatar(siteSettings) ?? generatedAvatar(`author:${(siteSettings.author_name?.trim().toLowerCase() || "yezi")}`);
 }
 
-/** 评论者优先使用邮箱对应的 Gravatar；未提供邮箱时使用本地稳定随机头像。 */
+/** 返回可安全作为远程封面/图片地址的配置头像；不返回本地 data URI 生成头像。 */
+export function getConfiguredAuthorAvatar(siteSettings: Record<string, string>): string | null {
+  const custom = siteSettings.author_avatar?.trim();
+  if (custom && (custom.startsWith("/uploads/") || /^https:\/\//i.test(custom))) return custom;
+  if (siteSettings.gravatar_enabled === "1") return gravatarAvatar(siteSettings.author_email ?? "", siteSettings);
+  return null;
+}
+
+/** 评论头像默认只使用本地稳定头像；站点明确开启 Gravatar 后才会发送邮箱哈希。 */
 export function getCommentAvatar(comment: { id: number; nickname: string; email: string | null }, siteSettings: Record<string, string>): string {
-  return gravatarAvatar(comment.email ?? "", siteSettings) ?? generatedAvatar(`comment:${comment.id}:${comment.nickname.trim().toLowerCase()}`);
+  if (siteSettings.gravatar_enabled === "1") {
+    const remote = gravatarAvatar(comment.email ?? "", siteSettings);
+    if (remote) return remote;
+  }
+  return generatedAvatar(`comment:${comment.id}:${comment.nickname.trim().toLowerCase()}`);
 }

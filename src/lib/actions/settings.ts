@@ -27,6 +27,7 @@ const SETTING_KEYS = [
   "show_table_of_contents",
   "author_name",
   "author_email",
+  "gravatar_enabled",
   "gravatar_mirror",
   "author_avatar",
   "author_avatar_no_border",

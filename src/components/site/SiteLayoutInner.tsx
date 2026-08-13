@@ -116,7 +116,6 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
             <SiteSearch />
             {/* 深色模式切换：仅桌面显示，位于搜索图标右侧（需求 F3） */}
             <button
-              ref={menuTriggerRef}
               type="button"
               onClick={toggleTheme}
               aria-label="切换深浅色主题"
@@ -133,6 +132,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
               </svg>
             </button>
             <button
+              ref={menuTriggerRef}
               type="button"
               aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
               aria-expanded={menuOpen}

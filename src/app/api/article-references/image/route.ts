@@ -4,6 +4,7 @@ import { isKnownArticleReferenceCover } from "@/lib/db";
 import { detectSafeRasterImageMime } from "@/lib/image-signature";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 import { assertPublicRemoteUrl } from "@/lib/remote-url";
+import { safeRemoteFetch } from "@/lib/remote-fetch";
 import { getClientIp, hashIp } from "@/lib/request";
 
 export const runtime = "nodejs";
@@ -87,9 +88,7 @@ export async function GET(request: Request) {
       const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       let response: Response;
       try {
-        response = await fetch(current, {
-          cache: "no-store",
-          redirect: "manual",
+        response = await safeRemoteFetch(current, {
           signal: controller.signal,
           headers: {
             accept: "image/avif,image/webp,image/apng,image/png,image/jpeg,image/gif,image/x-icon,*/*;q=0.1",

@@ -11,6 +11,8 @@ module.exports = {
       exec_mode: "fork",
       autorestart: true,
       max_memory_restart: "512M",
+      // 给 Next standalone 的优雅退出和 after() 任务留出时间。
+      kill_timeout: 30000,
       env: {
         NODE_ENV: "production",
         PORT: 3030,
