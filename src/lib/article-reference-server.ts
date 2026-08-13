@@ -193,13 +193,36 @@ function readImageSource(attributes: Record<string, string>): string {
     || attributes["data-actualsrc"] || attributes["data-url"] || attributes.src || srcsetUrl;
 }
 
-function readAuthorAvatarFromMarkup(html: string, baseUrl: string): string {
-  for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
+function comparableText(value: string): string {
+  return value.toLocaleLowerCase().replace(/[\s\u00a0]+/g, "").trim();
+}
+
+function readAuthorAvatarFromMarkup(html: string, baseUrl: string, author = ""): string {
+  const images = [...html.matchAll(/<img\b[^>]*>/gi)];
+  const comparableAuthor = comparableText(author);
+
+  // 很多博客只把作者名放在头像的 alt 属性里，不使用 avatar/profile class。
+  // 先按作者名匹配，避免把文章正文中的第一张图片误当成头像。
+  if (comparableAuthor.length >= 2) {
+    for (const match of images) {
+      const attributes = parseAttributes(match[0]);
+      const candidates = [attributes.alt, attributes.title, attributes["data-author"]]
+        .filter(Boolean)
+        .map(comparableText);
+      if (!candidates.some((candidate) => candidate === comparableAuthor || candidate.includes(comparableAuthor) || comparableAuthor.includes(candidate))) continue;
+      const source = resolveHttpUrl(readImageSource(attributes), baseUrl);
+      if (source) return source;
+    }
+  }
+
+  for (const match of images) {
+    const index = match.index ?? 0;
     const attributes = parseAttributes(match[0]);
-    const hint = [attributes.class, attributes.id, attributes.alt, attributes.title, attributes.itemprop]
+    const hint = [attributes.class, attributes.id, attributes.alt, attributes.title, attributes.itemprop, attributes["data-author"]]
       .filter(Boolean)
       .join(" ");
-    if (!/(?:author|avatar|profile|head[_-]?(?:img|image)|user[_-]?image)/i.test(hint)) continue;
+    const context = html.slice(Math.max(0, index - 600), Math.min(html.length, index + match[0].length + 300));
+    if (!/(?:author|avatar|profile|byline|post-author|head[_-]?(?:img|image)|user[_-]?image)/i.test(`${hint} ${context}`)) continue;
     const source = resolveHttpUrl(readImageSource(attributes), baseUrl);
     if (source) return source;
   }
@@ -214,6 +237,15 @@ function stripHtml(value: string): string {
     .replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function readTimeValue(html: string): string {
+  for (const match of html.matchAll(/<time\b([^>]*)>([\s\S]*?)<\/time>/gi)) {
+    const attributes = parseAttributes(match[0]);
+    const value = attributes.datetime || stripHtml(match[2] ?? "");
+    if (value.trim()) return value.trim();
+  }
+  return "";
 }
 
 function resolveHttpUrl(value: string, base: string): string {
@@ -336,10 +368,10 @@ async function fetchReferenceSource(input: string): Promise<ArticleReferenceArch
       || readScriptValue(html, "ori_head_img_url")
       || readScriptValue(html, "round_head_img_url")
       || jsonLd.authorAvatar
-      || readAuthorAvatarFromMarkup(html, finalUrl),
+      || readAuthorAvatarFromMarkup(html, finalUrl, author),
     finalUrl,
   );
-  const publishedAt = stripHtml(html.match(/id\s*=\s*["']publish_time["'][^>]*>([\s\S]*?)<\//i)?.[1] ?? "") || readMeta(html, ["article:published_time", "date", "datepublished"]) || readScriptValue(html, "ct") || jsonLd.publishedAt;
+  const publishedAt = stripHtml(html.match(/id\s*=\s*["']publish_time["'][^>]*>([\s\S]*?)<\//i)?.[1] ?? "") || readTimeValue(html) || readMeta(html, ["article:published_time", "date", "datepublished"]) || readScriptValue(html, "ct") || jsonLd.publishedAt;
   const canonical = resolveHttpUrl(readCanonical(html) || readMeta(html, ["og:url"]), finalUrl) || finalUrl;
   // 第三方页面没有明确封面时，优先使用目标页面作者头像，再回退到目标网站图标，
   // 不使用本站后台作者头像，避免不同来源的引用卡片被错误地标成本站作者。

@@ -15,7 +15,7 @@ type Props = { initialValues: Record<string, string>; section?: SettingsSection 
 const SECTION_KEYS: Record<SettingsSection, string[]> = {
   site: [
     "site_name", "site_subtitle", "site_logo", "site_logo_no_border", "footer_text", "social_links",
-    "show_related_posts", "show_more_posts", "show_table_of_contents", "show_references_page", "author_name", "author_email",
+    "show_related_posts", "show_more_posts", "show_table_of_contents", "show_home_page", "show_moments_page", "show_posts_page", "show_references_page", "show_works_page", "show_about_page", "author_name", "author_email",
     "gravatar_enabled", "gravatar_mirror", "author_avatar", "author_avatar_no_border", "qq_music_health_check_enabled",
     "qq_music_health_check_interval_hours", "telegram_comment_notifications_enabled",
   ],
@@ -35,7 +35,12 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
     show_related_posts: initialValues.show_related_posts ?? "1",
     show_more_posts: initialValues.show_more_posts ?? "1",
     show_table_of_contents: initialValues.show_table_of_contents ?? "1",
+    show_home_page: initialValues.show_home_page ?? "1",
+    show_moments_page: initialValues.show_moments_page ?? "1",
+    show_posts_page: initialValues.show_posts_page ?? "1",
     show_references_page: initialValues.show_references_page ?? "1",
+    show_works_page: initialValues.show_works_page ?? "1",
+    show_about_page: initialValues.show_about_page ?? "1",
     author_name: initialValues.author_name ?? "",
     author_email: initialValues.author_email ?? "",
     gravatar_enabled: initialValues.gravatar_enabled ?? "0",
@@ -199,13 +204,15 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
       </fieldset>
       <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:p-5">
         <legend className="px-1 text-sm font-medium text-neutral-700">页面展示</legend>
-        <label className="flex cursor-pointer items-start gap-3 text-sm text-neutral-700">
-          <input type="checkbox" checked={values.show_references_page !== "0"} onChange={(event) => update("show_references_page", event.target.checked ? "1" : "0")} className="mt-0.5 h-4 w-4 accent-accent" />
-          <span>
-            显示前台“引用”页面
-            <span className="mt-1 block text-xs leading-5 text-neutral-500">控制顶部导航和手机菜单中的“引用”入口；关闭后收藏数据仍保留，也可以通过 /references 直接访问。</span>
-          </span>
-        </label>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_home_page !== "0"} onChange={(event) => update("show_home_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“首页”</label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_moments_page !== "0"} onChange={(event) => update("show_moments_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“想法”</label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_posts_page !== "0"} onChange={(event) => update("show_posts_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“文章”</label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_references_page !== "0"} onChange={(event) => update("show_references_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“引用”</label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_works_page !== "0"} onChange={(event) => update("show_works_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“作品”</label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_about_page !== "0"} onChange={(event) => update("show_about_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“关于”</label>
+        </div>
+        <p className="text-xs leading-5 text-neutral-500">控制桌面顶部导航和手机菜单中的页面入口；关闭入口不会删除页面，直接访问页面地址仍然有效。</p>
       </fieldset>
       </>}
 
