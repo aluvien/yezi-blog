@@ -66,7 +66,7 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
                 {targetHref ? <Link href={targetHref} target="_blank" className="admin-link max-w-full truncate text-blue-700 hover:text-blue-900">{comment.target_label ?? "查看内容"}</Link> : <span>{comment.target_label ?? "目标已删除"}</span>}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400">
-                <span>IP {comment.ip_address || "历史记录无真实 IP"}</span><span>·</span><span>{formatDate(comment.created_at)}</span>
+                <span>IP 摘要 {comment.ip_address || "历史记录无摘要"}</span><span>·</span><span>{formatDate(comment.created_at)}</span>
               </div>
               <CommentActions id={comment.id} status={comment.status} initialReply={comment.admin_reply} />
             </li>

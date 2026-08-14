@@ -10,7 +10,19 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-search-"));
 process.env.BLOG_DB_PATH = path.join(tmpDir, "test.db");
 process.env.BLOG_ROOT = tmpDir;
 
-const { db, createPost, createMoment, updatePost, deletePost, searchPosts, searchMoments } = await import("../src/lib/db.ts");
+const {
+  db,
+  createPost,
+  createMoment,
+  updatePost,
+  updateMoment,
+  deletePost,
+  deleteMoment,
+  searchPosts,
+  searchMoments,
+  ensureFtsIndexes,
+  rebuildFtsIndexes,
+} = await import("../src/lib/db.ts");
 
 test.after(() => {
   try {
@@ -37,6 +49,19 @@ test("FTS matches title, category and tags (short queries fall back to scan)", (
   assert.ok(searchPosts("视觉").some((item) => item.id === post.id));
 });
 
+test("FTS keeps Chinese, English, category and tag searches complete across short and trigram queries", () => {
+  const post = createPost({
+    title: "Node runtime notes",
+    content: "中文检索与 English search 都应该可用",
+    category: "工程实践",
+    tags: ["TypeScript", "短标"],
+    status: "published",
+  });
+  for (const query of ["No", "Node", "中文", "工程", "工程实", "TypeScript", "短标"]) {
+    assert.ok(searchPosts(query).some((item) => item.id === post.id), `${query} 不应漏掉文章`);
+  }
+});
+
 test("searchMoments matches content substring", () => {
   const moment = createMoment({ content: "今天学了 Next.js 与 SQLite" });
   assert.ok(searchMoments("SQLite").some((item) => item.id === moment.id));
@@ -59,4 +84,48 @@ test("FTS stays in sync on update and delete", () => {
   deletePost(post.id);
   assert.equal(searchPosts("sync002").length, 0, "删除后应从索引移除");
   assert.equal(db.prepare("SELECT count(*) AS c FROM fts_posts").get().c, db.prepare("SELECT count(*) AS c FROM posts").get().c);
+});
+
+test("FTS stays in sync for moment update and delete", () => {
+  const moment = createMoment({ content: "moment sync alpha001" });
+  assert.ok(searchMoments("alpha001").some((item) => item.id === moment.id));
+  updateMoment(moment.id, { content: "moment sync beta002" });
+  assert.equal(searchMoments("alpha001").some((item) => item.id === moment.id), false);
+  assert.ok(searchMoments("beta002").some((item) => item.id === moment.id));
+  deleteMoment(moment.id);
+  assert.equal(searchMoments("beta002").some((item) => item.id === moment.id), false);
+});
+
+test("FTS rebuilds when a table or trigger is missing", () => {
+  rebuildFtsIndexes(db, "test-reset");
+  db.exec("DROP TRIGGER fts_posts_au");
+  const triggerResult = ensureFtsIndexes(db);
+  assert.equal(triggerResult.rebuilt, true);
+  assert.equal(triggerResult.reason, "missing-or-stale-trigger");
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = 'fts_posts_au'").get());
+
+  db.exec("DROP TABLE fts_moments");
+  const tableResult = ensureFtsIndexes(db);
+  assert.equal(tableResult.rebuilt, true);
+  assert.equal(tableResult.reason, "missing-table");
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'fts_moments'").get());
+});
+
+test("FTS detects equal-count payload corruption before it can omit a real result", () => {
+  const intact = createPost({ title: "intact sharedtoken", content: "first sharedtoken", status: "published" });
+  const corrupted = createPost({ title: "corrupted sharedtoken", content: "second sharedtoken", status: "published" });
+  db.prepare("DELETE FROM fts_posts WHERE rowid = ?").run(corrupted.id);
+  db.prepare("INSERT INTO fts_posts(rowid, payload) VALUES (?, ?)").run(corrupted.id, "unrelated payload");
+  assert.equal(db.prepare("SELECT count(*) AS c FROM fts_posts").get().c, db.prepare("SELECT count(*) AS c FROM posts").get().c);
+
+  const brokenResults = searchPosts("sharedtoken");
+  assert.ok(brokenResults.some((item) => item.id === intact.id));
+  assert.equal(brokenResults.some((item) => item.id === corrupted.id), false, "当前损坏索引会产生部分候选，从而漏文章");
+
+  const result = ensureFtsIndexes(db);
+  assert.equal(result.rebuilt, true);
+  assert.equal(result.reason, "payload-mismatch");
+  const repairedResults = searchPosts("sharedtoken");
+  assert.ok(repairedResults.some((item) => item.id === intact.id));
+  assert.ok(repairedResults.some((item) => item.id === corrupted.id));
 });

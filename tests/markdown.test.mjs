@@ -11,9 +11,17 @@ test("escapes raw HTML instead of executing it", () => {
 });
 
 test("blocks javascript: URLs in links and images", () => {
-  const html = renderMarkdown("[点击](javascript:alert(1))");
+  const html = renderMarkdown("[点击](javascript:alert(1))\n\n![图](data:text/html;base64,PHNjcmlwdD4=)");
   assert.ok(!html.includes("javascript:"));
+  assert.ok(!html.includes("data:text/html"));
   assert.ok(!html.includes("<a"));
+});
+
+test("sanitizes XSS attributes and preserves only supported video and reference output", () => {
+  const html = renderMarkdown("<iframe src=\"https://evil.example\" onload=\"alert(1)\"></iframe>\n\n```video\nhttps://evil.example/embed\n```");
+  assert.ok(!/<iframe[^>]*onload/i.test(html));
+  assert.ok(html.includes("&lt;iframe"));
+  assert.ok(!html.includes("evil.example/embed"));
 });
 
 test("external links get target and noopener rel", () => {

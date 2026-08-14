@@ -2,6 +2,7 @@
 import { db, now } from "./core";
 import { slugify } from "@/lib/slug";
 import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
+import { replacePostTagRelations } from "./post-tags";
 import type { Category } from "./types";
 
 export function listCategories(): Category[] {
@@ -121,6 +122,7 @@ export function renameTag(oldTag: string, newTag: string): boolean {
       const nextTags = normalizeUniqueTags(parsePostTags(post.tags).map((tag) => tag.toLocaleLowerCase() === fromKey ? to : tag));
       if (JSON.stringify(nextTags) !== JSON.stringify(parsePostTags(post.tags))) {
         update.run(JSON.stringify(nextTags), timestamp, post.id);
+        replacePostTagRelations(post.id, nextTags);
       }
     }
   });
@@ -140,6 +142,7 @@ export function deleteTag(tag: string): boolean {
       const nextTags = normalizeUniqueTags(parsePostTags(post.tags).filter((item) => item.toLocaleLowerCase() !== targetKey));
       if (JSON.stringify(nextTags) !== JSON.stringify(parsePostTags(post.tags))) {
         update.run(JSON.stringify(nextTags), timestamp, post.id);
+        replacePostTagRelations(post.id, nextTags);
       }
     }
   });

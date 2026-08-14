@@ -4,53 +4,20 @@ import { promises as fsPromises } from "node:fs";
 import path from "path";
 import sharp from "sharp";
 import { requireAdminApi } from "@/lib/auth";
-import { createAttachment, getPost } from "@/lib/db";
+import { createAttachment, getPost, type Attachment } from "@/lib/db";
 import { getUploadDir } from "@/lib/uploads";
 import { getClientIp, hashIp } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
+import { ALLOWED_UPLOAD_TYPES, hasSafeImageDimensions, hasValidUploadSignature, MAX_UPLOAD_SIZE } from "@/lib/upload-validation";
+import { writeUploadWithRecord } from "@/lib/upload-storage";
 
 export const runtime = "nodejs";
 
-const MAX_SIZE = 20 * 1024 * 1024; // 20MB
-// 图片分辨率上限：仅按头信息检查宽高，不触发完整解码，拦截“像素炸弹”防打满内存。
-// 60MP 足够容纳常见相机原图（约 24-45MP），同时挡住超高分辨率压缩炸弹。
-const MAX_PIXELS = 60 * 1024 * 1024;
 // 轻量内存限频：同一来源 60 秒内最多 30 次上传，防止会话内无限传文件打满磁盘。
 // 多实例/重启后失效，仅作基础防护。
 const UPLOAD_WINDOW_MS = 60 * 1000;
 const UPLOAD_MAX = 30;
 const allowUpload = createSlidingWindowLimiter({ windowMs: UPLOAD_WINDOW_MS, maxRequests: UPLOAD_MAX, maxKeys: 1_000 });
-const ALLOWED: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-  "application/pdf": ".pdf",
-  "text/plain": ".txt",
-  "text/markdown": ".md",
-  "application/zip": ".zip",
-  "application/msword": ".doc",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-};
-
-function hasBytes(buffer: Buffer, offset: number, bytes: number[]): boolean {
-  return bytes.every((value, index) => buffer[offset + index] === value);
-}
-
-function hasValidSignature(mime: string, buffer: Buffer): boolean {
-  if (mime === "image/jpeg") return hasBytes(buffer, 0, [0xff, 0xd8, 0xff]);
-  if (mime === "image/png") return hasBytes(buffer, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  if (mime === "image/webp") return buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP";
-  if (mime === "image/gif") return buffer.toString("ascii", 0, 6) === "GIF87a" || buffer.toString("ascii", 0, 6) === "GIF89a";
-  if (mime === "application/pdf") return buffer.toString("ascii", 0, 5) === "%PDF-";
-  if (mime === "application/zip" || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-    return hasBytes(buffer, 0, [0x50, 0x4b, 0x03, 0x04]) || hasBytes(buffer, 0, [0x50, 0x4b, 0x05, 0x06]);
-  }
-  if (mime === "application/msword") return hasBytes(buffer, 0, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
-  // 纯文本和 Markdown 没有稳定的文件头，继续依赖大小与 MIME 白名单。
-  return true;
-}
-
 export async function POST(request: Request) {
   const session = await requireAdminApi();
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
@@ -61,7 +28,7 @@ export async function POST(request: Request) {
   const declaredLength = Number(request.headers.get("content-length"));
   // 文件本体上限 20MB，另给 multipart 边界与字段留 1MB；先看 Content-Length，
   // 避免 request.formData() 在发现文件过大前就把整个请求缓冲进内存。
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_SIZE + 1024 * 1024) {
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_SIZE + 1024 * 1024) {
     return NextResponse.json({ error: "上传请求不能超过 21MB" }, { status: 413 });
   }
 
@@ -79,9 +46,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
   }
   if (!file) return NextResponse.json({ error: "缺少文件" }, { status: 400 });
-  const ext = ALLOWED[file.type];
+  const ext = ALLOWED_UPLOAD_TYPES[file.type];
   if (!ext) return NextResponse.json({ error: "不支持的文件类型" }, { status: 400 });
-  if (file.size > MAX_SIZE) return NextResponse.json({ error: "文件不能超过 20MB" }, { status: 400 });
+  if (file.size > MAX_UPLOAD_SIZE) return NextResponse.json({ error: "文件不能超过 20MB" }, { status: 400 });
 
   // 图片默认服务端精压(转 webp + resize 上限 1920 + 质量 80);勾选原图或 gif(保动画)或非图则保留原文件
   const shouldCompress = file.type.startsWith("image/") && file.type !== "image/gif" && !original;
@@ -92,18 +59,17 @@ export async function POST(request: Request) {
   if (file.type.startsWith("image/")) {
     try {
       const meta = await sharp(finalBuffer).metadata();
-      if (!meta.width || !meta.height || !hasValidSignature(file.type, finalBuffer)) {
+      if (!meta.width || !meta.height || !hasValidUploadSignature(file.type, finalBuffer)) {
         return NextResponse.json({ error: "图片文件内容无效" }, { status: 400 });
       }
-      const pixels = meta.width * meta.height;
-      if (pixels > MAX_PIXELS) {
+      if (!hasSafeImageDimensions(meta.width, meta.height)) {
         return NextResponse.json({ error: "图片分辨率过大，请压缩后上传" }, { status: 400 });
       }
     } catch {
       return NextResponse.json({ error: "图片文件无法读取" }, { status: 400 });
     }
   }
-  if (!hasValidSignature(file.type, finalBuffer)) {
+  if (!hasValidUploadSignature(file.type, finalBuffer)) {
     return NextResponse.json({ error: "文件内容与类型不匹配" }, { status: 400 });
   }
   if (shouldCompress) {
@@ -124,23 +90,22 @@ export async function POST(request: Request) {
   const name = `${crypto.randomBytes(8).toString("hex")}${finalExt}`;
   const uploadRoot = getUploadDir();
   const dir = path.join(uploadRoot, ym);
-  await fsPromises.mkdir(dir, { recursive: true });
   const relativePath = `/uploads/${ym}/${name}`;
   const absolutePath = path.join(dir, name);
-  await fsPromises.writeFile(absolutePath, finalBuffer, { mode: 0o640 });
-
   // 所有上传（封面/配图/Logo/头像/附件）都入库，便于在附件管理统一查看与清理
+  let attachment: Attachment;
   try {
-    const attachment = createAttachment({
+    await fsPromises.mkdir(dir, { recursive: true });
+    attachment = await writeUploadWithRecord(absolutePath, finalBuffer, () => createAttachment({
       post_id: postId,
       path: relativePath,
       original_name: file.name.slice(0, 160).replace(/[\\/\0]/g, "_") || name,
       mime_type: finalMime,
       size: finalBuffer.length,
-    });
-    return NextResponse.json({ path: relativePath, attachment });
+    }));
   } catch (error) {
-    await fsPromises.unlink(absolutePath).catch(() => undefined);
-    throw error;
+    console.error("[upload] 文件保存失败", error instanceof Error ? error.message : error);
+    return NextResponse.json({ error: "文件保存失败，请稍后再试" }, { status: 500 });
   }
+  return NextResponse.json({ path: relativePath, attachment });
 }

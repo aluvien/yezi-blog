@@ -52,6 +52,29 @@ npm run dev                        # http://localhost:3030
 
 > 注意：直连访问（未配置 `X-Real-IP`/`X-Forwarded-For`）时，来源 IP 会被统一记为 `unknown`，所有此类访客共享同一评论限频与点赞去重键。生产环境务必通过反向代理提供 `X-Real-IP`，以保证限流按真实访客生效。
 
+## 数据库升级与搜索索引
+
+数据库会在首次打开时自动执行带版本号的 SQLite migration；升级在单个事务中完成，失败不会推进版本号或留下半完成状态。已有数据库无需手动导出、重建或修改表结构，仍请在部署前保留可恢复备份。
+
+全文搜索使用 FTS5。启动时会校验索引版本、表结构、触发器、记录数和内容摘要；发现索引缺失、历史触发器故障或内容不一致时才会原子重建，正常启动不会无条件重建。上传图片的二进制文件不参与此校验。
+
+评论限频仅保留来源 IP 的不可逆摘要；后台展示的“IP 摘要”用于定位频繁滥用来源，不保存新评论的明文 IP。
+
+## 测试与质量检查
+
+```bash
+npm run lint
+npm run typecheck
+npm test                    # 全部单元与集成测试
+npm run test:unit
+npm run test:integration
+npx playwright install chromium  # 首次运行 E2E 时安装浏览器
+npm run test:e2e
+npm run build
+```
+
+Playwright 测试使用独立的临时 SQLite 数据库和上传目录，不会修改本地开发数据。CI 会执行质量检查、构建和核心 E2E smoke 流程，并会自动取消同一分支中过期的运行。
+
 ## 环境变量
 
 见 `.env.local.example`：

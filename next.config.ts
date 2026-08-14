@@ -4,6 +4,28 @@ import path from "node:path";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Production CSP keeps third-party content deliberately narrow without blocking
+ * the two supported video providers or administrator-configured HTTPS images.
+ * Development keeps its normal HMR behavior and is intentionally not covered.
+ */
+export function productionContentSecurityPolicy(): string {
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' https:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "frame-src https://player.bilibili.com https://www.youtube-nocookie.com",
+  ].join("; ");
+}
+
 const nextConfig: NextConfig = {
   output: "standalone",
   // 本地上传图由 Next Image 按设备宽度按需缩放，首次请求后复用优化缓存。
@@ -59,7 +81,7 @@ const nextConfig: NextConfig = {
   },
   // 允许通过开发机 IP 或绑定域名访问 HMR 与 Server Actions；
   // 否则页面能打开，但登录、评论等客户端交互会像“没有反应”。
-  allowedDevOrigins: ["192.168.31.31", "yezi.biaozhu.me", "yezi.me", "www.yezi.me"],
+  allowedDevOrigins: ["localhost", "127.0.0.1", "192.168.31.31", "yezi.biaozhu.me", "yezi.me", "www.yezi.me"],
   async headers() {
     return [
       {
@@ -70,6 +92,10 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
           { key: "X-DNS-Prefetch-Control", value: "on" },
+          // Next 开发服务器的 HMR 需要额外的脚本和 WebSocket 能力；生产环境才启用。
+          ...(process.env.NODE_ENV === "production"
+            ? [{ key: "Content-Security-Policy", value: productionContentSecurityPolicy() }]
+            : []),
         ],
       },
       // 动态页面由 Next 自己决定缓存策略；后台与写接口必须明确禁止中间层缓存。

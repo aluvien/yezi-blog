@@ -126,7 +126,9 @@ export interface Comment {
   email: string | null;
   website: string | null;
   content: string;
+  /** 不可逆 IP 摘要；字段名为兼容旧数据库保留。 */
   ip: string;
+  /** 不可逆 IP 摘要；字段名为兼容旧数据库保留。 */
   ip_address: string;
   status: "pending" | "approved";
   created_at: string;

@@ -87,11 +87,12 @@ export function createComment(data: {
   content: string;
   ip: string;
 }): Comment {
+  const ipHash = hashIp(data.ip);
   const info = db
     .prepare(
       "INSERT INTO comments (target_type, target_id, nickname, email, website, content, ip, ip_address, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
     )
-    .run(data.target_type, data.target_id, data.nickname, data.email ?? null, data.website ?? null, data.content, hashIp(data.ip), data.ip.trim().slice(0, 100), now());
+    .run(data.target_type, data.target_id, data.nickname, data.email ?? null, data.website ?? null, data.content, ipHash, ipHash, now());
   return db.prepare("SELECT * FROM comments WHERE id = ?").get(Number(info.lastInsertRowid)) as Comment;
 }
 

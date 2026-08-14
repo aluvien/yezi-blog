@@ -13,6 +13,9 @@ export * from "./db/metrics";
 export * from "./db/settings";
 export * from "./db/session-auth";
 export * from "./db/search";
+export { normalizeTagKey, replacePostTagRelations } from "./db/post-tags";
+export { FTS_SCHEMA_VERSION, ensureFtsIndexes, rebuildFtsIndexes } from "./db/fts";
+export { LATEST_DB_SCHEMA_VERSION } from "./db/migrations";
 
 export { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 export { parseMomentImages } from "@/lib/moments";
