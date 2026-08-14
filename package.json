@@ -2,6 +2,9 @@
   "name": "yezi-blog",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev -p 3030",
     "build": "node scripts/build.mjs",
@@ -11,7 +14,7 @@
     "backup": "node scripts/backup.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/*.test.mjs"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

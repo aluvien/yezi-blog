@@ -1,23 +1,18 @@
 import { apiJson, apiOptions, paginationMeta, parsePagination, publicMoment, publicPost } from "@/lib/api";
-import { countApprovedCommentsBulk, getContentMetricsBulk, listMoments, listPosts } from "@/lib/db";
-import { parsePostTags } from "@/lib/post-tags";
+import { countApprovedCommentsBulk, getContentMetricsBulk, searchMoments, searchPosts } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function matches(value: string, query: string): boolean {
-  return value.toLocaleLowerCase().includes(query.toLocaleLowerCase());
-}
 
 export function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const query = (params.get("q") ?? "").trim().slice(0, 100);
   if (!query) return apiJson({ data: [], meta: paginationMeta(1, 20, 0), query: "" });
 
-  // 搜索需先全文过滤再分页，保留内存过滤（FTS 重构见 lib/db.ts 标注）；
-  // 评论数与统计改用批量查询，避免每条单独查的 N+1。
-  const posts = listPosts().filter((post) => matches(post.title, query) || matches(post.content, query) || parsePostTags(post.tags).some((tag) => matches(tag, query)));
-  const moments = listMoments().filter((moment) => matches(moment.content, query));
+  // 全文搜索走 FTS5 索引（trigram 子串匹配）。与旧版内存过滤相比，搜索词现在也会
+  // 匹配文章分类（postMatchesSearch 语义），属于小幅行为增强。
+  const posts = searchPosts(query);
+  const moments = searchMoments(query);
   const postIds = posts.map((post) => post.id);
   const momentIds = moments.map((moment) => moment.id);
   const postCommentCounts = countApprovedCommentsBulk("post", postIds);

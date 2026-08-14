@@ -2,6 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 
+// 手动备份入口。每日自动调度版见 src/lib/backup.ts（backup-scheduler.ts 触发），
+// 两者共用同一套备份文件命名与保留策略（BACKUP_KEEP，默认 30 份），改动时请保持行为一致。
+
 const root = process.cwd();
 const source = path.resolve(process.env.BLOG_DB_PATH || path.join(root, "data", "blog.db"));
 if (!fs.existsSync(source)) {

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { countApprovedCommentsBulk, getContentMetricsBulk, getSiteSettings, listMoments, listPosts } from "@/lib/db";
+import { countApprovedCommentsBulk, getContentMetricsBulk, getSiteSettings, searchMoments, searchPosts } from "@/lib/db";
 import { getSiteAuthor } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
-import { parsePostTags } from "@/lib/post-tags";
 import { PostEntry } from "@/components/site/PostEntry";
 import { MomentEntry } from "@/components/site/MomentEntry";
 import { PageHeader } from "@/components/site/PageHeader";
@@ -16,10 +15,6 @@ export const metadata: Metadata = {
   description: "搜索文章与想法。",
 };
 
-function includesQuery(value: string, query: string): boolean {
-  return value.toLocaleLowerCase().includes(query.toLocaleLowerCase());
-}
-
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const query = ((await searchParams).q ?? "").trim();
   if (!query) {
@@ -30,10 +25,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       </div>
     );
   }
-  const posts = listPosts().filter((post) => {
-    return includesQuery(post.title, query) || includesQuery(post.content, query) || includesQuery(post.category, query) || parsePostTags(post.tags).some((tag) => includesQuery(tag, query));
-  });
-  const moments = listMoments().filter((moment) => !query || includesQuery(moment.content, query));
+  // 全文搜索走 FTS5 索引（trigram 子串匹配，行为与内存过滤一致）。
+  const posts = searchPosts(query);
+  const moments = searchMoments(query);
   const siteSettings = getSiteSettings();
   const authorName = getSiteAuthor(siteSettings);
   const isAuthorized = !!(await getSession());

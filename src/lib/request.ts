@@ -68,10 +68,9 @@ export function getVisitorKey(request: Request): string {
   return hashVisitorKey(ip, userAgent);
 }
 
-/** 将 IP 哈希为不可逆字符串，用于评论限频与存储，避免明文留存。 */
-export function hashIp(ip: string): string {
-  return crypto.createHash("sha256").update(ip.trim() || "unknown").digest("hex");
-}
+// hashIp 已抽到 src/lib/ip-hash.ts（不依赖 next/headers，供 db.ts 单测加载）；
+// 这里 re-export 保持旧引用不变。
+export { hashIp } from "@/lib/ip-hash";
 
 function hashVisitorKey(ip: string, userAgent: string): string {
   return crypto.createHash("sha256").update(`${ip}|${userAgent}`).digest("hex");

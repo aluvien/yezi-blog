@@ -151,7 +151,7 @@ POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 - SQLite 数据库：`data/blog.db`（首次运行自动建表）
 - 后台上传的图片：`public/uploads/`
 
-**这两个目录都需要在部署时持久化并定期备份。** 可使用 `npm run backup` 生成带时间戳的 SQLite 备份；备份目录不要直接暴露到 Web。
+**这两个目录都需要在部署时持久化并定期备份。** 可使用 `npm run backup` 手动生成带时间戳的 SQLite 备份；服务启动后也会自动每日备份（本地 04:17，若距上次备份超过 24 小时则启动后立即补一次），备份保留最近 `BACKUP_KEEP` 份（默认 30）。备份目录 `data/backups/` 不要直接暴露到 Web。
 
 ## 演示数据
 
