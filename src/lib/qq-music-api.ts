@@ -353,7 +353,11 @@ export function normalizeQQSearchTracks(raw: unknown): QQSearchTrack[] {
     const mid = getRecordString(song, ["songmid", "mid", "songMid"]);
     if (!/^[A-Za-z0-9_-]{4,80}$/.test(mid)) return [];
     const album = isRecord(song.album) ? song.album : null;
-    const albumMid = album ? getRecordString(album, ["mid", "albummid", "albumMid"]) : "";
+    // QQ's public search response currently puts `albummid` on the song
+    // itself, while the sidecar has used nested `album.mid` in older versions.
+    // Support both envelopes before constructing the stable QQ CDN cover URL.
+    const albumMid = (album ? getRecordString(album, ["mid", "albummid", "albumMid", "album_mid"]) : "")
+      || getRecordString(song, ["albummid", "albumMid", "album_mid"]);
     const cover = normalizeQQCover(
       getRecordString(song, ["cover", "pic", "image", "picurl", "picUrl"])
         || (album ? getRecordString(album, ["pic", "cover", "image", "picurl", "picUrl"]) : ""),

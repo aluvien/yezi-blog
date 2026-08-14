@@ -7,6 +7,7 @@ import {
   getRecordString,
   normalizeQQAudio,
   normalizeQQCover,
+  normalizeQQSearchTracks,
   qqMusicRequest,
   singerNames,
   type JsonRecord,
@@ -188,6 +189,55 @@ async function resolvePlaylistTrack(song: JsonRecord): Promise<ResolvedPlaylistT
 const playlistCache = new Map<string, { expiresAt: number; data: { tracks: ResolvedPlaylistTrack[]; total: number; skipped: number } }>();
 const PLAYLIST_CACHE_MS = 90_000;
 const MAX_PLAYLIST_TRACKS = 100;
+const publicCoverCache = new Map<string, { expiresAt: number; cover: string }>();
+const PUBLIC_COVER_CACHE_MS = 10 * 60_000;
+
+/**
+ * Some older QQ tracks return a blank album from the single-song detail API,
+ * even though QQ's search result still has the exact track and album ID.
+ * Use that public metadata only as a cover fallback for existing bare-MID
+ * embeds; new embeds persist the same search snapshot in their music spec.
+ */
+async function publicSearchCover(mid: string, title: string): Promise<string> {
+  const cached = publicCoverCache.get(mid);
+  if (cached && cached.expiresAt > Date.now()) return cached.cover;
+  if (!title.trim()) return "";
+
+  let cover = "";
+  try {
+    const endpoint = new URL("https://c.y.qq.com/soso/fcgi-bin/client_search_cp");
+    Object.entries({
+      format: "json",
+      outCharset: "utf-8",
+      ct: "24",
+      qqmusic_ver: "1298",
+      remoteplace: "txt.yqq.song",
+      t: "0",
+      aggr: "1",
+      cr: "1",
+      p: "1",
+      n: "30",
+      w: title.slice(0, 180),
+    }).forEach(([key, value]) => endpoint.searchParams.set(key, value));
+    const response = await fetch(endpoint, {
+      headers: { referer: "https://y.qq.com/", "user-agent": "Mozilla/5.0 (compatible; YeziBlog/1.0; +https://yezi.me)" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (response.ok) {
+      cover = normalizeQQSearchTracks(await response.json() as unknown).find((track) => track.mid === mid)?.cover || "";
+    }
+  } catch {
+    // The player remains usable when QQ's public metadata service is unavailable.
+  }
+
+  for (const [key, value] of publicCoverCache) {
+    if (value.expiresAt <= Date.now()) publicCoverCache.delete(key);
+  }
+  while (publicCoverCache.size >= 200) publicCoverCache.delete(publicCoverCache.keys().next().value as string);
+  publicCoverCache.set(mid, { expiresAt: Date.now() + PUBLIC_COVER_CACHE_MS, cover });
+  return cover;
+}
 
 async function resolvePlaylist(disstid: string) {
   const cached = playlistCache.get(disstid);
@@ -250,9 +300,10 @@ export async function GET(request: Request) {
           artist: fallbackInfo.artist || primaryInfo.artist,
           cover: fallbackInfo.cover || primaryInfo.cover,
           key: primaryInfo.key,
-        }
+      }
       : primaryInfo;
-    return NextResponse.json({ ...info, url: audio, lrc: `/api/music/qq?mid=${encodeURIComponent(mid)}&type=lyric` }, {
+    const cover = info.cover || await publicSearchCover(mid, info.name);
+    return NextResponse.json({ ...info, cover, url: audio, lrc: `/api/music/qq?mid=${encodeURIComponent(mid)}&type=lyric` }, {
       headers: { "cache-control": "private, max-age=120" },
     });
   } catch (error) {

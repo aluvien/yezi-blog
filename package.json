@@ -15,7 +15,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/*.test.mjs",
-    "test:unit": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/article-reference-reader-markdown.test.mjs tests/article-reference-snapshot.test.mjs tests/article-reference.test.mjs tests/backup-scheduler.test.mjs tests/markdown.test.mjs tests/post-tags.test.mjs tests/rate-limit.test.mjs tests/remote-url.test.mjs tests/security-headers.test.mjs tests/slug.test.mjs tests/upload-validation.test.mjs tests/video.test.mjs",
+    "test:unit": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/article-reference-reader-markdown.test.mjs tests/article-reference-snapshot.test.mjs tests/article-reference.test.mjs tests/backup-scheduler.test.mjs tests/markdown.test.mjs tests/music.test.mjs tests/post-tags.test.mjs tests/rate-limit.test.mjs tests/remote-url.test.mjs tests/security-headers.test.mjs tests/slug.test.mjs tests/upload-validation.test.mjs tests/video.test.mjs",
     "test:integration": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/comments.test.mjs tests/migrations.test.mjs tests/post-tag-relations.test.mjs tests/posts.test.mjs tests/search.test.mjs tests/session-auth.test.mjs",
     "test:e2e": "playwright test"
   },

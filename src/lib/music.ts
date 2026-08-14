@@ -48,11 +48,22 @@ function qqMusicMetadata(mode: string | undefined): Pick<MusicSpec, "title" | "a
   }
 }
 
-/** 供 QQ 搜索选择器生成简洁的音乐引用规格。 */
-export function createQQMusicSpec(mid: string): string {
+/**
+ * 供 QQ 搜索选择器生成音乐引用规格。
+ *
+ * 搜索接口的专辑封面比播放详情更稳定，随引用保存一个经过编码的展示快照。
+ * 这样即使 QQ 的播放详情缺少 album 字段，首屏和播放器仍可显示封面；手动
+ * 输入的旧规格则继续保持 `qqvip:id:song` 格式。
+ */
+export function createQQMusicSpec(mid: string, metadata?: Pick<MusicSpec, "title" | "artist" | "cover">): string {
   const safeMid = mid.trim();
   if (!/^[A-Za-z0-9_-]{4,80}$/.test(safeMid)) return "";
-  return `qqvip:${safeMid}:song`;
+  const title = stringMetadata(metadata?.title, 180);
+  const artist = stringMetadata(metadata?.artist, 180);
+  const candidateCover = stringMetadata(metadata?.cover, 1_500);
+  const cover = /^https:\/\//i.test(candidateCover) ? compactMusicCoverUrl(candidateCover) : "";
+  if (!title && !artist && !cover) return `qqvip:${safeMid}:song`;
+  return `qqvip:${safeMid}:song:meta-${encodeURIComponent(JSON.stringify({ title, artist, cover }))}`;
 }
 
 /** 解析 `qqvip:id:type[:random]` 规格。 */
