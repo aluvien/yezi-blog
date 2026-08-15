@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import {
   getGithubDeployStatusAction,
   getGithubVersionStatusAction,
+  scheduleGithubRestartAction,
   syncLatestGithubAction,
   type GithubVersionStatus,
 } from "@/lib/actions/sync";
@@ -60,6 +61,12 @@ export default function SyncGithubButton({ trailingAction }: Props) {
           return;
         }
         setStatus({ kind: "success", text: `${result.message} 正在确认重启状态…` });
+        // 先等待同步 Action 的成功响应到达浏览器，再单独安排 PM2 重启。重启会
+        // 终止当前 standalone 进程，因此不能 await 此请求；状态文件与下方轮询
+        // 会给出最终结果，避免首次同步被浏览器误报为响应异常。
+        void scheduleGithubRestartAction().then((restart) => {
+          if (!restart.ok) setStatus({ kind: "error", text: restart.error });
+        }).catch(() => undefined);
         for (let attempt = 0; attempt < 8; attempt += 1) {
           await new Promise((resolve) => window.setTimeout(resolve, 1500));
           let deploy: Awaited<ReturnType<typeof getGithubDeployStatusAction>>;

@@ -10,6 +10,10 @@ export type SyncGithubActionResult =
   | { ok: true; message: string }
   | { ok: false; error: string };
 
+export type ScheduleGithubRestartActionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
 export type GithubDeployStatus = {
   status: "unknown" | "restarting" | "success" | "failed";
   updatedAt?: string;
@@ -239,18 +243,39 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
     await runCommand("npm", ["run", "build"], projectDir, 300_000, buildEnv);
     const processName = await findPm2Name(projectDir);
     if (!processName) return { ok: false, error: "代码同步并构建成功，但没有找到对应的 PM2 进程" };
-    schedulePm2Restart(projectDir, processName);
-
     const changed = before.stdout.trim() !== after.stdout.trim();
     return {
       ok: true,
-      message: changed ? "GitHub 代码已更新，数据库已备份，构建完成，已交给 PM2 重启。" : "代码已经是最新版本，数据库已备份，构建完成，已交给 PM2 重启。",
+      // PM2 重启不能在这个 Server Action 返回前启动：更新时它会终止当前
+      // Next 进程，浏览器会把一次实际成功的同步误报成 unexpected response。
+      // 客户端收到此成功结果后，才调用下方单独的重启 Action。
+      message: changed ? "GitHub 代码已更新，数据库已备份并完成构建。" : "代码已经是最新版本，数据库已备份并完成构建。",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "同步或部署异常";
     return { ok: false, error: `同步失败：${message}` };
   } finally {
     releaseLock?.();
+  }
+}
+
+/**
+ * 在同步/构建的成功响应已送达浏览器后才安排 PM2 重启。
+ *
+ * 这必须和 syncLatestGithubAction 分开：PM2 重启当前 standalone 进程会中断
+ * 正在传输的 Server Action Flight 响应，导致前端第一次点击显示通用网络错误。
+ */
+export async function scheduleGithubRestartAction(): Promise<ScheduleGithubRestartActionResult> {
+  await requireAdmin();
+  try {
+    const projectDir = deploymentProjectDir();
+    const processName = await findPm2Name(projectDir);
+    if (!processName) return { ok: false, error: "代码已同步并构建成功，但没有找到对应的 PM2 进程" };
+    schedulePm2Restart(projectDir, processName);
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "无法安排 PM2 重启";
+    return { ok: false, error: `PM2 重启安排失败：${message}` };
   }
 }
 
