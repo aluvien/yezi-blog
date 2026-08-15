@@ -68,12 +68,15 @@ npm run typecheck
 npm test                    # 全部单元与集成测试
 npm run test:unit
 npm run test:integration
+npm run test:coverage         # Node 原生覆盖率基线
+npm run benchmark:db          # 5,000 篇隔离数据库的查询计划与耗时基线
 npx playwright install chromium  # 首次运行 E2E 时安装浏览器
 npm run test:e2e
 npm run build
+npm run test:production       # 真实 standalone + SQLite/FTS/CSP smoke
 ```
 
-Playwright 测试使用独立的临时 SQLite 数据库和上传目录，不会修改本地开发数据。CI 会执行质量检查、构建和核心 E2E smoke 流程，并会自动取消同一分支中过期的运行。
+Playwright、性能和 standalone 测试均使用独立的临时 SQLite 数据库和上传目录，不会修改本地开发数据。当前覆盖率基线为行 73.66%、分支 77.11%、函数 69.36%，CI 门槛分别为 70%、75%、65%；CI 还会执行高危依赖审计、standalone 与浏览器 smoke，并自动取消同一分支中过期的运行。
 
 ## 环境变量
 
@@ -174,7 +177,15 @@ POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 - SQLite 数据库：`data/blog.db`（首次运行自动建表）
 - 后台上传的图片：`public/uploads/`
 
-**这两个目录都需要在部署时持久化并定期备份。** 可使用 `npm run backup` 手动生成带时间戳的 SQLite 备份；服务启动后也会自动每日备份（本地 04:17，若距上次备份超过 24 小时则启动后立即补一次），备份保留最近 `BACKUP_KEEP` 份（默认 30）。备份目录 `data/backups/` 不要直接暴露到 Web。
+**这两个目录都需要在部署时持久化并定期备份。** 可使用 `npm run backup` 手动生成带时间戳的 SQLite 备份；每个备份会用全新的只读连接执行 SQLite `integrity_check`，未通过校验的文件会立即删除。服务启动后也会自动每日备份（本地 04:17，若距上次备份超过 24 小时则启动后立即补一次），备份保留最近 `BACKUP_KEEP` 份（默认 30）。备份目录 `data/backups/` 不要直接暴露到 Web。
+
+恢复演练或实际恢复前，先校验目标文件：
+
+```bash
+npm run backup:verify -- /absolute/path/to/blog-YYYYMMDDHHMMSS.db
+```
+
+校验通过后，在维护窗口停止 PM2、保留当前数据库副本，再将备份文件恢复为 `BLOG_DB_PATH` 指向的数据库并重启服务。首次请求会自动运行缺失的兼容 migration 与 FTS 校验；恢复操作应始终先在副本或预发布环境演练。
 
 ## 演示数据
 

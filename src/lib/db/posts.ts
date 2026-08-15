@@ -41,9 +41,9 @@ export function listPostsByTag(tag: string): Post[] {
   if (!needle) return [];
   return db.prepare(`
     SELECT posts.*
-    FROM posts
-    INNER JOIN post_tags ON post_tags.post_id = posts.id
-    WHERE posts.status = 'published' AND post_tags.normalized_tag = ?
+    FROM post_tags INDEXED BY idx_post_tags_normalized_tag_post_id
+    INNER JOIN posts ON posts.id = post_tags.post_id
+    WHERE post_tags.normalized_tag = ? AND posts.status = 'published'
     ORDER BY posts.created_at DESC
   `).all(needle) as Post[];
 }

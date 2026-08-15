@@ -22,6 +22,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Dependency security audit
+        run: npm audit --audit-level=high
       - name: Lint
         run: npm run lint
       - name: Typecheck
@@ -30,8 +32,12 @@ jobs:
         run: npm run test:unit
       - name: Integration tests
         run: npm run test:integration
+      - name: Coverage baseline
+        run: npm run test:coverage
       - name: Production build
         run: npm run build
+      - name: Standalone production smoke
+        run: npm run test:production
 
   e2e:
     needs: quality

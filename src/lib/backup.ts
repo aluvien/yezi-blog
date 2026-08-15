@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { getProjectRoot } from "@/lib/uploads";
+import { verifyDatabaseBackup, type DatabaseBackupVerification } from "./backup-verification";
 
 const DEFAULT_KEEP = 30;
 
@@ -12,12 +13,14 @@ export interface DbBackupResult {
   stamp: string;
   /** 本次清理掉的旧备份文件名。 */
   cleaned: string[];
+  /** 备份作为全新只读数据库打开后的完整性校验结果。 */
+  verification: DatabaseBackupVerification;
 }
 
 /**
  * 用 SQLite online backup API 生成带时间戳的只读快照，并清理超出保留份数的旧备份。
- * 后台每日调度（backup-scheduler.ts）与手动命令（scripts/backup.mjs）共用同一套
- * 目标格式；手动脚本逻辑保持独立，改动时应保持两者行为一致。
+ * 后台每日调度（backup-scheduler.ts）与手动命令（scripts/backup.mts）使用同一
+ * 目标格式与校验规则；手动脚本为不依赖应用路径别名的运维入口，改动时应保持两者行为一致。
  */
 export async function runDbBackup(options: { keep?: number; dbPath?: string } = {}): Promise<DbBackupResult> {
   const root = getProjectRoot();
@@ -33,9 +36,15 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string } = 
   const target = path.join(backupDir, `blog-${stamp}.db`);
 
   const db = new Database(source, { readonly: true });
+  let verification: DatabaseBackupVerification;
   try {
     await db.backup(target);
     fs.chmodSync(target, 0o600);
+    verification = verifyDatabaseBackup(target);
+  } catch (error) {
+    // 不把无法重新打开的文件保留为“成功备份”，避免恢复时才发现不可用。
+    fs.rmSync(target, { force: true });
+    throw error;
   } finally {
     db.close();
   }
@@ -53,7 +62,7 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string } = 
     fs.unlinkSync(path.join(backupDir, file.name));
     cleaned.push(file.name);
   }
-  return { path: target, stamp, cleaned };
+  return { path: target, stamp, cleaned, verification: verification! };
 }
 
 /** 最近一次备份文件的修改时间戳（毫秒），从未备份过则返回 null。 */

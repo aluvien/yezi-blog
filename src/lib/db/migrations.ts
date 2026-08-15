@@ -109,6 +109,20 @@ const MIGRATIONS: readonly Migration[] = [
       }
     },
   },
+  {
+    // 执行计划基线证明：原有标签 JOIN 会先扫描已发布文章，分类条件也没有
+    // 覆盖 status + category + 时间排序。两个索引只改变查询代价，不改变数据或 API。
+    version: 6,
+    name: "query-plan-indexes",
+    up(db) {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_post_tags_normalized_tag_post_id
+          ON post_tags (normalized_tag, post_id);
+        CREATE INDEX IF NOT EXISTS idx_posts_status_category_time
+          ON posts (status, category COLLATE NOCASE, created_at DESC);
+      `);
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

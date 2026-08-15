@@ -11,21 +11,46 @@ function ftsEscapeTerm(value: string): string {
   return value.replace(/["*^(){}[\]\\:]/g, " ");
 }
 
-/**
- * 用 FTS5 求候选 rowid 集。trigram 子串匹配与 includes 一致，因此 FTS 命中的
- * 一定包含 includes 会命中的全部结果（不漏）；调用方仍会用 includes 精确过滤，
- * 保证搜索结果与旧版内存扫描完全一致。MATCH 异常（例如清理后仍非法）时返回 null，
- * 由调用方回退全量扫描。
- */
-function ftsCandidateRowIds(query: string, kind: "post" | "moment"): number[] | null {
+/** Build a safe FTS phrase query, or return null to preserve the scan fallback. */
+function ftsMatchQuery(query: string): string | null {
   const trimmed = query.trim();
   if (trimmed.length < FTS_MIN_QUERY_LENGTH) return null;
   const safe = ftsEscapeTerm(trimmed).replace(/\s+/g, " ").trim();
   if (safe.length < FTS_MIN_QUERY_LENGTH) return null;
-  const table = kind === "post" ? "fts_posts" : "fts_moments";
+  return `"${safe}"`;
+}
+
+/**
+ * Query FTS and source rows in one statement. The old implementation built
+ * one SQL placeholder per candidate ID, which grows without bound for broad
+ * terms and can hit SQLite's variable limit on a large archive. Returning
+ * null retains the existing full-scan fallback for malformed MATCH input.
+ */
+function ftsCandidatePosts(query: string): Post[] | null {
+  const match = ftsMatchQuery(query);
+  if (!match) return null;
   try {
-    const rows = db.prepare(`SELECT rowid FROM ${table} WHERE ${table} MATCH ?`).all(`"${safe}"`) as Array<{ rowid: number }>;
-    return rows.map((row) => row.rowid);
+    return db.prepare(`
+      SELECT posts.*
+      FROM fts_posts
+      INNER JOIN posts ON posts.id = fts_posts.rowid
+      WHERE fts_posts MATCH ? AND posts.status = 'published'
+    `).all(match) as Post[];
+  } catch {
+    return null;
+  }
+}
+
+function ftsCandidateMoments(query: string): Moment[] | null {
+  const match = ftsMatchQuery(query);
+  if (!match) return null;
+  try {
+    return db.prepare(`
+      SELECT moments.*
+      FROM fts_moments
+      INNER JOIN moments ON moments.id = fts_moments.rowid
+      WHERE fts_moments MATCH ?
+    `).all(match) as Moment[];
   } catch {
     return null;
   }
@@ -51,13 +76,10 @@ export function momentMatchesSearch(moment: Moment, query: string): boolean {
 export function searchPosts(query: string): Post[] {
   const needle = query.trim();
   if (!needle) return [];
-  const candidateIds = ftsCandidateRowIds(needle, "post");
-  const rows: Post[] =
-    candidateIds && candidateIds.length > 0
-      ? (db
-          .prepare(`SELECT * FROM posts WHERE status = 'published' AND id IN (${candidateIds.map(() => "?").join(",")})`)
-          .all(...candidateIds) as Post[])
-      : (db.prepare("SELECT * FROM posts WHERE status = 'published'").all() as Post[]);
+  const candidates = ftsCandidatePosts(needle);
+  const rows = candidates && candidates.length > 0
+    ? candidates
+    : (db.prepare("SELECT * FROM posts WHERE status = 'published'").all() as Post[]);
   return rows
     .filter((post) => postMatchesSearch(post, needle))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -67,11 +89,10 @@ export function searchPosts(query: string): Post[] {
 export function searchMoments(query: string): Moment[] {
   const needle = query.trim();
   if (!needle) return [];
-  const candidateIds = ftsCandidateRowIds(needle, "moment");
-  const rows: Moment[] =
-    candidateIds && candidateIds.length > 0
-      ? (db.prepare(`SELECT * FROM moments WHERE id IN (${candidateIds.map(() => "?").join(",")})`).all(...candidateIds) as Moment[])
-      : (db.prepare("SELECT * FROM moments").all() as Moment[]);
+  const candidates = ftsCandidateMoments(needle);
+  const rows = candidates && candidates.length > 0
+    ? candidates
+    : (db.prepare("SELECT * FROM moments").all() as Moment[]);
   return rows
     .filter((moment) => momentMatchesSearch(moment, needle))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
