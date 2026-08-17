@@ -38,6 +38,8 @@ export const viewport: Viewport = {
   minimumScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // iPhone 安装态需要此项才会暴露 safe-area-inset-*，供底部 PWA 导航避开 Home Indicator。
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light) and (max-width: 699px)", color: "#ffffff" },
     { media: "(prefers-color-scheme: light) and (min-width: 700px)", color: "#f7f7f9" },
@@ -56,14 +58,15 @@ export default function RootLayout({
   const layoutTheme = normalizeLayoutTheme(siteSettings.layout_theme);
   const darkMode = normalizeDarkMode(siteSettings.dark_mode);
   // 主题初始化：读 cookie（用户手动切换）> 后台设置的默认值 > 系统偏好。
-  // 放在 body 最前执行，首帧前生效避免闪烁；后台管理页固定浅色。
-  const themeInitScript = `(function(){try{var m=${JSON.stringify(darkMode)};var c=document.cookie.match(/(?:^|; )theme_mode=([^;]+)/);var mode=c?decodeURIComponent(c[1]):m;if(location.pathname.indexOf("/admin")===0)mode="light";var dark=mode==="dark"||(mode==="auto"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",dark?"dark":"light");}catch(e){}})();`;
+  // 同时在首帧识别安装态 PWA，避免底栏/菜单在水合后才切换；后台管理页固定浅色。
+  const themeInitScript = `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;document.documentElement.setAttribute("data-display-mode",standalone?"standalone":"browser");var m=${JSON.stringify(darkMode)};var c=document.cookie.match(/(?:^|; )theme_mode=([^;]+)/);var mode=c?decodeURIComponent(c[1]):m;if(location.pathname.indexOf("/admin")===0)mode="light";var dark=mode==="dark"||(mode==="auto"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",dark?"dark":"light");}catch(e){}})();`;
   return (
     <html
       lang="zh-CN"
       data-scroll-behavior="smooth"
       data-palette={palette}
       data-layout-theme={layoutTheme}
+      data-display-mode="browser"
       // data-theme 由内联脚本在 React 接管前设置（避免闪烁），
       // 用 suppressHydrationWarning 让 React 跳过对该元素的属性比对，防止水合报错 #418
       suppressHydrationWarning

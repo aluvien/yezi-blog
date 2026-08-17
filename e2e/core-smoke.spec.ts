@@ -22,6 +22,25 @@ test.describe.serial("core editorial smoke flows", () => {
     expect(upload.status()).toBe(401);
   });
 
+  test("installed PWA uses the five-item bottom navigation instead of the mobile menu button", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, "standalone", { configurable: true, value: true });
+    });
+    await page.goto("/");
+
+    await expect(page.locator("html")).toHaveAttribute("data-display-mode", "standalone");
+    await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
+    await expect(page.getByLabel("打开菜单")).toBeHidden();
+    const navigation = page.getByRole("navigation", { name: "PWA 主导航" });
+    await expect(navigation).toBeVisible();
+    await expect(navigation).toHaveCSS("min-height", "66px");
+    await expect(navigation.getByRole("link")).toHaveCount(5);
+    for (const label of ["首页", "文章", "想法", "作品", "关于"]) {
+      await expect(navigation.getByRole("link", { name: label })).toBeVisible();
+    }
+  });
+
   test("admin creates a draft, uploads and inserts an image, publishes, then edits the post", async ({ page }) => {
     await login(page);
     await page.goto("/admin/posts/new");

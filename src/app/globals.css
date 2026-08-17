@@ -5018,7 +5018,7 @@ textarea.comment-field {
     font-size: 38px;
   }
 
-  [data-layout-theme="editorial"] .site-page-header p {
+[data-layout-theme="editorial"] .site-page-header p {
     font-size: 14px;
     line-height: 1.7;
   }
@@ -5026,4 +5026,57 @@ textarea.comment-field {
   [data-layout-theme="editorial"] .site-page-header > div:last-child {
     font-size: 13px;
   }
+}
+
+/* 安装到主屏幕后，保留网页 URL 与内容，但采用更接近原生 App 的底部导航。 */
+.site-pwa-bottom-nav {
+  display: none;
+}
+
+html[data-display-mode="standalone"] .site-menu-trigger {
+  display: none;
+}
+
+html[data-display-mode="standalone"] .site-pwa-bottom-nav {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* 66px 内容区 + iPhone Home Indicator 安全区；链接自身保持至少 44px 可点按。 */
+  min-height: calc(66px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--divider);
+  /* 内容略偏下放置，贴近 iOS 原生底栏的视觉重心；Home Indicator 安全区仍完整保留。 */
+  padding: 13px 10px calc(1px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 7%);
+  backdrop-filter: blur(14px);
+}
+
+html[data-display-mode="standalone"] .site-pwa-bottom-nav a {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+html[data-display-mode="standalone"] .site-pwa-bottom-nav a:hover,
+html[data-display-mode="standalone"] .site-pwa-bottom-nav a.is-active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-strong);
+}
+
+html[data-display-mode="standalone"] .site-main {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px)) !important;
 }

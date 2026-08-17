@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { getSiteAuthor, site, parseSocialLinks } from "@/lib/site";
-import { getVisibleNavItems } from "@/components/site/SiteNav";
+import { getVisibleNavItems, PWA_NAV_ITEMS } from "@/lib/site-navigation";
 import { NavIcon } from "@/components/site/NavIcon";
 import { SiteSearch } from "@/components/site/SiteSearch";
 import { ReadingProgress } from "@/components/site/ReadingProgress";
@@ -77,6 +77,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
   const socialLinks = parseSocialLinks(siteSettings.social_links, 6);
   const navItems = getVisibleNavItems(siteSettings);
+  const pwaNavItems = PWA_NAV_ITEMS.filter((item) => siteSettings[item.settingKey] !== "0");
 
   return (
     <div className="site-canvas flex min-h-full flex-1 flex-col">
@@ -177,6 +178,18 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
           </div>
         </footer>
       </div>
+
+      <nav className="site-pwa-bottom-nav" aria-label="PWA 主导航">
+        {pwaNavItems.map((item) => {
+          const active = item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          return (
+            <Link key={item.href} href={item.href} className={active ? "is-active" : undefined} aria-current={active ? "page" : undefined}>
+              <NavIcon href={item.href} className="h-4 w-4" />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
 
       {menuOpen && (
         <div className="site-mobile-menu md:hidden" role="dialog" aria-modal="true" aria-label="移动端菜单" onClick={() => setMenuOpen(false)}>
