@@ -85,6 +85,36 @@ test.describe.serial("core editorial smoke flows", () => {
     await expect(page.locator("#comments").getByText("E2E 评论内容", { exact: true })).toBeVisible();
   });
 
+  test("admin formats and publishes About page Markdown with the shared toolbar", async ({ page }) => {
+    await login(page);
+    await page.goto("/admin/pages/about");
+    const editor = page.getByLabel("关于页内容（Markdown）");
+    await editor.fill("关于页面 E2E 内容");
+    await editor.focus();
+    await page.getByRole("button", { name: "H2", exact: true }).click();
+    await expect(editor).toHaveValue("## 关于页面 E2E 内容");
+
+    await page.getByRole("button", { name: "预览" }).click();
+    await expect(page.getByRole("heading", { name: "关于页面 E2E 内容", level: 2 })).toBeVisible();
+    await page.getByRole("button", { name: "返回编辑" }).click();
+    await page.getByRole("button", { name: "保存关于页面" }).click();
+    await expect(page.getByText("关于页面已保存")).toBeVisible();
+
+    await page.goto("/about");
+    await expect(page.getByRole("heading", { name: "关于页面 E2E 内容", level: 2 })).toBeVisible();
+  });
+
+  test("appearance settings uses the full available admin content width", async ({ page }) => {
+    await login(page);
+    await page.goto("/admin/settings/appearance");
+    const [mainBox, panelBox] = await Promise.all([
+      page.locator("main.admin-main").boundingBox(),
+      page.locator("fieldset").first().boundingBox(),
+    ]);
+    if (!mainBox || !panelBox) throw new Error("外观设置布局未加载");
+    expect(panelBox.width).toBeGreaterThan(mainBox.width * 0.9);
+  });
+
   test("admin can delete the published post", async ({ page }) => {
     await login(page);
     await page.goto("/admin/posts");

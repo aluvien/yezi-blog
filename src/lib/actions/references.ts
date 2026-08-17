@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { deleteReferenceLibrary, deleteReferenceLibraryMany, updateReferenceLibraryCategory } from "@/lib/db";
+import { deleteReferenceLibrary, deleteReferenceLibraryMany, updateReferenceLibraryMetadata } from "@/lib/db";
 import type { ActionResult } from "@/lib/actions/posts";
 
 function refreshReferencePages(): void {
@@ -11,12 +11,13 @@ function refreshReferencePages(): void {
   revalidatePath("/admin");
 }
 
-/** 更新独立引用的分类，不影响文章正文中的引用快照。 */
-export async function updateReferenceLibraryCategoryAction(id: number, formData: FormData): Promise<void> {
+/** 更新独立引用的分类和标签，不影响文章正文中的引用快照。 */
+export async function updateReferenceLibraryMetadataAction(id: number, formData: FormData): Promise<void> {
   await requireAdmin();
   const category = String(formData.get("category") ?? "").trim();
+  const tags = String(formData.get("tags") ?? "");
   if (category.length > 80) return;
-  if (!updateReferenceLibraryCategory(id, category)) return;
+  if (!updateReferenceLibraryMetadata(id, category, tags)) return;
   refreshReferencePages();
 }
 

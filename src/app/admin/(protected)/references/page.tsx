@@ -1,5 +1,5 @@
 import { articleReferenceCoverSrc, formatArticleReferenceDate } from "@/lib/article-reference";
-import { listReferenceLibrary, listReferenceLibraryCategories } from "@/lib/db";
+import { listCategories, listReferenceLibrary, listReferenceLibraryCategories, listReferenceLibraryTags } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import AdminPageHeader from "@/components/admin/AdminPageHeader";
 import AdminReferenceSummary from "@/components/admin/AdminReferenceSummary";
@@ -7,8 +7,9 @@ import { ArticleReferenceArchiveActions } from "@/components/admin/ArticleRefere
 import AdminReferenceAddButton from "@/components/admin/AdminReferenceAddButton";
 import { parseArchiveReport } from "@/lib/article-reference-archive";
 import DeleteButton from "@/components/admin/DeleteButton";
-import { deleteReferenceLibraryAction, updateReferenceLibraryCategoryAction } from "@/lib/actions/references";
+import { deleteReferenceLibraryAction, updateReferenceLibraryMetadataAction } from "@/lib/actions/references";
 import { ReferenceSelectionCheckbox, ReferenceSelectionProvider } from "@/components/admin/ReferenceSelectionControls";
+import { parsePostTags } from "@/lib/post-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,11 @@ function shortUrl(value: string): string {
 
 export default function AdminReferencesPage() {
   const references = listReferenceLibrary();
-  const categoryOptions = listReferenceLibraryCategories().map((item) => item.category);
+  const categoryOptions = [...new Set([
+    ...listCategories().map((item) => item.name),
+    ...listReferenceLibraryCategories().map((item) => item.category),
+  ])].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const tagOptions = listReferenceLibraryTags().map((item) => item.tag);
 
   return (
     <div className="flex flex-col gap-4">
@@ -41,7 +46,7 @@ export default function AdminReferencesPage() {
         eyebrow="ARTICLE REFERENCES"
         title={`引用管理（${references.length}）`}
         description="独立保存站外文章的来源、封面和摘要；关联本地文章是可选的，阅读缓存仅管理员可见。"
-        actions={<AdminReferenceAddButton categoryOptions={categoryOptions} />}
+        actions={<AdminReferenceAddButton categoryOptions={categoryOptions} tagOptions={tagOptions} />}
       />
 
       {references.length === 0 ? (
@@ -53,6 +58,7 @@ export default function AdminReferencesPage() {
             const points = parseKeyPoints(reference.key_points);
             const publishedAt = formatArticleReferenceDate(reference.published_at);
             const report = parseArchiveReport(reference.archive_cache_report);
+            const tags = parsePostTags(reference.tags);
             const imageCount = report.cachedImages + report.reusedImages;
             const qualityLabel = report.quality === "good" ? "质量良好" : report.quality === "poor" ? "建议检查" : "质量一般";
             return (
@@ -85,16 +91,31 @@ export default function AdminReferencesPage() {
                     <a href={reference.url} target="_blank" rel="noopener noreferrer" className="admin-reference-title no-underline hover:text-accent">
                       {reference.title}
                     </a>
-                    <form action={updateReferenceLibraryCategoryAction.bind(null, reference.id)} className="mt-3 flex max-w-sm items-center gap-2">
-                      <label htmlFor={`reference-category-${reference.id}`} className="shrink-0 text-xs text-neutral-400">分类</label>
-                      <input
-                        id={`reference-category-${reference.id}`}
-                        name="category"
-                        defaultValue={reference.category}
-                        maxLength={80}
-                        placeholder="未分类"
-                        className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-transparent px-2.5 py-1.5 text-xs text-neutral-700 outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
-                      />
+                    <form action={updateReferenceLibraryMetadataAction.bind(null, reference.id)} className="mt-3 grid max-w-xl gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+                      <label htmlFor={`reference-category-${reference.id}`} className="text-xs text-neutral-400">
+                        分类
+                        <select
+                          id={`reference-category-${reference.id}`}
+                          name="category"
+                          defaultValue={reference.category}
+                          className="mt-1 w-full rounded-lg border border-neutral-200 bg-transparent px-2.5 py-1.5 text-xs text-neutral-700 outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                        >
+                          <option value="">未分类</option>
+                          {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+                        </select>
+                      </label>
+                      <label htmlFor={`reference-tags-${reference.id}`} className="text-xs text-neutral-400">
+                        标签
+                        <input
+                          id={`reference-tags-${reference.id}`}
+                          name="tags"
+                          defaultValue={tags.join(", ")}
+                          list="reference-tag-options"
+                          maxLength={1000}
+                          placeholder="逗号分隔"
+                          className="mt-1 w-full rounded-lg border border-neutral-200 bg-transparent px-2.5 py-1.5 text-xs text-neutral-700 outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                        />
+                      </label>
                       <button type="submit" className="shrink-0 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 transition-colors hover:border-accent/40 hover:text-accent">保存</button>
                     </form>
                   </div>
@@ -142,6 +163,9 @@ export default function AdminReferencesPage() {
             );
           })}
         </ul>
+        <datalist id="reference-tag-options">
+          {tagOptions.map((tag) => <option key={tag} value={tag} />)}
+        </datalist>
         </ReferenceSelectionProvider>
       )}
     </div>

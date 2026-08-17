@@ -12,21 +12,7 @@ import ImageUpload from "./ImageUpload";
 import { MusicInsertDialog } from "./MusicInsertDialog";
 import { VideoInsertDialog } from "./VideoInsertDialog";
 import { ArticleReferenceDialog } from "./ArticleReferenceDialog";
-
-const MARKDOWN_TOOLS = [
-  { kind: "line-prefix", label: "H2", title: "将选中行设为二级标题", prefix: "## ", placeholder: "小标题" },
-  { kind: "wrap", label: "粗体", title: "将选中文字设为粗体", before: "**", after: "**", placeholder: "重点文字" },
-  { kind: "wrap", label: "斜体", title: "将选中文字设为斜体", before: "*", after: "*", placeholder: "强调文字" },
-  { kind: "link", label: "链接", title: "为选中文字添加链接" },
-  { kind: "reference", label: "文章引用", title: "读取公众号或网页文章并插入引用卡片" },
-  { kind: "line-prefix", label: "引用", title: "将选中行设为引用", prefix: "> ", placeholder: "引用内容" },
-  { kind: "line-prefix", label: "列表", title: "将选中行设为列表", prefix: "- ", placeholder: "列表项" },
-  { kind: "wrap", label: "代码", title: "将选中文字设为代码块", before: "```\n", after: "\n```", placeholder: "const value = true" },
-  { kind: "image", label: "图片", title: "插入图片（输入网址或上传）" },
-  { kind: "music", label: "音乐", title: "插入音乐播放器（网易云/QQ 等）" },
-  { kind: "video", label: "视频", title: "插入 Bilibili 或 YouTube 视频" },
-  { kind: "raw", label: "分隔线", title: "插入分隔线", text: "\n---\n" },
-] as const;
+import { ARTICLE_MARKDOWN_TOOLS, MarkdownToolbar, type MarkdownTool } from "./MarkdownToolbar";
 
 type TextRange = { start: number; end: number };
 
@@ -209,7 +195,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     if (markdownImageInputRef.current) markdownImageInputRef.current.value = "";
   }
 
-  function runMarkdownTool(tool: (typeof MARKDOWN_TOOLS)[number]) {
+  function runMarkdownTool(tool: MarkdownTool) {
     if (tool.kind === "link" || tool.kind === "image") {
       openMarkdownDialog(tool.kind);
     } else if (tool.kind === "music") {
@@ -225,7 +211,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
       insertLinePrefix(tool.prefix, tool.placeholder);
     } else if (tool.kind === "raw") {
       insertTextAtCursor(tool.text);
-    } else {
+    } else if (tool.kind === "wrap") {
       insertMarkdown(tool.before, tool.after, tool.placeholder);
     }
   }
@@ -362,24 +348,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           />
         ) : (
           <>
-            <div className="mb-2 flex flex-wrap gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 p-2 lg:sticky lg:top-20 lg:z-10">
-              {MARKDOWN_TOOLS.map((tool) => (
-                <button
-                  key={tool.label}
-                  type="button"
-                  title={tool.title}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    rememberSelection();
-                  }}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => runMarkdownTool(tool)}
-                  className="rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-xs text-neutral-700 transition-colors hover:border-accent hover:text-accent active:bg-accent/10"
-                >
-                  {tool.label}
-                </button>
-              ))}
-            </div>
+            <MarkdownToolbar tools={ARTICLE_MARKDOWN_TOOLS} onBeforeTool={rememberSelection} onTool={runMarkdownTool} />
             <textarea
               ref={textareaRef}
               value={content}

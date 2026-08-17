@@ -125,3 +125,49 @@ test("a failed migration rolls back its schema work and does not advance its ver
     closeTemporaryDatabase(temporary);
   }
 });
+
+test("reference library tag migration adds an empty JSON tag list without losing existing metadata", () => {
+  const temporary = createTemporaryDatabase();
+  try {
+    temporary.db.exec(`
+      CREATE TABLE reference_library (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url TEXT NOT NULL,
+        canonical_url TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL DEFAULT '',
+        source_name TEXT NOT NULL DEFAULT '',
+        author TEXT NOT NULL DEFAULT '',
+        published_at TEXT NOT NULL DEFAULT '',
+        cover TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        summary TEXT NOT NULL DEFAULT '',
+        key_points TEXT NOT NULL DEFAULT '[]',
+        category TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      PRAGMA user_version = 6;
+    `);
+    temporary.db.prepare(`
+      INSERT INTO reference_library
+        (url, canonical_url, title, category, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      "https://example.com/legacy-reference",
+      "https://example.com/legacy-reference",
+      "旧引用",
+      "技术",
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-01T00:00:00.000Z",
+    );
+
+    assert.equal(runMigrations(temporary.db), LATEST_DB_SCHEMA_VERSION);
+    assert.deepEqual(
+      temporary.db.prepare("SELECT title, category, tags FROM reference_library").get(),
+      { title: "旧引用", category: "技术", tags: "[]" },
+    );
+    assert.equal(runMigrations(temporary.db), LATEST_DB_SCHEMA_VERSION);
+  } finally {
+    closeTemporaryDatabase(temporary);
+  }
+});

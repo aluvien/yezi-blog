@@ -59,12 +59,20 @@ export default function AdminAttachmentsPage() {
                   {attachment.references.map((ref, i) => (
                     <Link
                       key={`${ref.type}-${ref.id}-${i}`}
-                      href={ref.type === "post" ? `/admin/posts/${ref.id}/edit` : `/admin/moments/${ref.id}/edit`}
+                      href={ref.type === "post"
+                        ? `/admin/posts/${ref.id}/edit`
+                        : ref.type === "moment"
+                          ? `/admin/moments/${ref.id}/edit`
+                          : ref.label === "关于页内容"
+                            ? "/admin/pages/about"
+                            : "/admin/settings"}
                       className="admin-link min-w-0 truncate text-blue-700 no-underline hover:text-blue-900"
                     >
                       {ref.type === "post"
                         ? `${ref.usage === "cover" ? "封面：" : ref.usage === "content+cover" ? "正文+封面：" : "文章："}${ref.label}`
-                        : `想法：${ref.label}`}
+                        : ref.type === "moment"
+                          ? `想法：${ref.label}`
+                          : `站点设置：${ref.label}`}
                     </Link>
                   ))}
                 </div>

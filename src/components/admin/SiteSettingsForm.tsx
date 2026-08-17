@@ -282,8 +282,8 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         </div>
       </section>}
 
-      {section === "appearance" && <div className="grid gap-5 xl:grid-cols-12">
-      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 xl:col-span-8 sm:p-5">
+      {section === "appearance" && <div>
+      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:p-5">
         <legend className="px-1 text-sm font-medium text-neutral-700">外观主题</legend>
         <div>
           <p className="text-sm text-neutral-600">前台版式主题（不改变现有内容与数据）</p>

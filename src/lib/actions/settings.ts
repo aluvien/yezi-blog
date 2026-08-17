@@ -73,6 +73,7 @@ export async function updateSiteSettingsAction(values: Record<string, string>): 
   if (schedulerChanged) refreshQQMusicHealthScheduler();
   revalidatePath("/", "layout");
   revalidatePath("/about");
+  revalidatePath("/admin/attachments");
   return { ok: true };
 }
 

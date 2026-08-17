@@ -63,34 +63,9 @@ export function listAttachments(): AttachmentWithUsage[] {
     .all() as Array<{ id: number; content: string; images: string }>;
   const settings = getSiteSettings();
   const tracked = rows.map((row) => {
-    const references: AttachmentReference[] = [];
-    for (const post of posts) {
-      const inContent = Boolean(post.content && post.content.includes(row.path));
-      const isCover = Boolean(post.cover && post.cover === row.path);
-      if (inContent || isCover) {
-        references.push({
-          type: "post",
-          id: post.id,
-          label: post.title,
-          slug: post.slug,
-          usage: inContent && isCover ? "content+cover" : isCover ? "cover" : "content",
-        });
-      }
-    }
-    for (const moment of moments) {
-      if (moment.images && moment.images.includes(row.path)) {
-        const summary = moment.content.replace(/\s+/g, " ").trim().slice(0, 30);
-        references.push({ type: "moment", id: moment.id, label: summary || "想法" });
-      }
-    }
-    if (settings.site_logo && settings.site_logo === row.path) {
-      references.push({ type: "setting", id: 0, label: "站点 Logo" });
-    }
-    if (settings.author_avatar && settings.author_avatar === row.path) {
-      references.push({ type: "setting", id: 0, label: "作者头像" });
-    }
-    return { ...row, references, referenced: references.length > 0 };
-  }).map((row) => ({ ...row, tracked: true }));
+    const references = findAttachmentReferences(row.path, posts, moments, settings);
+    return { ...row, references, referenced: references.length > 0, tracked: true };
+  });
 
   const trackedPaths = new Set(rows.map((row) => row.path));
   const diskFiles = scanUploadDirectory();
@@ -160,6 +135,9 @@ function findAttachmentReferences(
   }
   if (settings.author_avatar && settings.author_avatar === attachmentPath) {
     references.push({ type: "setting", id: 0, label: "作者头像" });
+  }
+  if (settings.about_content && settings.about_content.includes(attachmentPath)) {
+    references.push({ type: "setting", id: 0, label: "关于页内容", usage: "content" });
   }
   return references;
 }

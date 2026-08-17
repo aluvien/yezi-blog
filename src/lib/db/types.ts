@@ -54,6 +54,8 @@ export interface ReferenceLibraryItem {
   summary: string;
   key_points: string;
   category: string;
+  /** JSON 数组字符串，如 '["阅读","架构"]' */
+  tags: string;
   created_at: string;
   updated_at: string;
   archive_captured_at: string | null;
@@ -161,7 +163,7 @@ export interface AttachmentReference {
 }
 
 export interface AttachmentWithUsage extends Attachment {
-  /** 引用此附件的文章/想法列表（按正文、封面、想法图片匹配） */
+  /** 引用此附件的文章、想法或站点设置（按正文、封面、图片及设置内容匹配） */
   references: AttachmentReference[];
   referenced: boolean;
   /** true 表示数据库有记录；false 表示仅在上传目录扫描到，尚未入库。 */

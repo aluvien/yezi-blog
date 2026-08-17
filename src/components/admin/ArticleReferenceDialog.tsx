@@ -8,8 +8,13 @@ import {
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
 
-type ArticleReferenceSelection = { marker: string; snapshot: ArticleReferenceSnapshot; category?: string };
-type Props = { onClose: (selection: ArticleReferenceSelection | null) => void; showCategory?: boolean; categoryOptions?: string[] };
+type ArticleReferenceSelection = { marker: string; snapshot: ArticleReferenceSnapshot; category?: string; tags?: string };
+type Props = {
+  onClose: (selection: ArticleReferenceSelection | null) => void;
+  showCategory?: boolean;
+  categoryOptions?: string[];
+  tagOptions?: string[];
+};
 
 type PreviewResponse = {
   snapshot?: Partial<ArticleReferenceSnapshot>;
@@ -29,13 +34,14 @@ async function fetchReferenceHistory(keyword: string): Promise<ArticleReferenceS
   return data.references ?? [];
 }
 
-export function ArticleReferenceDialog({ onClose, showCategory = false, categoryOptions = [] }: Props) {
+export function ArticleReferenceDialog({ onClose, showCategory = false, categoryOptions = [], tagOptions = [] }: Props) {
   const [url, setUrl] = useState("");
   const [snapshot, setSnapshot] = useState<ArticleReferenceSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [cacheReader, setCacheReader] = useState(true);
   const [cacheImages, setCacheImages] = useState(true);
   const [category, setCategory] = useState("");
+  const [tags, setTags] = useState("");
   const [archiveMessage, setArchiveMessage] = useState("");
   const [summarizing, setSummarizing] = useState(false);
   const [error, setError] = useState("");
@@ -137,7 +143,7 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
 
   function insert() {
     if (!snapshot) return;
-    onClose({ marker: encodeArticleReferenceMarker(snapshot), snapshot, ...(showCategory ? { category: category.trim() } : {}) });
+    onClose({ marker: encodeArticleReferenceMarker(snapshot), snapshot, ...(showCategory ? { category: category.trim(), tags } : {}) });
   }
 
   function selectHistory(item: ArticleReferenceSnapshot) {
@@ -195,20 +201,35 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
         </label>
 
         {showCategory && (
-          <div className="mt-3">
-            <label htmlFor="reference-category" className="mb-1 block text-xs text-neutral-500">收藏分类（可选）</label>
-            <input
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label htmlFor="reference-category" className="block text-xs text-neutral-500">
+              收藏分类（可选）
+              <select
               id="reference-category"
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              list="reference-category-options"
-              maxLength={80}
-              placeholder="例如：阅读、技术、灵感"
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
-            />
-            <datalist id="reference-category-options">
-              {categoryOptions.map((item) => <option key={item} value={item} />)}
+              className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+              >
+                <option value="">未分类</option>
+                {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label htmlFor="reference-tags" className="block text-xs text-neutral-500">
+              标签（可选）
+              <input
+                id="reference-tags"
+                value={tags}
+                onChange={(event) => setTags(event.target.value)}
+                list="reference-dialog-tag-options"
+                maxLength={1000}
+                placeholder="例如：AI，阅读，架构"
+                className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+              />
+            </label>
+            <datalist id="reference-dialog-tag-options">
+              {tagOptions.map((item) => <option key={item} value={item} />)}
             </datalist>
+            <p className="sm:col-span-2 text-[11px] leading-5 text-neutral-400">分类选项来自分类管理；标签用逗号分隔，最多保存 12 个。</p>
           </div>
         )}
 

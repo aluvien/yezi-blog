@@ -1,5 +1,6 @@
 import { articleReferenceCoverSrc, formatArticleReferenceDate } from "@/lib/article-reference";
 import type { ReferenceLibraryItem } from "@/lib/db";
+import { parsePostTags } from "@/lib/post-tags";
 
 export function ReferenceLibraryCard({ reference }: { reference: ReferenceLibraryItem }) {
   const source = reference.source_name || (() => {
@@ -11,6 +12,7 @@ export function ReferenceLibraryCard({ reference }: { reference: ReferenceLibrar
   })();
   const date = formatArticleReferenceDate(reference.published_at);
   const description = reference.description || reference.summary;
+  const tags = parsePostTags(reference.tags);
 
   return (
     <a
@@ -46,8 +48,11 @@ export function ReferenceLibraryCard({ reference }: { reference: ReferenceLibrar
         </h2>
         {description && <p className="mt-2 line-clamp-2 text-[13px] leading-6 text-muted">{description}</p>}
         <div className="mt-3 flex items-center justify-between gap-3">
-          <span className={`inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-[11px] ${reference.category ? "bg-accent/10 text-accent" : "bg-soft text-muted"}`}>
-            {reference.category || "未分类"}
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className={`inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-[11px] ${reference.category ? "bg-accent/10 text-accent" : "bg-soft text-muted"}`}>
+              {reference.category || "未分类"}
+            </span>
+            {tags.map((tag) => <span key={tag} className="inline-flex max-w-full items-center rounded-full bg-soft px-2.5 py-1 text-[11px] text-muted">#{tag}</span>)}
           </span>
           <span className="shrink-0 text-[12px] text-muted transition-colors group-hover:text-accent">阅读原文 ↗</span>
         </div>

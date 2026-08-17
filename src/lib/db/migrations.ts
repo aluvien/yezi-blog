@@ -123,6 +123,21 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    // 引用库标签独立于文章标签，避免站外收藏误混入文章标签页；统一复用文章
+    // 标签的解析规则，确保历史异常值也会升级为安全、可预测的 JSON 数组。
+    version: 7,
+    name: "reference-library-tags",
+    up(db) {
+      ensureColumn(db, "reference_library", "tags", "TEXT NOT NULL DEFAULT '[]'");
+      const rows = db.prepare("SELECT id, tags FROM reference_library").all() as Array<{ id: number; tags: string }>;
+      const update = db.prepare("UPDATE reference_library SET tags = ? WHERE id = ?");
+      for (const row of rows) {
+        const normalized = JSON.stringify(parsePostTags(row.tags));
+        if (normalized !== row.tags) update.run(normalized, row.id);
+      }
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;
