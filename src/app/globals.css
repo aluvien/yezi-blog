@@ -5092,13 +5092,6 @@ html[data-display-mode="standalone"] .global-player-float {
 
 html[data-display-mode="standalone"] .global-player-panel {
   bottom: var(--site-pwa-bottom-nav-height);
-  /* 收起动画位于导航背后，面板滑入底栏时自然被遮住。 */
-  z-index: 40;
-}
-
-html[data-display-mode="standalone"] .global-player-panel.is-open {
-  /* 展开态仍高于导航，确保控制面板可完整操作。 */
-  z-index: 60;
 }
 
 /* 面板基准已抬到导航上沿，闭合时还须越过整条底栏，才能完全移出视口。 */
