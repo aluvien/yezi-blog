@@ -56,11 +56,18 @@ test.describe.serial("core editorial smoke flows", () => {
       };
       float.remove();
       panel.remove();
-      return result;
+      const closedPanel = document.createElement("div");
+      closedPanel.className = "global-player-panel";
+      closedPanel.innerHTML = '<div class="global-player-host" style="height: 120px">播放器</div>';
+      document.body.append(closedPanel);
+      const closedPanelTop = Math.round(closedPanel.getBoundingClientRect().top);
+      closedPanel.remove();
+      return { ...result, closedPanelTop, viewportHeight: window.innerHeight };
     });
     expect(musicAlignment.floatGap).toBe(12);
     expect(musicAlignment.panelBottom).toBe(musicAlignment.navTop);
     expect(musicAlignment.playerSafeArea).toBe("0px");
+    expect(musicAlignment.closedPanelTop).toBeGreaterThanOrEqual(musicAlignment.viewportHeight);
   });
 
   test("admin creates a draft, uploads and inserts an image, publishes, then edits the post", async ({ page }) => {

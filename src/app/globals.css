@@ -5094,6 +5094,11 @@ html[data-display-mode="standalone"] .global-player-panel {
   bottom: var(--site-pwa-bottom-nav-height);
 }
 
+/* 面板基准已抬到导航上沿，闭合时还须越过整条底栏，才能完全移出视口。 */
+html[data-display-mode="standalone"] .global-player-panel:not(.is-open) {
+  transform: translate(-50%, calc(105% + var(--site-pwa-bottom-nav-height)));
+}
+
 /* 展开面板位于底栏之上，无需再次为 Home Indicator 预留空白。 */
 html[data-display-mode="standalone"] .global-player-host {
   padding-bottom: 0;
