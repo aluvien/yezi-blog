@@ -39,6 +39,28 @@ test.describe.serial("core editorial smoke flows", () => {
     for (const label of ["首页", "文章", "想法", "作品", "关于"]) {
       await expect(navigation.getByRole("link", { name: label })).toBeVisible();
     }
+
+    const musicAlignment = await page.evaluate(() => {
+      const float = document.createElement("button");
+      float.className = "global-player-float";
+      const panel = document.createElement("div");
+      panel.className = "global-player-panel is-open";
+      panel.innerHTML = '<div class="global-player-host">播放器</div>';
+      document.body.append(float, panel);
+      const nav = document.querySelector<HTMLElement>(".site-pwa-bottom-nav")!;
+      const result = {
+        floatGap: Math.round(nav.getBoundingClientRect().top - float.getBoundingClientRect().bottom),
+        panelBottom: Math.round(panel.getBoundingClientRect().bottom),
+        navTop: Math.round(nav.getBoundingClientRect().top),
+        playerSafeArea: getComputedStyle(panel.querySelector<HTMLElement>(".global-player-host")!).paddingBottom,
+      };
+      float.remove();
+      panel.remove();
+      return result;
+    });
+    expect(musicAlignment.floatGap).toBe(12);
+    expect(musicAlignment.panelBottom).toBe(musicAlignment.navTop);
+    expect(musicAlignment.playerSafeArea).toBe("0px");
   });
 
   test("admin creates a draft, uploads and inserts an image, publishes, then edits the post", async ({ page }) => {

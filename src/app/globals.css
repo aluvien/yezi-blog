@@ -5037,6 +5037,10 @@ html[data-display-mode="standalone"] .site-menu-trigger {
   display: none;
 }
 
+html[data-display-mode="standalone"] {
+  --site-pwa-bottom-nav-height: calc(66px + env(safe-area-inset-bottom, 0px));
+}
+
 html[data-display-mode="standalone"] .site-pwa-bottom-nav {
   position: fixed;
   right: 0;
@@ -5046,7 +5050,7 @@ html[data-display-mode="standalone"] .site-pwa-bottom-nav {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   /* 66px 内容区 + iPhone Home Indicator 安全区；链接自身保持至少 44px 可点按。 */
-  min-height: calc(66px + env(safe-area-inset-bottom, 0px));
+  min-height: var(--site-pwa-bottom-nav-height);
   border-top: 1px solid var(--divider);
   /* 内容略偏下放置，贴近 iOS 原生底栏的视觉重心；Home Indicator 安全区仍完整保留。 */
   padding: 13px 10px calc(1px + env(safe-area-inset-bottom, 0px));
@@ -5079,4 +5083,18 @@ html[data-display-mode="standalone"] .site-pwa-bottom-nav a.is-active {
 
 html[data-display-mode="standalone"] .site-main {
   padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* PWA 底栏占用底部空间后，音乐入口与展开面板都以上沿为共同定位基准。 */
+html[data-display-mode="standalone"] .global-player-float {
+  bottom: calc(var(--site-pwa-bottom-nav-height) + 12px);
+}
+
+html[data-display-mode="standalone"] .global-player-panel {
+  bottom: var(--site-pwa-bottom-nav-height);
+}
+
+/* 展开面板位于底栏之上，无需再次为 Home Indicator 预留空白。 */
+html[data-display-mode="standalone"] .global-player-host {
+  padding-bottom: 0;
 }
