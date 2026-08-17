@@ -19,11 +19,38 @@ export function ensureUniqueSlug(input: string, title: string, excludeId?: numbe
   }
 }
 
-/** 已发布文章列表。传 options 时走 SQL 分页（LIMIT/OFFSET），不传则返回全部（内存过滤型调用方仍依赖全量）。 */
-export function listPosts(options?: { limit?: number; offset?: number }): Post[] {
-  const { limit, offset } = options ?? {};
-  let sql = "SELECT * FROM posts WHERE status = 'published' ORDER BY created_at DESC";
-  const params: Array<number> = [];
+export type PublishedPostQuery = {
+  limit?: number;
+  offset?: number;
+  category?: string;
+  tag?: string;
+};
+
+function publishedPostQuery(options: PublishedPostQuery = {}): { from: string; conditions: string[]; params: Array<string | number> } {
+  const category = options.category?.trim() ?? "";
+  const tag = normalizeTagKey(options.tag ?? "");
+  const from = tag
+    ? "FROM post_tags INDEXED BY idx_post_tags_normalized_tag_post_id INNER JOIN posts ON posts.id = post_tags.post_id"
+    : "FROM posts";
+  const conditions = ["posts.status = 'published'"];
+  const params: Array<string | number> = [];
+  if (tag) {
+    conditions.push("post_tags.normalized_tag = ?");
+    params.push(tag);
+  }
+  if (category) {
+    conditions.push("posts.category = ? COLLATE NOCASE");
+    params.push(category);
+  }
+  return { from, conditions, params };
+}
+
+/** 已发布文章列表。传 options 时走 SQL 分页和索引筛选；不传则返回全部（归档合并时间流仍依赖全量）。 */
+export function listPosts(options: PublishedPostQuery = {}): Post[] {
+  const { limit, offset } = options;
+  const query = publishedPostQuery(options);
+  let sql = `SELECT posts.* ${query.from} WHERE ${query.conditions.join(" AND ")} ORDER BY posts.created_at DESC`;
+  const params = [...query.params];
   if (Number.isInteger(limit) && (limit as number) > 0) {
     sql += " LIMIT ?";
     params.push(limit as number);
@@ -163,8 +190,9 @@ export function countPosts(): number {
 }
 
 /** 仅统计已发布文章（含草稿的总数见 countPosts）。 */
-export function countPublishedPosts(): number {
-  return (db.prepare("SELECT COUNT(*) AS c FROM posts WHERE status = 'published'").get() as { c: number }).c;
+export function countPublishedPosts(options: Pick<PublishedPostQuery, "category" | "tag"> = {}): number {
+  const query = publishedPostQuery(options);
+  return (db.prepare(`SELECT COUNT(*) AS c ${query.from} WHERE ${query.conditions.join(" AND ")}`).get(...query.params) as { c: number }).c;
 }
 
 /**

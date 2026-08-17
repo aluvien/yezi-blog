@@ -1,11 +1,11 @@
 import { apiJson, apiOptions } from "@/lib/api";
-import { listCategoriesWithPublishedPostCount } from "@/lib/db";
+import { listReferenceLibraryCategories } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  return apiJson({ data: listCategoriesWithPublishedPostCount() });
+  return apiJson({ data: listReferenceLibraryCategories() });
 }
 
 export function OPTIONS() {

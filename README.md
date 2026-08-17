@@ -154,23 +154,35 @@ qqvip:歌曲MID:song
 
 ## App API
 
-已预留版本化公开接口，基础地址为 `/api/v1`。接口只返回已发布文章、公开想法、作品和已审核评论，不暴露邮箱、IP 或后台字段。
+已提供版本化公开接口，基础地址为 `/api/v1`。接口只返回已发布文章、公开想法、作品、已审核评论和前台可见引用；不暴露邮箱、IP、后台设置或引用私有阅读归档。每个响应都带有 `X-API-Version: v1`，列表统一使用 `{ data, meta }`，`meta` 包含 `page`、`limit`、`total`、`total_pages`。
 
 ```text
 GET /api/v1                 # 接口发现与版本信息
+GET /api/v1/site            # 原生端需要的公开品牌、作者、导航、关于页 Markdown 与社交链接
 GET /api/v1/posts           # 文章列表，支持 ?page=1&limit=20（limit 最大 50）
-GET /api/v1/posts/:slug     # 文章详情与已审核评论
+GET /api/v1/posts/:slug     # 文章详情、已审核评论和正文引用快照
 GET /api/v1/moments         # 想法列表，支持分页
 GET /api/v1/works           # 作品列表，支持分页
 GET /api/v1/feed            # 文章与想法的统一时间流，支持分页
-GET /api/v1/categories      # 分类列表
+GET /api/v1/categories      # 分类列表，含已发布文章数 posts_count
+GET /api/v1/tags            # 已发布文章标签与计数，支持 ?limit=50
+GET /api/v1/references      # 公开引用卡片，支持 ?q=关键词&category=分类&page=1&limit=20
+GET /api/v1/reference-categories # 公开引用分类与计数
 GET /api/v1/search?q=关键词  # 搜索文章与想法，支持分页
 GET /api/v1/interactions?target_type=post&target_id=1 # 阅读/点赞统计
 POST /api/v1/interactions   # body: { target_type, target_id, kind: "view" | "like" }
 POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 ```
 
-返回格式统一为 JSON；列表接口使用 `{ data, meta }`，后续新增接口时保持 `/api/v1` 版本不变，必要时再增加 `/api/v2`。
+### 原生客户端使用约定
+
+- `GET /posts?view=summary` 返回轻量文章卡片：包含 `excerpt`，不包含整篇 `content`。可与 `category`、`tag`、`page`、`limit` 组合使用；不带 `view=summary` 时仍保持原有完整文章返回，兼容既有调用方。
+- 文章详情的 `content` 和 `site.about_content` 是 Yezi Markdown。若正文有 `!reference:<token>`，使用同一响应中的 `references` 快照渲染卡片；该数组只含公开元信息，绝不包含归档 HTML、原文快照路径或后台任务信息。
+- `cover`、`logo`、`avatar`、想法图片等以站内相对 URL 返回，原生客户端应相对请求的站点根 URL 解析。引用列表与文章详情 `references` 均提供 `cover_url`，应优先使用它；它始终走本站受 SSRF 保护的图片代理。
+- 纯原生 iOS 请求不受浏览器 CORS 限制，因此无需为 App 设置 `API_CORS_ORIGIN`。只有 WebView 或其他浏览器来源需要跨域时，才将该变量设为唯一可信来源。
+- 点赞/阅读的 `POST /interactions` 可携带随机 UUID 请求头 `X-Yezi-Visitor-Id`。iOS 应首次启动生成 UUID 并存入 Keychain，不能使用账号、设备序列号、IDFA 或任何可识别个人信息。服务端只保存哈希；该头只影响互动去重，限频仍按来源网络与 User-Agent 执行。
+
+所有新增字段和端点均保持在 `/api/v1` 内，不删除原字段或改变既有默认返回。需要破坏性变更时应新增 `/api/v2`。
 
 ## 数据与上传文件
 

@@ -91,6 +91,18 @@ try {
   if (!body || typeof body !== "object" || !Array.isArray(body.data) || !body.meta) {
     throw new Error("standalone 搜索接口返回格式异常");
   }
+
+  const discovery = await waitForResponse(`${baseUrl}/api/v1`, () => output.join(""));
+  const discoveryBody = await discovery.json();
+  if (discovery.headers.get("x-api-version") !== "v1" || discoveryBody?.endpoints?.site !== "/api/v1/site") {
+    throw new Error("standalone App API 发现信息异常");
+  }
+
+  const site = await waitForResponse(`${baseUrl}/api/v1/site`, () => output.join(""));
+  const siteBody = await site.json();
+  if (!siteBody?.data || typeof siteBody.data.name !== "string" || !Array.isArray(siteBody.data.navigation)) {
+    throw new Error("standalone App API 站点配置异常");
+  }
   console.log(`production smoke passed: standalone + SQLite + FTS + CSP on ${baseUrl}`);
 } finally {
   await stop(child);

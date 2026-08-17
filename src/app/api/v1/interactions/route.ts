@@ -1,6 +1,6 @@
 import { apiJson, apiOptions } from "@/lib/api";
 import { getMoment, getPost, getContentMetrics, recordContentInteraction, toggleContentLike, type ContentTarget, type InteractionKind } from "@/lib/db";
-import { getVisitorKey, readLimitedJson, RequestBodyError } from "@/lib/request";
+import { getVisitorKey, getVisitorRateLimitKey, readLimitedJson, RequestBodyError } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   if (!targetExists(targetType, targetId)) return apiJson({ error: "内容不存在" }, 404);
 
   const visitorKey = getVisitorKey(request);
-  if (!allowInteraction(visitorKey)) return apiJson({ error: "操作过于频繁，请稍后再试" }, 429);
+  if (!allowInteraction(getVisitorRateLimitKey(request))) return apiJson({ error: "操作过于频繁，请稍后再试" }, 429);
   // like 支持切换（已赞再点取消），view 仍为单向计数
   const metrics = kind === "like"
     ? toggleContentLike(targetType, targetId, visitorKey)

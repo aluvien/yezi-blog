@@ -2,9 +2,12 @@ import crypto from "crypto";
 import { headers } from "next/headers";
 
 export class RequestBodyError extends Error {
-  constructor(message: string, readonly status: 400 | 413 = 400) {
+  readonly status: 400 | 413;
+
+  constructor(message: string, status: 400 | 413 = 400) {
     super(message);
     this.name = "RequestBodyError";
+    this.status = status;
   }
 }
 
@@ -63,6 +66,20 @@ export function getClientIp(request: Request): string {
 
 /** 互动去重只保存不可逆 visitor key，不把完整 UA/IP 写入公开统计表。 */
 export function getVisitorKey(request: Request): string {
+  const nativeVisitorId = request.headers.get("x-yezi-visitor-id")?.trim() ?? "";
+  // 原生 App 在 Keychain 中保存随机 UUID，服务器只保存其哈希。网页与缺失/非法
+  // 头部继续沿用原先的 IP + UA 去重，不改变现有浏览器行为。
+  if (isNativeVisitorId(nativeVisitorId)) return hashVisitorKey("native", nativeVisitorId);
+  const ip = getClientIp(request);
+  const userAgent = request.headers.get("user-agent")?.slice(0, 300) ?? "";
+  return hashVisitorKey(ip, userAgent);
+}
+
+/**
+ * 互动限频不能改用客户端自报 ID，否则攻击者可不断更换 UUID 绕过窗口限制。
+ * 因此即便原生端使用独立访客 ID，限频仍保持历史的 IP + UA 维度。
+ */
+export function getVisitorRateLimitKey(request: Request): string {
   const ip = getClientIp(request);
   const userAgent = request.headers.get("user-agent")?.slice(0, 300) ?? "";
   return hashVisitorKey(ip, userAgent);
@@ -74,6 +91,10 @@ export { hashIp } from "@/lib/ip-hash";
 
 function hashVisitorKey(ip: string, userAgent: string): string {
   return crypto.createHash("sha256").update(`${ip}|${userAgent}`).digest("hex");
+}
+
+function isNativeVisitorId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 /**

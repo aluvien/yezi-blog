@@ -25,9 +25,16 @@ function resolveRelative(specifier, parentUrl) {
 }
 
 export async function resolve(specifier, context, nextResolve) {
+  // Route Handler 测试会直接加载 Next 的 ESM 模块；应用构建器可解析
+  // `next/server`，而裸 Node ESM 需要显式入口文件。仅测试钩子处理此差异。
+  if (specifier === "next/server" || specifier === "next/headers") {
+    return nextResolve(`${specifier}.js`, context);
+  }
   if (specifier.startsWith("@/")) {
     let mapped = path.join(projectSrc, specifier.slice(2));
-    if (!fs.existsSync(mapped)) {
+    // `@/lib/db` 同时存在 db.ts 与 db/ 目录时，应与 Next 的解析一致，
+    // 优先命中扩展名文件而不是把目录交给 Node loader。
+    if (!fs.existsSync(mapped) || fs.statSync(mapped).isDirectory()) {
       for (const ext of [".ts", ".tsx", ".mts"]) {
         if (fs.existsSync(mapped + ext)) {
           mapped += ext;

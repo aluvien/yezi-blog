@@ -153,7 +153,14 @@ function getReferenceLibraryItemByCanonicalUrl(canonicalUrl: string): ReferenceL
   `).get(canonicalUrl, canonicalUrl) as ReferenceLibraryItem | undefined;
 }
 
-export function listReferenceLibrary(options: { keyword?: string; category?: string } = {}): ReferenceLibraryItem[] {
+export type ReferenceLibraryQuery = {
+  keyword?: string;
+  category?: string;
+  limit?: number;
+  offset?: number;
+};
+
+function referenceLibraryFilters(options: Pick<ReferenceLibraryQuery, "keyword" | "category">): { where: string; parameters: string[] } {
   const keyword = String(options.keyword ?? "").trim().slice(0, 120);
   const category = String(options.category ?? "").trim().slice(0, 80);
   const conditions: string[] = [];
@@ -181,6 +188,22 @@ export function listReferenceLibrary(options: { keyword?: string; category?: str
     parameters.push(...Array.from({ length: 9 }, () => keyword));
   }
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  return { where, parameters };
+}
+
+export function listReferenceLibrary(options: ReferenceLibraryQuery = {}): ReferenceLibraryItem[] {
+  const { where, parameters } = referenceLibraryFilters(options);
+  const { limit, offset } = options;
+  let pagination = "";
+  const paginationParameters: number[] = [];
+  if (Number.isInteger(limit) && (limit as number) > 0) {
+    pagination = " LIMIT ?";
+    paginationParameters.push(limit as number);
+    if (Number.isInteger(offset) && (offset as number) > 0) {
+      pagination += " OFFSET ?";
+      paginationParameters.push(offset as number);
+    }
+  }
   return db.prepare(`
     SELECT rl.*, ara.captured_at AS archive_captured_at, ara.updated_at AS archive_updated_at, ara.cache_report AS archive_cache_report,
       COUNT(ar.id) AS linked_post_count,
@@ -191,8 +214,13 @@ export function listReferenceLibrary(options: { keyword?: string; category?: str
     LEFT JOIN posts p ON p.id = ar.post_id
     ${where}
     GROUP BY rl.id
-    ORDER BY rl.updated_at DESC, rl.id DESC
-  `).all(...parameters) as ReferenceLibraryItem[];
+    ORDER BY rl.updated_at DESC, rl.id DESC${pagination}
+  `).all(...parameters, ...paginationParameters) as ReferenceLibraryItem[];
+}
+
+export function countReferenceLibrary(options: Pick<ReferenceLibraryQuery, "keyword" | "category"> = {}): number {
+  const { where, parameters } = referenceLibraryFilters(options);
+  return Number((db.prepare(`SELECT COUNT(*) AS count FROM reference_library rl ${where}`).get(...parameters) as { count: number }).count);
 }
 
 export function listReferenceLibraryCategories(): Array<{ category: string; count: number }> {

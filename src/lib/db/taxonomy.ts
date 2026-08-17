@@ -9,6 +9,17 @@ export function listCategories(): Category[] {
   return db.prepare("SELECT * FROM categories ORDER BY name COLLATE NOCASE ASC").all() as Category[];
 }
 
+/** 公开分类导航：保留空分类，同时附上已发布文章数量供客户端避免额外请求。 */
+export function listCategoriesWithPublishedPostCount(): Array<Category & { posts_count: number }> {
+  return db.prepare(`
+    SELECT categories.*, COUNT(posts.id) AS posts_count
+    FROM categories
+    LEFT JOIN posts ON posts.category = categories.name COLLATE NOCASE AND posts.status = 'published'
+    GROUP BY categories.id
+    ORDER BY categories.name COLLATE NOCASE ASC
+  `).all() as Array<Category & { posts_count: number }>;
+}
+
 export function createCategory(name: string): Category | undefined {
   const normalized = name.trim().slice(0, 80);
   if (!normalized) return undefined;
