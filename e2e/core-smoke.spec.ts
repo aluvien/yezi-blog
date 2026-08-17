@@ -53,6 +53,8 @@ test.describe.serial("core editorial smoke flows", () => {
         panelBottom: Math.round(panel.getBoundingClientRect().bottom),
         navTop: Math.round(nav.getBoundingClientRect().top),
         playerSafeArea: getComputedStyle(panel.querySelector<HTMLElement>(".global-player-host")!).paddingBottom,
+        navZIndex: getComputedStyle(nav).zIndex,
+        openPanelZIndex: getComputedStyle(panel).zIndex,
       };
       float.remove();
       panel.remove();
@@ -61,12 +63,16 @@ test.describe.serial("core editorial smoke flows", () => {
       closedPanel.innerHTML = '<div class="global-player-host" style="height: 120px">播放器</div>';
       document.body.append(closedPanel);
       const closedPanelTop = Math.round(closedPanel.getBoundingClientRect().top);
+      const closedPanelZIndex = getComputedStyle(closedPanel).zIndex;
       closedPanel.remove();
-      return { ...result, closedPanelTop, viewportHeight: window.innerHeight };
+      return { ...result, closedPanelTop, closedPanelZIndex, viewportHeight: window.innerHeight };
     });
     expect(musicAlignment.floatGap).toBe(12);
     expect(musicAlignment.panelBottom).toBe(musicAlignment.navTop);
     expect(musicAlignment.playerSafeArea).toBe("0px");
+    expect(musicAlignment.navZIndex).toBe("50");
+    expect(musicAlignment.openPanelZIndex).toBe("60");
+    expect(musicAlignment.closedPanelZIndex).toBe("40");
     expect(musicAlignment.closedPanelTop).toBeGreaterThanOrEqual(musicAlignment.viewportHeight);
   });
 
