@@ -29,6 +29,12 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 原生 App 管理 API 必须由 Route Handler 统一返回 REST JSON envelope；
+  // 具体会话校验由 requireAdminApi() 完成，不能在 proxy 层提前返回旧格式。
+  if (pathname === "/api/admin/v1" || pathname.startsWith("/api/admin/v1/")) {
+    return NextResponse.next();
+  }
+
   const token = request.cookies.get("admin_session")?.value;
   if (!token) {
     if (pathname.startsWith("/api/")) {

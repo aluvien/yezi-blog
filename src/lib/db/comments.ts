@@ -3,26 +3,63 @@ import { db, now } from "./core";
 import { hashIp } from "@/lib/ip-hash";
 import type { Comment, CommentWithTarget } from "./types";
 
-/** 后台审核列表：pending 优先，组内按时间倒序，附带评论对象标签 */
-export function listCommentsForAdmin(limit?: number): CommentWithTarget[] {
-  const safeLimit = limit === undefined ? null : Math.min(100, Math.max(1, Math.trunc(limit)));
+export type AdminCommentStatus = "all" | "pending" | "approved";
+
+export type AdminCommentQuery = {
+  limit?: number;
+  offset?: number;
+  status?: AdminCommentStatus;
+};
+
+const ADMIN_COMMENT_SELECT = `SELECT c.*,
+  CASE c.target_type
+    WHEN 'post' THEN (SELECT title FROM posts WHERE id = c.target_id)
+    ELSE substr((SELECT content FROM moments WHERE id = c.target_id), 1, 50)
+  END AS target_label,
+  CASE c.target_type
+    WHEN 'post' THEN (SELECT slug FROM posts WHERE id = c.target_id)
+    ELSE NULL
+  END AS target_slug
+ FROM comments c`;
+
+function normalizeAdminCommentQuery(input: number | AdminCommentQuery | undefined): AdminCommentQuery {
+  if (typeof input === "number") return { limit: input };
+  return input ?? {};
+}
+
+function adminCommentFilter(status: AdminCommentStatus = "all"): { where: string; params: string[] } {
+  if (status === "pending" || status === "approved") return { where: " WHERE c.status = ?", params: [status] };
+  return { where: "", params: [] };
+}
+
+/** 后台审核列表：pending 优先，组内按时间倒序，附带评论对象标签。 */
+export function listCommentsForAdmin(input?: number | AdminCommentQuery): CommentWithTarget[] {
+  const options = normalizeAdminCommentQuery(input);
+  const safeLimit = options.limit === undefined ? null : Math.min(100, Math.max(1, Math.trunc(options.limit)));
+  const safeOffset = options.offset === undefined ? 0 : Math.max(0, Math.trunc(options.offset));
+  const filter = adminCommentFilter(options.status);
   const limitSql = safeLimit === null ? "" : " LIMIT ?";
-  const params = safeLimit === null ? [] : [safeLimit];
+  const offsetSql = safeLimit !== null && safeOffset > 0 ? " OFFSET ?" : "";
+  const params: Array<string | number> = [...filter.params];
+  if (safeLimit !== null) params.push(safeLimit);
+  if (offsetSql) params.push(safeOffset);
   return db
     .prepare(
-      `SELECT c.*,
-        CASE c.target_type
-          WHEN 'post' THEN (SELECT title FROM posts WHERE id = c.target_id)
-          ELSE substr((SELECT content FROM moments WHERE id = c.target_id), 1, 50)
-        END AS target_label,
-        CASE c.target_type
-          WHEN 'post' THEN (SELECT slug FROM posts WHERE id = c.target_id)
-          ELSE NULL
-        END AS target_slug
-       FROM comments c
-       ORDER BY CASE c.status WHEN 'pending' THEN 0 ELSE 1 END, c.created_at DESC${limitSql}`,
+      `${ADMIN_COMMENT_SELECT}${filter.where}
+       ORDER BY CASE c.status WHEN 'pending' THEN 0 ELSE 1 END, c.created_at DESC${limitSql}${offsetSql}`,
     )
     .all(...params) as CommentWithTarget[];
+}
+
+export function getCommentForAdmin(id: number): CommentWithTarget | undefined {
+  return db.prepare(`${ADMIN_COMMENT_SELECT} WHERE c.id = ?`).get(id) as CommentWithTarget | undefined;
+}
+
+export function countCommentsForAdmin(status: AdminCommentStatus = "all"): number {
+  const filter = adminCommentFilter(status);
+  return (
+    db.prepare(`SELECT COUNT(*) AS c FROM comments c${filter.where}`).get(...filter.params) as { c: number }
+  ).c;
 }
 
 /** 前台侧栏用：只取已审核的最近评论，避免读取后台待审核数据与全部评论正文。 */

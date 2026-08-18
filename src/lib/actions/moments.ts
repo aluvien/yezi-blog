@@ -31,11 +31,11 @@ export async function createMomentAction(data: { content: string; images: string
   const images = normalizeMomentImages(data.images);
   if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
   if (!content && images.length === 0) return { ok: false, error: "写点什么或至少传一张图" };
-  createMoment({ content, images });
+  const moment = createMoment({ content, images });
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
-  return { ok: true };
+  return { ok: true, data: moment };
 }
 
 export async function updateMomentAction(
@@ -50,11 +50,11 @@ export async function updateMomentAction(
   const images = normalizeMomentImages(data.images);
   if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
   if (!content && images.length === 0) return { ok: false, error: "写点什么或至少保留一张图" };
-  updateMoment(id, { content, images });
+  const moment = updateMoment(id, { content, images });
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
-  return { ok: true };
+  return { ok: true, data: moment };
 }
 
 export async function deleteMomentAction(id: number): Promise<ActionResult> {
@@ -64,5 +64,5 @@ export async function deleteMomentAction(id: number): Promise<ActionResult> {
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
-  return { ok: true };
+  return { ok: true, data: { id } };
 }

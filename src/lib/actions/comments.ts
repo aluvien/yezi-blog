@@ -30,7 +30,7 @@ export async function approveCommentAction(id: number): Promise<ActionResult> {
   revalidatePath("/admin/comments");
   revalidatePath("/admin");
   revalidateCommentTarget(comment);
-  return { ok: true };
+  return { ok: true, data: getComment(id) };
 }
 
 export async function hideCommentAction(id: number): Promise<ActionResult> {
@@ -41,7 +41,7 @@ export async function hideCommentAction(id: number): Promise<ActionResult> {
   revalidatePath("/admin/comments");
   revalidatePath("/admin");
   revalidateCommentTarget(comment);
-  return { ok: true };
+  return { ok: true, data: getComment(id) };
 }
 
 export async function replyCommentAction(id: number, rawReply: string): Promise<ActionResult> {
@@ -53,7 +53,7 @@ export async function replyCommentAction(id: number, rawReply: string): Promise<
   updateCommentReply(id, reply || null);
   revalidatePath("/admin/comments");
   revalidateCommentTarget(comment);
-  return { ok: true };
+  return { ok: true, data: getComment(id) };
 }
 
 export async function deleteCommentAction(id: number): Promise<ActionResult> {
@@ -64,5 +64,5 @@ export async function deleteCommentAction(id: number): Promise<ActionResult> {
   revalidatePath("/admin/comments");
   revalidatePath("/admin");
   revalidateCommentTarget(comment);
-  return { ok: true };
+  return { ok: true, data: { id } };
 }

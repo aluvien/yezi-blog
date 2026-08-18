@@ -42,7 +42,7 @@ export async function createWorkAction(data: WorkInput): Promise<ActionResult> {
   await requireAdmin();
   const validationError = validateWork(data);
   if (validationError) return { ok: false, error: validationError };
-  createWork({
+  const work = createWork({
     title: data.title.trim(),
     description: data.description,
     cover: data.cover,
@@ -52,7 +52,7 @@ export async function createWorkAction(data: WorkInput): Promise<ActionResult> {
   revalidatePath("/admin/works");
   revalidatePath("/works");
   revalidatePath("/");
-  return { ok: true };
+  return { ok: true, data: work };
 }
 
 export async function updateWorkAction(id: number, data: WorkInput): Promise<ActionResult> {
@@ -60,7 +60,7 @@ export async function updateWorkAction(id: number, data: WorkInput): Promise<Act
   if (!getWork(id)) return { ok: false, error: "作品不存在" };
   const validationError = validateWork(data);
   if (validationError) return { ok: false, error: validationError };
-  updateWork(id, {
+  const work = updateWork(id, {
     title: data.title.trim(),
     description: data.description,
     cover: data.cover,
@@ -70,7 +70,7 @@ export async function updateWorkAction(id: number, data: WorkInput): Promise<Act
   revalidatePath("/admin/works");
   revalidatePath("/works");
   revalidatePath("/");
-  return { ok: true };
+  return { ok: true, data: work };
 }
 
 export async function deleteWorkAction(id: number): Promise<ActionResult> {
@@ -80,5 +80,5 @@ export async function deleteWorkAction(id: number): Promise<ActionResult> {
   revalidatePath("/admin/works");
   revalidatePath("/works");
   revalidatePath("/");
-  return { ok: true };
+  return { ok: true, data: { id } };
 }

@@ -17,7 +17,7 @@ export interface PostInput {
   status: "draft" | "published";
 }
 
-export type ActionResult = { ok: true; message?: string } | { ok: false; error: string };
+export type ActionResult = { ok: true; message?: string; data?: unknown } | { ok: false; error: string };
 
 const MAX_POST_CONTENT_LENGTH = 1_500_000;
 const MAX_REFERENCE_SNAPSHOTS = 50;
@@ -74,6 +74,7 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
   if (validationError) return { ok: false, error: validationError };
   const referenceSnapshots = data.referenceSnapshots ?? [];
   const content = compactArticleReferenceMarkers(data.content, referenceSnapshots);
+  let createdPost: ReturnType<typeof getPost>;
   try {
     db.transaction(() => {
       const created = createPost({
@@ -85,6 +86,7 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
         tags: normalizePostTags(data.tags),
         status: data.status,
       });
+      createdPost = created;
       attachAttachmentsToPost(data.attachmentIds, created.id);
       syncArticleReferences(created.id, parseArticleReferenceMarkers(content, referenceSnapshots));
     })();
@@ -98,7 +100,7 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
   if (data.category.trim()) revalidatePath(`/categories/${encodeURIComponent(data.category.trim())}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");
-  return { ok: true };
+  return { ok: true, data: createdPost };
 }
 
 export async function updatePostAction(id: number, data: PostInput): Promise<ActionResult> {
@@ -111,6 +113,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
   const referenceSnapshots = data.referenceSnapshots ?? [];
   const content = compactArticleReferenceMarkers(data.content, referenceSnapshots);
   let updatedSlug = existing.slug;
+  let updatedPost: ReturnType<typeof getPost>;
   try {
     db.transaction(() => {
       const updated = updatePost(id, {
@@ -122,6 +125,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
         tags: normalizePostTags(data.tags),
         status: data.status,
       });
+      updatedPost = updated;
       updatedSlug = updated?.slug || existing.slug;
       attachAttachmentsToPost(data.attachmentIds, id);
       syncArticleReferences(id, parseArticleReferenceMarkers(content, referenceSnapshots));
@@ -138,7 +142,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
   revalidatePath(`/posts/${updatedSlug}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");
-  return { ok: true };
+  return { ok: true, data: updatedPost };
 }
 
 /** 从引用管理页把引用直接附加到已有文章，避免为了插入引用跳去“新建文章”。 */
@@ -216,5 +220,5 @@ export async function deletePostAction(id: number): Promise<ActionResult> {
   revalidatePath(`/posts/${post.slug}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");
-  return { ok: true };
+  return { ok: true, data: { id: post.id } };
 }

@@ -82,11 +82,39 @@ export function listPostsByCategory(category: string): Post[] {
   return db.prepare("SELECT * FROM posts WHERE status = 'published' AND category = ? COLLATE NOCASE ORDER BY created_at DESC").all(needle) as Post[];
 }
 
-/** 后台用：包含草稿与已发布文章。 */
-export function listAllPosts(options?: { limit?: number; offset?: number }): Post[] {
-  const { limit, offset } = options ?? {};
-  let sql = "SELECT * FROM posts ORDER BY created_at DESC";
-  const params: Array<number> = [];
+export type AdminPostStatus = "all" | "draft" | "published";
+
+export type AdminPostQuery = {
+  limit?: number;
+  offset?: number;
+  status?: AdminPostStatus;
+  search?: string;
+};
+
+function adminPostQuery(options: AdminPostQuery = {}): { conditions: string[]; params: Array<string | number> } {
+  const conditions: string[] = [];
+  const params: Array<string | number> = [];
+  const status = options.status ?? "all";
+  const search = options.search?.trim() ?? "";
+
+  if (status === "draft" || status === "published") {
+    conditions.push("status = ?");
+    params.push(status);
+  }
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push("(title LIKE ? COLLATE NOCASE OR slug LIKE ? COLLATE NOCASE OR content LIKE ? COLLATE NOCASE)");
+    params.push(pattern, pattern, pattern);
+  }
+  return { conditions, params };
+}
+
+/** 后台用：包含草稿与已发布文章，并支持状态、关键词和 SQL 分页。 */
+export function listAllPosts(options: AdminPostQuery = {}): Post[] {
+  const { limit, offset } = options;
+  const query = adminPostQuery(options);
+  let sql = `SELECT * FROM posts${query.conditions.length > 0 ? ` WHERE ${query.conditions.join(" AND ")}` : ""} ORDER BY created_at DESC`;
+  const params = [...query.params];
   if (Number.isInteger(limit) && (limit as number) > 0) {
     sql += " LIMIT ?";
     params.push(limit as number);
@@ -96,6 +124,16 @@ export function listAllPosts(options?: { limit?: number; offset?: number }): Pos
     }
   }
   return db.prepare(sql).all(...params) as Post[];
+}
+
+/** 后台文章列表的总数，与 listAllPosts 使用完全相同的筛选条件。 */
+export function countAllPosts(options: Pick<AdminPostQuery, "status" | "search"> = {}): number {
+  const query = adminPostQuery(options);
+  return (
+    db
+      .prepare(`SELECT COUNT(*) AS c FROM posts${query.conditions.length > 0 ? ` WHERE ${query.conditions.join(" AND ")}` : ""}`)
+      .get(...query.params) as { c: number }
+  ).c;
 }
 
 /** 后台仪表盘用：按时间读取少量文章，避免把所有正文加载进内存。 */
