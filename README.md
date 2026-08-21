@@ -184,6 +184,112 @@ POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 
 所有新增字段和端点均保持在 `/api/v1` 内，不删除原字段或改变既有默认返回。需要破坏性变更时应新增 `/api/v2`。
 
+## Admin REST API（原生 iOS 管理端）
+
+网页后台继续使用 Server Actions；原生 App 应使用 `/api/admin/v1` 的 REST JSON 接口，不需要 WebView，也不能调用 Next.js Server Actions 协议。登录仍使用 `POST /api/admin/login`，服务器会写入 httpOnly 的 `admin_session` Cookie；iOS `URLSession` 必须保留并随后的请求一并发送该 Cookie。
+
+所有 `/api/admin/v1/*` 路由都会验证该 Cookie，且不会重定向到 HTML 登录页。响应带 `Cache-Control: private, no-store` 和 `X-API-Version: v1`。
+
+成功响应：
+
+```json
+{ "data": {}, "meta": {} }
+```
+
+失败响应：
+
+```json
+{
+  "error": {
+    "code": "UNAUTHENTICATED",
+    "message": "未登录或登录已过期"
+  }
+}
+```
+
+未登录固定为 HTTP `401`。所有列表支持 `page`、`limit`（最大 100），并在 `meta` 返回 `page`、`limit`、`total`、`totalPages`。
+
+### 分类与标签
+
+| 方法 | 路径 | 请求 JSON | `data` |
+| --- | --- | --- | --- |
+| GET | `/api/admin/v1/categories?page=1&limit=20` | — | 分类数组，每项含 `id`、`name`、`slug`、`created_at`、`posts_count` |
+| POST | `/api/admin/v1/categories` | `{ "name": "分类名称" }` | 新分类（含 `posts_count`） |
+| PATCH | `/api/admin/v1/categories/:id` | `{ "name": "新的分类名称" }` | 更新后的分类（含 `posts_count`） |
+| DELETE | `/api/admin/v1/categories/:id` | — | `{ "id": 1 }` |
+| GET | `/api/admin/v1/tags?page=1&limit=20` | — | `{ tag, count }` 数组 |
+| PATCH | `/api/admin/v1/tags` | `{ "old_tag": "旧标签", "new_tag": "新标签" }` | `{ "tag": "新标签", "tags": [{ "tag": "新标签", "count": 2 }] }` |
+| DELETE | `/api/admin/v1/tags` | `{ "tag": "要删除的标签" }` | `{ "tag": "旧标签", "tags": [] }` |
+
+分类与标签名称均最长 80 字符；标签不能含英文逗号、中文逗号或换行。重复分类、无效参数均为 HTTP `400`，不存在的分类/标签为 HTTP `404`。标签变更会更新现有文章标签关系；当前想法数据模型不含独立标签字段。
+
+### 引用资料库
+
+`GET /api/admin/v1/references?page=1&limit=20&search=&category=&tag=` 返回后台完整引用字段：
+
+```json
+{
+  "data": [{
+    "id": 1,
+    "url": "https://example.com/article",
+    "canonical_url": "https://example.com/article",
+    "title": "文章标题",
+    "source_name": "来源",
+    "author": "作者",
+    "published_at": "2026-08-21",
+    "cover_url": "https://example.com/cover.jpg",
+    "description": "描述",
+    "summary": "摘要",
+    "key_points": ["要点"],
+    "category": "阅读",
+    "tags": ["iOS"],
+    "archive_captured_at": null,
+    "archive_updated_at": null,
+    "archive_cache_report": null,
+    "linked_post_count": 1,
+    "linked_post_titles": ["关联文章"],
+    "created_at": "2026-08-21T00:00:00.000Z",
+    "updated_at": "2026-08-21T00:00:00.000Z"
+  }],
+  "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+| 方法 | 路径 | 请求 JSON | `data` |
+| --- | --- | --- | --- |
+| GET | `/api/admin/v1/references/:id` | — | 上述单个完整引用 |
+| POST | `/api/admin/v1/references` | `{ "snapshot": { "url": "…", "canonicalUrl": "…", "title": "…", "source": "…", "author": "…", "publishedAt": "…", "cover": "…", "description": "…", "summary": "…", "keyPoints": [] }, "category": "阅读", "tags": "iOS, REST" }` | 保存后的完整引用 |
+| PATCH | `/api/admin/v1/references/:id` | `{ "category": "阅读", "tags": "iOS, REST" }` | 更新后的完整引用 |
+| DELETE | `/api/admin/v1/references/:id` | — | `{ "id": 1 }` |
+| POST | `/api/admin/v1/references/bulk-delete` | `{ "ids": [1, 2, 3] }` | `{ "deletedCount": 3 }` |
+| POST | `/api/admin/v1/posts/:id/references` | `{ "snapshot": { /* ArticleReferenceSnapshot */ } }` | 更新后的完整文章，含 `referenceSnapshots` |
+
+该管理接口不会返回阅读归档正文、原始 HTML 或归档文件路径；归档操作仍沿用既有 `/api/admin/article-references/*` 管理接口。
+
+### 附件维护
+
+| 方法 | 路径 | 请求 JSON | `data` |
+| --- | --- | --- | --- |
+| POST | `/api/admin/v1/attachments/:id/compress` | `{ "profile": "balanced" }`（也可为 `quality`、`small`） | `{ "originalSize": 1024, "compressedSize": 800, "savedPercent": 22, "changed": true }` |
+| POST | `/api/admin/v1/attachments/untracked/compress` | `{ "path": "202608/file.png", "profile": "balanced" }` | 同上，另含规范化的 `path` |
+| POST | `/api/admin/v1/attachments/cleanup-unused` | `{ "confirm": true }` | `{ "deletedCount": 2, "skippedCount": 0 }` |
+| DELETE | `/api/admin/v1/attachments/untracked` | `{ "path": "202608/file.png", "confirm": true }` | `{ "path": "/uploads/202608/file.png", "deletedCount": 1, "skippedCount": 0 }` |
+
+`path` 必须相对 `uploads` 目录，任何 `..`、绝对目录或 uploads 外路径都将返回 HTTP `400`。删除与清理必须显式传入 `confirm: true`；正在文章、想法或站点设置中使用的附件不会被删除。
+
+### GitHub 同步与部署
+
+这些端点没有可传参数：客户端提交命令、路径、PM2 进程名或分支都会被拒绝。服务器仍只会使用预配置的部署目录、`main` 分支、既有锁文件和状态文件。
+
+| 方法 | 路径 | 请求 JSON | `data` |
+| --- | --- | --- | --- |
+| GET | `/api/admin/v1/deploy/status` | — | `{ "status": "unknown" \| "restarting" \| "success" \| "failed", "updatedAt": "…", "error": "…" }` |
+| GET | `/api/admin/v1/deploy/version` | — | `{ "status": "up-to-date" \| "outdated" \| "dirty" \| "unavailable", "localCommit": "…", "remoteCommit": "…" }` |
+| POST | `/api/admin/v1/deploy/sync` | `{}` 或无 body | `{ "status": "success", "message": "…" }` |
+| POST | `/api/admin/v1/deploy/restart` | `{}` 或无 body | `{ "status": "restarting" }` |
+
+重复同步或重启返回 HTTP `409` 与 `DEPLOY_IN_PROGRESS`；同步/重启失败返回统一 `error` envelope。项目没有额外的部署开关时，这些 API 与网页端同步按钮使用同一套 `DEPLOY_PROJECT_DIR`、`DEPLOY_PM2_NAME`、部署锁及状态文件配置。
+
 ## 数据与上传文件
 
 - SQLite 数据库：`data/blog.db`（首次运行自动建表）

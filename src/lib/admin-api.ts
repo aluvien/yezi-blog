@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
 import type { PostInput } from "@/lib/actions/posts";
-import type { Comment, CommentWithTarget, Moment, Post, Session, Work } from "@/lib/db";
+import type { Comment, CommentWithTarget, Moment, Post, ReferenceLibraryItem, Session, Work } from "@/lib/db";
+import { normalizeArticleReferenceSnapshot, type ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { parseMomentImages } from "@/lib/moments";
 import { parsePostTags } from "@/lib/post-tags";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
@@ -65,6 +66,15 @@ export async function readAdminJson(request: Request, maxBytes = ADMIN_API_MAX_B
   }
 }
 
+/** 部署类端点不接收任何命令、路径、分支或 PM2 参数。允许空 JSON 对象，拒绝其他请求体。 */
+export async function requireEmptyAdminJsonBody(request: Request): Promise<NextResponse | null> {
+  if (!request.body) return null;
+  const body = await readAdminJson(request);
+  if (!body.ok) return body.response;
+  if (Object.keys(body.value).length > 0) return adminError("INVALID_PARAMETER", "该接口不接受命令、路径、分支或进程参数", 400);
+  return null;
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -118,6 +128,56 @@ export function adminActionError(result: { ok: false; error: string }, code = "V
 export function adminInternalError(scope: string, error: unknown): NextResponse {
   console.error(`[admin-api] ${scope} failed`, error instanceof Error ? error.message : error);
   return adminError("INTERNAL_ERROR", "服务器处理失败，请稍后重试", 500);
+}
+
+/** 后台引用库完整字段；归档正文和原始文件路径仍不通过 REST API 暴露。 */
+export function serializeAdminReference(reference: ReferenceLibraryItem): Record<string, unknown> {
+  return {
+    id: reference.id,
+    url: reference.url,
+    canonical_url: reference.canonical_url,
+    title: reference.title,
+    source_name: reference.source_name,
+    author: reference.author,
+    published_at: reference.published_at,
+    cover_url: reference.cover,
+    description: reference.description,
+    summary: reference.summary,
+    key_points: parseJsonArray(reference.key_points),
+    category: reference.category,
+    tags: parsePostTags(reference.tags),
+    archive_captured_at: reference.archive_captured_at,
+    archive_updated_at: reference.archive_updated_at,
+    archive_cache_report: parseJsonValue(reference.archive_cache_report),
+    linked_post_count: Number(reference.linked_post_count ?? 0),
+    linked_post_titles: reference.linked_post_titles ? reference.linked_post_titles.split(",").filter(Boolean) : [],
+    created_at: reference.created_at,
+    updated_at: reference.updated_at,
+  };
+}
+
+function parseJsonArray(value: string | null | undefined): string[] {
+  try {
+    const parsed = JSON.parse(value || "[]") as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonValue(value: string | null): unknown {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+export function parseAdminReferenceSnapshot(value: unknown): ArticleReferenceSnapshot | null {
+  if (!isRecord(value)) return null;
+  const snapshot = normalizeArticleReferenceSnapshot(value as Partial<ArticleReferenceSnapshot>);
+  return snapshot.url ? snapshot : null;
 }
 
 export function serializeAdminPostSummary(post: Post, metrics?: { views: number; likes: number }): Record<string, unknown> {

@@ -201,11 +201,11 @@ export async function saveReferenceLibraryAction(input: ArticleReferenceSnapshot
   if (!snapshot.url) return { ok: false, error: "引用网址无效" };
   const normalizedCategory = String(category ?? "").trim();
   if (normalizedCategory.length > 80) return { ok: false, error: "分类名称不能超过 80 个字符" };
-  upsertReferenceLibrarySnapshot(snapshot, { category: normalizedCategory, tags });
+  const saved = upsertReferenceLibrarySnapshot(snapshot, { category: normalizedCategory, tags });
   revalidatePath("/admin/references");
   revalidatePath("/references");
   revalidatePath("/admin");
-  return { ok: true, message: "已保存到引用资料库" };
+  return { ok: true, message: "已保存到引用资料库", data: saved };
 }
 
 export async function deletePostAction(id: number): Promise<ActionResult> {

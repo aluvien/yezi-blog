@@ -16,7 +16,7 @@ export async function updateReferenceLibraryMetadataAction(id: number, formData:
   await requireAdmin();
   const category = String(formData.get("category") ?? "").trim();
   const tags = String(formData.get("tags") ?? "");
-  if (category.length > 80) return;
+  if (!Number.isInteger(id) || id < 1 || category.length > 80) return;
   if (!updateReferenceLibraryMetadata(id, category, tags)) return;
   refreshReferencePages();
 }
@@ -39,5 +39,5 @@ export async function deleteReferenceLibraryManyAction(ids: number[]): Promise<A
   const deleted = deleteReferenceLibraryMany(ids);
   if (deleted === 0) return { ok: false, error: "选中的引用不存在或已被删除" };
   refreshReferencePages();
-  return { ok: true, message: `已删除 ${deleted} 条引用` };
+  return { ok: true, message: `已删除 ${deleted} 条引用`, data: { deletedCount: deleted } };
 }

@@ -156,13 +156,15 @@ function getReferenceLibraryItemByCanonicalUrl(canonicalUrl: string): ReferenceL
 export type ReferenceLibraryQuery = {
   keyword?: string;
   category?: string;
+  tag?: string;
   limit?: number;
   offset?: number;
 };
 
-function referenceLibraryFilters(options: Pick<ReferenceLibraryQuery, "keyword" | "category">): { where: string; parameters: string[] } {
+function referenceLibraryFilters(options: Pick<ReferenceLibraryQuery, "keyword" | "category" | "tag">): { where: string; parameters: string[] } {
   const keyword = String(options.keyword ?? "").trim().slice(0, 120);
   const category = String(options.category ?? "").trim().slice(0, 80);
+  const tag = String(options.tag ?? "").trim().replace(/^#+/, "").slice(0, 80);
   const conditions: string[] = [];
   const parameters: string[] = [];
   if (category) {
@@ -186,6 +188,10 @@ function referenceLibraryFilters(options: Pick<ReferenceLibraryQuery, "keyword" 
       OR instr(lower(rl.tags), lower(?)) > 0
     )`);
     parameters.push(...Array.from({ length: 9 }, () => keyword));
+  }
+  if (tag) {
+    conditions.push("EXISTS (SELECT 1 FROM json_each(rl.tags) WHERE lower(json_each.value) = lower(?))");
+    parameters.push(tag);
   }
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   return { where, parameters };
@@ -218,7 +224,7 @@ export function listReferenceLibrary(options: ReferenceLibraryQuery = {}): Refer
   `).all(...parameters, ...paginationParameters) as ReferenceLibraryItem[];
 }
 
-export function countReferenceLibrary(options: Pick<ReferenceLibraryQuery, "keyword" | "category"> = {}): number {
+export function countReferenceLibrary(options: Pick<ReferenceLibraryQuery, "keyword" | "category" | "tag"> = {}): number {
   const { where, parameters } = referenceLibraryFilters(options);
   return Number((db.prepare(`SELECT COUNT(*) AS count FROM reference_library rl ${where}`).get(...parameters) as { count: number }).count);
 }

@@ -50,22 +50,30 @@ export async function deleteUntrackedAttachmentAction(relativePath: string): Pro
   if (usage.referenced) return { ok: false, error: "附件正在网站中使用，请先移除引用" };
   removeAttachmentFile(usage.path);
   revalidateAttachmentPages();
-  return { ok: true };
+  return { ok: true, data: { path: usage.path, deletedCount: 1, skippedCount: 0 } };
 }
 
 export async function clearUnusedAttachmentsAction(): Promise<ActionResult> {
   await requireAdmin();
   const unused = listAttachments().filter((attachment) => !attachment.referenced);
+  let deletedCount = 0;
+  let skippedCount = 0;
   for (const attachment of unused) {
     if (attachment.tracked) {
       const deleted = deleteAttachment(attachment.id);
-      if (deleted) removeAttachmentFile(deleted.path);
+      if (deleted) {
+        removeAttachmentFile(deleted.path);
+        deletedCount += 1;
+      } else {
+        skippedCount += 1;
+      }
     } else {
       removeAttachmentFile(attachment.path);
+      deletedCount += 1;
     }
   }
   revalidateAttachmentPages();
-  return { ok: true };
+  return { ok: true, data: { deletedCount, skippedCount } };
 }
 
 async function compressImageFile(relativePath: string, profile: CompressionProfile, attachmentId?: number): Promise<ActionResult> {
@@ -109,14 +117,22 @@ async function compressImageFile(relativePath: string, profile: CompressionProfi
     const compressedSize = (await fsPromises.stat(temporaryPath)).size;
     if (compressedSize >= originalSize) {
       await fsPromises.unlink(temporaryPath).catch(() => undefined);
-      return { ok: true, message: "压缩后体积没有变小，已保留原图" };
+      return {
+        ok: true,
+        message: "压缩后体积没有变小，已保留原图",
+        data: { originalSize, compressedSize: originalSize, savedPercent: 0, changed: false },
+      };
     }
 
     await fsPromises.rename(temporaryPath, absolutePath);
     if (attachmentId) updateAttachmentSize(attachmentId, compressedSize);
     const savedPercent = Math.max(1, Math.round((1 - compressedSize / originalSize) * 100));
     revalidateAttachmentPages();
-    return { ok: true, message: `压缩完成，体积减少约 ${savedPercent}%；原链接保持不变` };
+    return {
+      ok: true,
+      message: `压缩完成，体积减少约 ${savedPercent}%；原链接保持不变`,
+      data: { originalSize, compressedSize, savedPercent, changed: true },
+    };
   } catch (error) {
     await fsPromises.unlink(temporaryPath).catch(() => undefined);
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";

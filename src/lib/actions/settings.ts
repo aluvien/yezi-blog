@@ -6,6 +6,8 @@ import {
   deleteCategory,
   deleteTag as deleteTagInDb,
   getSiteSettings,
+  listAllTags,
+  listCategories,
   renameTag as renameTagInDb,
   setSiteSettings,
   updateCategory,
@@ -13,7 +15,7 @@ import {
 import { requireAdmin } from "@/lib/auth";
 import { refreshQQMusicHealthScheduler } from "@/lib/qq-music-scheduler";
 
-export type SettingsActionResult = { ok: true } | { ok: false; error: string };
+export type SettingsActionResult = { ok: true; data?: unknown } | { ok: false; error: string };
 
 const SETTING_KEYS = [
   "site_name",
@@ -78,12 +80,21 @@ export async function updateSiteSettingsAction(values: Record<string, string>): 
 }
 
 export async function createCategoryAction(formData: FormData): Promise<void> {
+  await createCategoryByNameAction(String(formData.get("name") ?? ""));
+}
+
+/** 分类管理网页与原生 API 共用的创建校验。 */
+export async function createCategoryByNameAction(name: string): Promise<SettingsActionResult> {
   await requireAdmin();
-  const name = String(formData.get("name") ?? "").trim();
-  if (!name || name.length > 80) return;
-  createCategory(name);
-  revalidatePath("/admin/categories");
-  revalidatePath("/", "layout");
+  const normalized = String(name ?? "").trim();
+  if (!normalized || normalized.length > 80) return { ok: false, error: "分类名称不能为空且不超过 80 个字符" };
+  if (listCategories().some((category) => category.name.localeCompare(normalized, "zh-CN", { sensitivity: "accent" }) === 0)) {
+    return { ok: false, error: "分类名称已经被使用" };
+  }
+  const created = createCategory(normalized);
+  if (!created) return { ok: false, error: "分类创建失败" };
+  revalidateTaxonomy();
+  return { ok: true, data: created };
 }
 
 export async function deleteCategoryAction(formData: FormData): Promise<void> {
@@ -106,18 +117,23 @@ export async function updateCategoryAction(id: number, name: string): Promise<Se
   if (!Number.isInteger(id) || id < 1) return { ok: false, error: "分类不存在" };
   const normalized = String(name ?? "").trim();
   if (!normalized || normalized.length > 80) return { ok: false, error: "分类名称不能为空且不超过 80 个字符" };
+  if (!listCategories().some((category) => category.id === id)) return { ok: false, error: "分类不存在" };
+  if (listCategories().some((category) => category.id !== id && category.name.localeCompare(normalized, "zh-CN", { sensitivity: "accent" }) === 0)) {
+    return { ok: false, error: "分类名称已经被使用" };
+  }
   const updated = updateCategory(id, normalized);
-  if (!updated) return { ok: false, error: "分类不存在，或名称已经被使用" };
+  if (!updated) return { ok: false, error: "分类更新失败" };
   revalidateTaxonomy();
-  return { ok: true };
+  return { ok: true, data: updated };
 }
 
 export async function deleteCategoryByIdAction(id: number): Promise<SettingsActionResult> {
   await requireAdmin();
   if (!Number.isInteger(id) || id < 1) return { ok: false, error: "分类不存在" };
+  if (!listCategories().some((category) => category.id === id)) return { ok: false, error: "分类不存在" };
   deleteCategory(id);
   revalidateTaxonomy();
-  return { ok: true };
+  return { ok: true, data: { id } };
 }
 
 function validTagName(value: string): boolean {
@@ -127,6 +143,9 @@ function validTagName(value: string): boolean {
 export async function renameTagAction(oldTag: string, newTag: string): Promise<SettingsActionResult> {
   await requireAdmin();
   if (!validTagName(oldTag) || !validTagName(newTag)) return { ok: false, error: "标签不能为空、不能包含逗号，且不超过 80 个字符" };
+  if (!listAllTags().some((item) => item.tag.localeCompare(oldTag.trim().replace(/^#+/, ""), "zh-CN", { sensitivity: "accent" }) === 0)) {
+    return { ok: false, error: "标签不存在" };
+  }
   if (!renameTagInDb(oldTag, newTag)) return { ok: false, error: "标签修改失败" };
   revalidateTaxonomy();
   return { ok: true };
@@ -135,6 +154,9 @@ export async function renameTagAction(oldTag: string, newTag: string): Promise<S
 export async function deleteTagAction(tag: string): Promise<SettingsActionResult> {
   await requireAdmin();
   if (!validTagName(tag)) return { ok: false, error: "标签名称无效" };
+  if (!listAllTags().some((item) => item.tag.localeCompare(tag.trim().replace(/^#+/, ""), "zh-CN", { sensitivity: "accent" }) === 0)) {
+    return { ok: false, error: "标签不存在" };
+  }
   if (!deleteTagInDb(tag)) return { ok: false, error: "标签删除失败" };
   revalidateTaxonomy();
   return { ok: true };
