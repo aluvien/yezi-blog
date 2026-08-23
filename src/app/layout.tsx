@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { site } from "@/lib/site";
 import { getCachedSiteSettings } from "@/lib/server-data";
 import { normalizeDarkMode, normalizeLayoutTheme, normalizePalette } from "@/lib/theme";
@@ -48,7 +49,7 @@ export const viewport: Viewport = {
   colorScheme: "light dark",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -57,6 +58,7 @@ export default function RootLayout({
   const palette = normalizePalette(siteSettings.theme);
   const layoutTheme = normalizeLayoutTheme(siteSettings.layout_theme);
   const darkMode = normalizeDarkMode(siteSettings.dark_mode);
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   // 主题初始化：读 cookie（用户手动切换）> 后台设置的默认值 > 系统偏好。
   // 同时在首帧识别安装态 PWA，避免底栏/菜单在水合后才切换；后台管理页固定浅色。
   const themeInitScript = `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;document.documentElement.setAttribute("data-display-mode",standalone?"standalone":"browser");var m=${JSON.stringify(darkMode)};var c=document.cookie.match(/(?:^|; )theme_mode=([^;]+)/);var mode=c?decodeURIComponent(c[1]):m;if(location.pathname.indexOf("/admin")===0)mode="light";var dark=mode==="dark"||(mode==="auto"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",dark?"dark":"light");}catch(e){}})();`;
@@ -77,7 +79,7 @@ export default function RootLayout({
             React 在生产环境接管页面时会因此触发 hydration mismatch (#418)。 */}
         {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link rel="stylesheet" href="/fonts/chiron/css/vf.css" />
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-full flex flex-col">
         <ViewportZoomLock />

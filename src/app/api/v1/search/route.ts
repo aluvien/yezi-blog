@@ -1,13 +1,22 @@
 import { apiJson, apiOptions, paginationMeta, parsePagination, publicMoment, publicPost } from "@/lib/api";
 import { countApprovedCommentsBulk, getContentMetricsBulk, searchMoments, searchPosts } from "@/lib/db";
+import { getClientIp, hashIp } from "@/lib/request";
+import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// 进程内限流是反向代理限流的补充；搜索本身也在 DAO 层限制候选行数，重启或
+// 多实例时不会退化成全量扫描。
+const allowSearchRequest = createSlidingWindowLimiter({ windowMs: 60_000, maxRequests: 60, maxKeys: 5_000 });
 
 export function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const query = (params.get("q") ?? "").trim().slice(0, 100);
   if (!query) return apiJson({ data: [], meta: paginationMeta(1, 20, 0), query: "" });
+  if (!allowSearchRequest(hashIp(getClientIp(request)))) {
+    return apiJson({ error: "搜索过于频繁，请稍后再试" }, 429);
+  }
 
   // 全文搜索走 FTS5 索引（trigram 子串匹配）。与旧版内存过滤相比，搜索词现在也会
   // 匹配文章分类（postMatchesSearch 语义），属于小幅行为增强。

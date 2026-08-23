@@ -3,8 +3,12 @@ import { db } from "./core";
 import type { Post, Moment } from "./types";
 import { parsePostTags } from "@/lib/post-tags";
 
-// trigram tokenizer 需要至少 3 个字符才能做子串匹配；更短的查询回退全量扫描。
+// trigram tokenizer 需要至少 3 个字符才能做子串匹配；更短的查询使用有上限的回退扫描。
 const FTS_MIN_QUERY_LENGTH = 3;
+// 站内搜索是展示功能而不是导出接口。限制候选数避免短词、损坏索引或极宽 FTS
+// 命中一次性把所有 Markdown 正文读进 Node 进程；个人博客中超过此数的命中对
+// 搜索体验没有额外价值，分页也不会因此隐式加载未显示的完整正文。
+export const SEARCH_CANDIDATE_LIMIT = 100;
 
 /** 去掉 FTS5 查询语法里的特殊字符，避免 MATCH 表达式解析失败。 */
 function ftsEscapeTerm(value: string): string {
@@ -24,7 +28,8 @@ function ftsMatchQuery(query: string): string | null {
  * Query FTS and source rows in one statement. The old implementation built
  * one SQL placeholder per candidate ID, which grows without bound for broad
  * terms and can hit SQLite's variable limit on a large archive. Returning
- * null retains the existing full-scan fallback for malformed MATCH input.
+ * null retains a bounded fallback for short or malformed MATCH input. An empty
+ * array is a healthy FTS miss and must never trigger a fallback scan.
  */
 function ftsCandidatePosts(query: string): Post[] | null {
   const match = ftsMatchQuery(query);
@@ -35,7 +40,9 @@ function ftsCandidatePosts(query: string): Post[] | null {
       FROM fts_posts
       INNER JOIN posts ON posts.id = fts_posts.rowid
       WHERE fts_posts MATCH ? AND posts.status = 'published'
-    `).all(match) as Post[];
+      ORDER BY posts.created_at DESC
+      LIMIT ?
+    `).all(match, SEARCH_CANDIDATE_LIMIT) as Post[];
   } catch {
     return null;
   }
@@ -50,7 +57,9 @@ function ftsCandidateMoments(query: string): Moment[] | null {
       FROM fts_moments
       INNER JOIN moments ON moments.id = fts_moments.rowid
       WHERE fts_moments MATCH ?
-    `).all(match) as Moment[];
+      ORDER BY moments.created_at DESC
+      LIMIT ?
+    `).all(match, SEARCH_CANDIDATE_LIMIT) as Moment[];
   } catch {
     return null;
   }
@@ -72,14 +81,24 @@ export function momentMatchesSearch(moment: Moment, query: string): boolean {
   return moment.content.toLocaleLowerCase().includes(query.toLocaleLowerCase());
 }
 
+function fallbackPosts(): Post[] {
+  return db
+    .prepare("SELECT * FROM posts WHERE status = 'published' ORDER BY created_at DESC LIMIT ?")
+    .all(SEARCH_CANDIDATE_LIMIT) as Post[];
+}
+
+function fallbackMoments(): Moment[] {
+  return db
+    .prepare("SELECT * FROM moments ORDER BY created_at DESC LIMIT ?")
+    .all(SEARCH_CANDIDATE_LIMIT) as Moment[];
+}
+
 /** 已发布文章全文搜索：FTS5 缩小候选后按 includes 精确过滤，结果按时间倒序。 */
 export function searchPosts(query: string): Post[] {
   const needle = query.trim();
   if (!needle) return [];
   const candidates = ftsCandidatePosts(needle);
-  const rows = candidates && candidates.length > 0
-    ? candidates
-    : (db.prepare("SELECT * FROM posts WHERE status = 'published'").all() as Post[]);
+  const rows = candidates ?? fallbackPosts();
   return rows
     .filter((post) => postMatchesSearch(post, needle))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -90,9 +109,7 @@ export function searchMoments(query: string): Moment[] {
   const needle = query.trim();
   if (!needle) return [];
   const candidates = ftsCandidateMoments(needle);
-  const rows = candidates && candidates.length > 0
-    ? candidates
-    : (db.prepare("SELECT * FROM moments").all() as Moment[]);
+  const rows = candidates ?? fallbackMoments();
   return rows
     .filter((moment) => momentMatchesSearch(moment, needle))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

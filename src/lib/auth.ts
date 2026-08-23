@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   createSession,
-  deleteExpiredSessions,
+  cleanupExpiredAuthState,
   deleteSession,
   clearLoginAttempt,
   getLoginAttempt,
@@ -24,8 +24,10 @@ const GLOBAL_LOGIN_MAX_ATTEMPTS = 25;
 function verifyPassword(password: string): boolean {
   const admin = process.env.ADMIN_PASSWORD;
   if (!admin) return false;
-  const a = Buffer.from(password);
-  const b = Buffer.from(admin);
+  // timingSafeEqual requires equal-length buffers. Hashing both inputs first
+  // preserves a fixed comparison length without exposing the password length.
+  const a = crypto.createHash("sha256").update(password, "utf8").digest();
+  const b = crypto.createHash("sha256").update(admin, "utf8").digest();
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
@@ -44,12 +46,19 @@ export async function login(password: string, options: { secure?: boolean; ip?: 
   const now = Date.now();
   const existing = getLoginAttempt(ip);
   const globalExisting = getLoginAttempt(GLOBAL_LOGIN_KEY);
-  const blockedUntil = Math.max(existing?.blocked_until ?? 0, globalExisting?.blocked_until ?? 0);
-  if (blockedUntil > now) {
-    return { ok: false, blocked: true, retryAfter: Math.ceil((blockedUntil - now) / 1000) };
+  const ipBlockedUntil = existing?.blocked_until ?? 0;
+  if (ipBlockedUntil > now) {
+    return { ok: false, blocked: true, retryAfter: Math.ceil((ipBlockedUntil - now) / 1000) };
   }
 
-  if (!verifyPassword(password)) {
+  const passwordMatches = verifyPassword(password);
+  const globalBlockedUntil = globalExisting?.blocked_until ?? 0;
+  if (!passwordMatches) {
+    // The account-wide guard blocks distributed guessing, but an attacker must
+    // not be able to use it to reject the administrator's correct password.
+    if (globalBlockedUntil > now) {
+      return { ok: false, blocked: true, retryAfter: Math.ceil((globalBlockedUntil - now) / 1000) };
+    }
     const failure = recordLoginFailure(ip, {
       now,
       windowMs: LOGIN_WINDOW_MS,
@@ -70,7 +79,7 @@ export async function login(password: string, options: { secure?: boolean; ip?: 
 
   clearLoginAttempt(ip);
   clearLoginAttempt(GLOBAL_LOGIN_KEY);
-  deleteExpiredSessions();
+  cleanupExpiredAuthState(now);
   const token = crypto.randomBytes(32).toString("hex");
   createSession(token, Date.now() + SESSION_TTL_MS);
   const store = await cookies();

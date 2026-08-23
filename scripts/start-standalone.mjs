@@ -20,13 +20,21 @@ function loadEnvFile(filePath) {
   }
 }
 
+function restrictFilePermissions(filePath) {
+  if (fs.existsSync(filePath)) fs.chmodSync(filePath, 0o600);
+}
+
 // 不能依赖 PM2 的 exec cwd：旧进程可能把 cwd 留在 .next/standalone，
 // 这样会让相对数据库、上传目录和环境文件指向错误位置。
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
 if (!process.env.BLOG_ROOT) process.env.BLOG_ROOT = root;
-loadEnvFile(path.join(root, ".env.local"));
-loadEnvFile(path.join(root, ".env"));
+const localEnv = path.join(root, ".env.local");
+const fallbackEnv = path.join(root, ".env");
+restrictFilePermissions(localEnv);
+restrictFilePermissions(fallbackEnv);
+loadEnvFile(localEnv);
+loadEnvFile(fallbackEnv);
 if (!process.env.PORT) process.env.PORT = "3030";
 if (!process.env.HOSTNAME) process.env.HOSTNAME = "0.0.0.0";
 
@@ -35,7 +43,11 @@ if (!process.env.HOSTNAME) process.env.HOSTNAME = "0.0.0.0";
 if (!process.env.BLOG_DB_PATH) process.env.BLOG_DB_PATH = path.join(root, "data", "blog.db");
 // 上传文件只存到项目根 data/uploads（与 blog.db 同目录持久化），由 /uploads route 实时提供。
 // 不写入 public 或 standalone，避免多个目录造成数据分叉。
-fs.mkdirSync(path.join(root, "data", "uploads"), { recursive: true });
+const dataDir = path.join(root, "data");
+const uploadDir = path.join(dataDir, "uploads");
+fs.mkdirSync(uploadDir, { recursive: true, mode: 0o700 });
+fs.chmodSync(dataDir, 0o700);
+fs.chmodSync(uploadDir, 0o700);
 
 // 维护只在真正启动服务时执行，避免 next build 加载数据库模块时修改生产数据。
 await import("./maintain-db.mjs");

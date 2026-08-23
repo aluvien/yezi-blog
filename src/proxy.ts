@@ -1,16 +1,52 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { productionContentSecurityPolicy } from "@/lib/csp";
+
+type ProxySecurityContext = {
+  nonce?: string;
+  requestHeaders?: Headers;
+};
+
+function createSecurityContext(request: NextRequest): ProxySecurityContext {
+  if (process.env.NODE_ENV !== "production") return {};
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const policy = productionContentSecurityPolicy(nonce);
+  const requestHeaders = new Headers(request.headers);
+  // Next reads the request CSP while rendering and applies this nonce to its
+  // framework scripts. The explicit x-nonce is for our theme bootstrap below.
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", policy);
+  return { nonce, requestHeaders };
+}
+
+function applySecurityHeaders(response: NextResponse, security: ProxySecurityContext): NextResponse {
+  if (security.nonce) {
+    response.headers.set("Content-Security-Policy", productionContentSecurityPolicy(security.nonce));
+  }
+  return response;
+}
+
+function nextResponse(security: ProxySecurityContext): NextResponse {
+  return applySecurityHeaders(
+    NextResponse.next(security.requestHeaders ? { request: { headers: security.requestHeaders } } : undefined),
+    security,
+  );
+}
 
 // 第一层保护：仅检查 session cookie 是否存在（proxy 环境无法访问 sqlite）。
 // 真正的会话校验在后台布局、Server Actions 和 route handler 内通过数据库完成。
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const security = createSecurityContext(request);
 
   // 对外隐藏 Next 图片优化器的内部路径；参数和响应仍由 /_next/image 处理。
   if (pathname === "/image") {
     const target = request.nextUrl.clone();
     target.pathname = "/_next/image";
-    return NextResponse.rewrite(target);
+    return applySecurityHeaders(
+      NextResponse.rewrite(target, security.requestHeaders ? { request: { headers: security.requestHeaders } } : undefined),
+      security,
+    );
   }
 
   // Next 在动态 catch-all 路由解析前可能无法处理非法百分号编码；提前返回 404，
@@ -19,34 +55,29 @@ export function proxy(request: NextRequest) {
     try {
       decodeURIComponent(pathname);
     } catch {
-      return new NextResponse("Not Found", { status: 404 });
+      return applySecurityHeaders(new NextResponse("Not Found", { status: 404 }), security);
     }
-    return NextResponse.next();
+    return nextResponse(security);
   }
 
-  // 登录页与登录 API 放行
-  if (pathname === "/admin/login" || pathname === "/api/admin/login") {
-    return NextResponse.next();
-  }
+  const isLoginRoute = pathname === "/admin/login" || pathname === "/api/admin/login";
+  const isNativeAdminApi = pathname === "/api/admin/v1" || pathname.startsWith("/api/admin/v1/");
+  const needsCookiePresenceCheck = !isLoginRoute && !isNativeAdminApi
+    && (pathname.startsWith("/admin/") || pathname.startsWith("/api/admin/"));
 
-  // 原生 App 管理 API 必须由 Route Handler 统一返回 REST JSON envelope；
-  // 具体会话校验由 requireAdminApi() 完成，不能在 proxy 层提前返回旧格式。
-  if (pathname === "/api/admin/v1" || pathname.startsWith("/api/admin/v1/")) {
-    return NextResponse.next();
-  }
-
-  const token = request.cookies.get("admin_session")?.value;
-  if (!token) {
+  if (needsCookiePresenceCheck && !request.cookies.get("admin_session")?.value) {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "未登录" }, { status: 401 });
+      return applySecurityHeaders(NextResponse.json({ error: "未登录" }, { status: 401 }), security);
     }
     const loginUrl = new URL("/admin/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    return applySecurityHeaders(NextResponse.redirect(loginUrl), security);
   }
 
-  return NextResponse.next();
+  return nextResponse(security);
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*", "/uploads/:path*", "/image"],
+  // CSP nonce must be attached before every rendered route. Static assets do
+  // not render HTML and are intentionally excluded from this work.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|fonts/|pwa-icon/|manifest.webmanifest|sitemap.xml|rss.xml).*)"],
 };

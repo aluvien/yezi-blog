@@ -3,6 +3,8 @@ import { db, now } from "./core";
 import { hashIp } from "@/lib/ip-hash";
 import type { Session, LoginAttempt } from "./types";
 
+const LOGIN_ATTEMPT_RETENTION_MS = 24 * 60 * 60 * 1000;
+
 function hashSessionToken(token: string): string {
   return hashIp(token);
 }
@@ -31,8 +33,21 @@ export function deleteSession(token: string): void {
   db.prepare("DELETE FROM sessions WHERE id IN (?, ?)").run(token, hashSessionToken(token));
 }
 
-export function deleteExpiredSessions(): void {
-  db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
+export function deleteExpiredSessions(referenceTime = Date.now()): void {
+  db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(referenceTime);
+}
+
+/** Login failures are transient abuse-control state, not an activity archive. */
+export function deleteExpiredLoginAttempts(referenceTime = Date.now()): void {
+  db.prepare("DELETE FROM login_attempts WHERE first_failed_at < ?").run(referenceTime - LOGIN_ATTEMPT_RETENTION_MS);
+}
+
+/** Safe to run at startup, before a backup, and after a successful login. */
+export function cleanupExpiredAuthState(referenceTime = Date.now()): void {
+  db.transaction(() => {
+    deleteExpiredSessions(referenceTime);
+    deleteExpiredLoginAttempts(referenceTime);
+  })();
 }
 
 // ---------- login protection ----------

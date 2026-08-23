@@ -22,6 +22,7 @@ const {
   searchMoments,
   ensureFtsIndexes,
   rebuildFtsIndexes,
+  SEARCH_CANDIDATE_LIMIT,
 } = await import("../src/lib/db.ts");
 
 test.after(() => {
@@ -73,6 +74,18 @@ test("empty or whitespace query returns no results", () => {
   assert.deepEqual(searchPosts(""), []);
   assert.deepEqual(searchPosts("   "), []);
   assert.deepEqual(searchMoments(""), []);
+});
+
+test("search bounds both FTS candidates and short-query fallback scans", () => {
+  for (let index = 0; index < SEARCH_CANDIDATE_LIMIT + 12; index += 1) {
+    createPost({
+      title: `候选限制 ${index}`,
+      content: "ab shared-search-candidate",
+      status: "published",
+    });
+  }
+  assert.equal(searchPosts("shared-search-candidate").length, SEARCH_CANDIDATE_LIMIT);
+  assert.equal(searchPosts("ab").length, SEARCH_CANDIDATE_LIMIT);
 });
 
 test("FTS stays in sync on update and delete", () => {

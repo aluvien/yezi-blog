@@ -68,7 +68,7 @@ const child = spawn(process.execPath, [path.join(root, "scripts", "start-standal
     NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${port}`,
     ADMIN_PASSWORD: "production-smoke-password",
     SESSION_COOKIE_SECURE: "false",
-    TRUST_PROXY: "false",
+    TRUST_PROXY: "true",
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -85,12 +85,33 @@ try {
   const page = await waitForResponse(`${baseUrl}/`, () => output.join(""));
   const csp = page.headers.get("content-security-policy") || "";
   if (!csp.includes("default-src 'self'")) throw new Error("standalone 响应缺少生产 CSP");
+  if (csp.includes("script-src 'self' 'unsafe-inline'")) throw new Error("生产 CSP 仍允许任意内联脚本");
+  const nonce = csp.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
+  if (!nonce) throw new Error("生产 CSP 缺少 per-request nonce");
+  const pageHtml = await page.text();
+  if (!pageHtml.includes(`nonce=\"${nonce}\"`)) throw new Error("页面主题脚本或框架脚本未携带 CSP nonce");
 
   const api = await waitForResponse(`${baseUrl}/api/v1/search?q=standalone-smoke`, () => output.join(""));
   const body = await api.json();
   if (!body || typeof body !== "object" || !Array.isArray(body.data) || !body.meta) {
     throw new Error("standalone 搜索接口返回格式异常");
   }
+
+  // 分布式失败触发账户级保护后，正确密码仍必须能登录；否则任何访客都能把
+  // 管理员锁在门外。每次使用不同可信代理 IP，避免先触发单 IP 保护。
+  for (let index = 0; index < 25; index += 1) {
+    await fetch(`${baseUrl}/api/admin/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-real-ip": `198.51.100.${index + 1}` },
+      body: JSON.stringify({ password: "wrong-password" }),
+    });
+  }
+  const validLogin = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-real-ip": "198.51.100.201" },
+    body: JSON.stringify({ password: "production-smoke-password" }),
+  });
+  if (!validLogin.ok) throw new Error("全局登录保护错误地拒绝了正确密码");
 
   const discovery = await waitForResponse(`${baseUrl}/api/v1`, () => output.join(""));
   const discoveryBody = await discovery.json();

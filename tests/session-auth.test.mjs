@@ -11,6 +11,7 @@ process.env.BLOG_ROOT = tmpDir;
 const {
   db,
   createSession,
+  cleanupExpiredAuthState,
   deleteExpiredSessions,
   deleteSession,
   getLoginAttempt,
@@ -53,4 +54,12 @@ test("login failure counters block both a client and the account-wide key", () =
     recordLoginFailure("__admin_account__", { now, windowMs: 60_000, maxAttempts: 25, blockMs: 60_000 });
   }
   assert.ok((getLoginAttempt("__admin_account__")?.blocked_until ?? 0) > now);
+});
+
+test("auth-state cleanup removes old login failures along with expired sessions", () => {
+  const now = Date.now();
+  const staleKey = "203.0.113.44";
+  recordLoginFailure(staleKey, { now: now - 25 * 60 * 60 * 1000, windowMs: 60_000, maxAttempts: 5, blockMs: 60_000 });
+  cleanupExpiredAuthState(now);
+  assert.equal(getLoginAttempt(staleKey), undefined);
 });

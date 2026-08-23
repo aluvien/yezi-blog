@@ -8,7 +8,7 @@ const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-db-performance-"));
 process.env.BLOG_ROOT = tempRoot;
 process.env.BLOG_DB_PATH = path.join(tempRoot, "data", "blog.db");
 
-const { db, listPostsByCategory, listPostsByTag, searchPosts } = await import("../src/lib/db.ts");
+const { db, listPostsByCategory, listPostsByTag, searchPosts, SEARCH_CANDIDATE_LIMIT } = await import("../src/lib/db.ts");
 const SAMPLE_SIZE = 5_000;
 
 test.after(() => {
@@ -61,6 +61,6 @@ test("database query-plan and timing baseline uses FTS and selective tag/categor
   const search = measure(() => searchPosts("rarebenchmarktoken"));
   assert.equal(tag.count, SAMPLE_SIZE / 10);
   assert.equal(category.count, SAMPLE_SIZE / 5);
-  assert.equal(search.count, SAMPLE_SIZE / 10);
+  assert.equal(search.count, SEARCH_CANDIDATE_LIMIT, "公开搜索必须限制宽泛 FTS 命中的候选量");
   context.diagnostic(JSON.stringify({ sampleSize: SAMPLE_SIZE, tag, category, search }));
 });

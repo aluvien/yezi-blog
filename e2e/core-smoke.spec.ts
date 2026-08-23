@@ -167,7 +167,8 @@ test.describe.serial("core editorial smoke flows", () => {
     await login(page);
     await page.goto("/admin/posts");
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "删除" }).click();
+    const postCard = page.locator("li").filter({ has: page.getByLabel(`编辑文章：${title}`) });
+    await postCard.getByRole("button", { name: "删除" }).click();
     await expect(page.getByLabel(`编辑文章：${title}`)).toHaveCount(0);
     await page.goto(`/posts/${slug}`);
     await expect(page.getByText("404")).toBeVisible();

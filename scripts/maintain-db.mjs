@@ -4,6 +4,12 @@ import Database from "better-sqlite3";
 
 const root = process.cwd();
 const dbPath = path.resolve(process.env.BLOG_DB_PATH || path.join(root, "data", "blog.db"));
+function secureDatabaseFiles() {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    const file = `${dbPath}${suffix}`;
+    if (fs.existsSync(file)) fs.chmodSync(file, 0o600);
+  }
+}
 if (fs.existsSync(dbPath)) {
   const db = new Database(dbPath, { timeout: 5000 });
   try {
@@ -30,5 +36,6 @@ if (fs.existsSync(dbPath)) {
     console.warn(`[db-maintenance] ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     db.close();
+    secureDatabaseFiles();
   }
 }
