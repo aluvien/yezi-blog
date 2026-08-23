@@ -150,13 +150,13 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   function insertMusicBlock(spec: string) {
     const range = dialogRangeRef.current ?? getEditingRange();
     dialogRangeRef.current = null;
-    replaceTextAtRange(`\n\`\`\`music\n${spec}\n\`\`\`\n`, range);
+    replaceTextAtRange(`\n\n!music ${spec}\n\n`, range);
   }
 
   function insertVideoBlock(spec: string) {
     const range = dialogRangeRef.current ?? getEditingRange();
     dialogRangeRef.current = null;
-    replaceTextAtRange(`\n\`\`\`video\n${spec}\n\`\`\`\n`, range);
+    replaceTextAtRange(`\n\n!video ${spec}\n\n`, range);
   }
 
   function insertReferenceMarker(marker: string) {

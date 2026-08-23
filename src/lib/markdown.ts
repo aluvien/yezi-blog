@@ -6,7 +6,7 @@ import {
   expandArticleReferenceMarkers,
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
-import { musicContainerHtml, parseMusicBlock } from "@/lib/music";
+import { musicContainerHtml, parseMusicBlock, parseMusicSpec } from "@/lib/music";
 import { parseVideoBlock, videoContainerHtml } from "@/lib/video";
 
 // 输出端白名单兜底：即使 renderer 层出现回归，也不放行任意标签/属性。
@@ -90,6 +90,25 @@ function renderMarkdownImage(src: string, alt: string, titleAttribute: string): 
 }
 
 /**
+ * 文章和想法共用独占行短代码。文章继续兼容旧的 fenced code block：
+ *
+ *   !music qqvip:002eDlpu4U223F:song
+ *   !video https://www.bilibili.com/video/BV13JMi6yE4p
+ */
+function renderEmbedShortcode(text: string): string | null {
+  const match = text.trim().match(/^!(music|video)\s+(.+?)\s*$/i);
+  if (!match) return null;
+
+  if (match[1].toLowerCase() === "music") {
+    const spec = parseMusicSpec(match[2]);
+    return spec ? musicContainerHtml(spec) : null;
+  }
+
+  const spec = parseVideoBlock(match[2])[0];
+  return spec ? videoContainerHtml(spec) : null;
+}
+
+/**
  * 渲染文章 markdown 为 HTML。
  * h2/h3 会自动添加 id 属性用于 TOC 锚点。
  */
@@ -135,6 +154,10 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
   // !reference:... 会先展开成 reference 代码块，使用正文内置的元数据卡片；不会在前台请求第三方网页。
   // 非 music/video 语言走 marked 默认渲染，保持原有代码块样式不变。
   const defaultCode = renderer.code.bind(renderer);
+  const defaultParagraph = renderer.paragraph.bind(renderer);
+  renderer.paragraph = function (token: Tokens.Paragraph) {
+    return renderEmbedShortcode(token.text) ?? defaultParagraph(token);
+  };
   renderer.code = function (token: Tokens.Code) {
     const language = token.lang?.trim().toLowerCase() ?? "";
     if (language === "music" || language === "qqvip") {
@@ -178,6 +201,7 @@ export function extractHeadings(content: string): TocHeading[] {
 export function stripMarkdown(content: string, maxLength = 100): string {
   let text = content
     .replace(/^[ \t]*!reference(?::|[ \t]+)\S+[ \t]*$/gm, " ")
+    .replace(/^[ \t]*!(?:music|video)\s+.+?[ \t]*$/gmi, " ")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")

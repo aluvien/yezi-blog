@@ -104,13 +104,13 @@ export default function AboutPageForm({ initialValue }: { initialValue: string }
   function insertMusicBlock(spec: string): void {
     const range = dialogRangeRef.current ?? getEditingRange();
     dialogRangeRef.current = null;
-    replaceTextAtRange(`\n\`\`\`music\n${spec}\n\`\`\`\n`, range);
+    replaceTextAtRange(`\n\n!music ${spec}\n\n`, range);
   }
 
   function insertVideoBlock(spec: string): void {
     const range = dialogRangeRef.current ?? getEditingRange();
     dialogRangeRef.current = null;
-    replaceTextAtRange(`\n\`\`\`video\n${spec}\n\`\`\`\n`, range);
+    replaceTextAtRange(`\n\n!video ${spec}\n\n`, range);
   }
 
   function openMarkdownDialog(kind: "link" | "image"): void {

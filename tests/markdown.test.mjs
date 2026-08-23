@@ -62,3 +62,27 @@ test("music block renders a container card", () => {
   assert.ok(html.includes("qqvip"));
   assert.ok(!html.includes("<pre>"));
 });
+
+test("article media shortcodes render music and supported video embeds", () => {
+  const html = renderMarkdown([
+    "正文前。",
+    "",
+    "!music qqvip:abc123:song",
+    "",
+    "!video https://www.bilibili.com/video/BV13JMi6yE4p?p=2",
+    "",
+    "正文后。",
+  ].join("\n"));
+  assert.ok(html.includes('data-server="qqvip"'));
+  assert.ok(html.includes('data-video-platform="bilibili"'));
+  assert.ok(html.includes("bvid=BV13JMi6yE4p"));
+  assert.ok(html.includes("page=2"));
+  assert.ok(!html.includes("!music"));
+  assert.ok(!html.includes("!video"));
+});
+
+test("invalid media shortcodes remain plain text", () => {
+  const html = renderMarkdown("!video https://evil.example/embed");
+  assert.ok(html.includes("!video"));
+  assert.ok(!html.includes("<iframe"));
+});
