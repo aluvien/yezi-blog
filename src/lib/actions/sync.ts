@@ -117,12 +117,17 @@ function invalidateGithubVersionCache(): void {
 
 async function findPm2Name(projectDir: string): Promise<string | null> {
   const configuredName = process.env.DEPLOY_PM2_NAME?.trim();
-  const result = await runCommand("pm2", ["jlist"], projectDir, 15_000, deploymentEnv());
-  const processes = JSON.parse(result.stdout) as Pm2Process[];
-  if (configuredName) return processes.some((item) => item.name === configuredName) ? configuredName : null;
-  const expectedDir = path.resolve(projectDir);
-  const match = processes.find((item) => item.name && item.pm2_env?.pm_cwd && path.resolve(item.pm2_env.pm_cwd) === expectedDir);
-  return match?.name ?? null;
+  try {
+    const result = await runCommand("pm2", ["jlist"], projectDir, 15_000, deploymentEnv());
+    const processes = JSON.parse(result.stdout) as Pm2Process[];
+    if (configuredName) return processes.some((item) => item.name === configuredName) ? configuredName : null;
+    const expectedDir = path.resolve(projectDir);
+    const match = processes.find((item) => item.name && item.pm2_env?.pm_cwd && path.resolve(item.pm2_env.pm_cwd) === expectedDir);
+    return match?.name ?? null;
+  } catch {
+    // 某些既有部署由 systemd/nohup 直接运行 Next，未安装 PM2 不是同步失败。
+    return null;
+  }
 }
 
 /** 在服务端直接拉取 GitHub main 并部署，不再依赖外部 hook。 */
@@ -133,7 +138,6 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
     const projectDir = deploymentProjectDir();
     if (!fs.existsSync(path.join(projectDir, "package.json"))) return { ok: false, error: `部署目录无效：${projectDir}` };
     const processName = await findPm2Name(projectDir);
-    if (!processName) return { ok: false, error: "未找到受当前 PM2 管理的目标进程；在线目录未做任何修改" };
     const envFile = path.resolve(process.env.BLOG_ENV_FILE?.trim() || path.join(projectDir, ".env.local"));
     if (!fs.existsSync(envFile)) return { ok: false, error: `缺少稳定外部环境文件：${envFile}` };
     if ((fs.statSync(envFile).mode & 0o077) !== 0) return { ok: false, error: "外部环境文件权限必须为 0600" };
@@ -152,7 +156,7 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
       env: {
         ...deploymentEnv(),
         DEPLOY_PROJECT_DIR: projectDir,
-        DEPLOY_PM2_NAME: processName,
+        ...(processName ? { DEPLOY_PM2_NAME: processName, DEPLOY_RESTART_MODE: "pm2" } : { DEPLOY_RESTART_MODE: "direct" }),
         DEPLOY_STATUS_FILE: statusFile,
         BLOG_ENV_FILE: envFile,
       },
@@ -160,7 +164,9 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
     child.unref();
     return {
       ok: true,
-      message: "已启动独立 release 部署任务；构建、切换、健康检查与失败回滚将在服务器端完成。",
+      message: processName
+        ? "已启动独立 release 部署任务；构建、切换、健康检查与失败回滚将在服务器端完成。"
+        : "已启动独立 release 部署任务；将替换 3030 端口上的旧 Next 进程并完成健康检查。",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "同步或部署异常";

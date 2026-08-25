@@ -10,6 +10,7 @@ const databasePath = path.resolve(process.env.BLOG_DB_PATH || path.join(stateRoo
 const releasesRoot = path.resolve(process.env.DEPLOY_RELEASES_DIR || path.join(path.dirname(sourceRoot), "yezi-blog-releases"));
 const currentLink = path.resolve(process.env.DEPLOY_CURRENT_LINK || path.join(path.dirname(sourceRoot), "yezi-blog-current"));
 const processName = process.env.DEPLOY_PM2_NAME?.trim() || "yezi-blog";
+const restartMode = process.env.DEPLOY_RESTART_MODE === "direct" ? "direct" : "pm2";
 const envFile = path.resolve(process.env.BLOG_ENV_FILE?.trim() || path.join(sourceRoot, ".env.local"));
 const statusFile = path.resolve(process.env.DEPLOY_STATUS_FILE || path.join(stateRoot, "data", "deploy-status.json"));
 const lockFile = path.join(releasesRoot, ".deploy.lock");
@@ -146,6 +147,52 @@ async function verifyPm2Ownership() {
   if (!processEntry) throw new Error(`PM2 中不存在进程 ${processName}`);
 }
 
+async function portIsListening(port) {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port });
+    socket.once("connect", () => { socket.destroy(); resolve(true); });
+    socket.once("error", () => resolve(false));
+  });
+}
+
+/** Direct/nohup deployments have no supervisor. Only target the configured HTTP port. */
+async function stopDirectServer() {
+  const port = Number.parseInt(new URL(finalHealthUrl).port || "80", 10);
+  const result = await run("ss", ["-ltnp", `sport = :${port}`], sourceRoot, 15_000).catch(() => ({ stdout: "" }));
+  const pids = [...new Set([...result.stdout.matchAll(/pid=(\d+)/g)].map((match) => Number(match[1])).filter((pid) => pid > 1 && pid !== process.pid))];
+  for (const pid of pids) {
+    try { process.kill(pid, "SIGTERM"); } catch { /* Process may already be gone. */ }
+  }
+  for (let attempt = 0; attempt < 30 && await portIsListening(port); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (await portIsListening(port)) {
+    for (const pid of pids) {
+      try { process.kill(pid, "SIGKILL"); } catch { /* Process may already be gone. */ }
+    }
+  }
+}
+
+async function startDirectServer(target, env) {
+  const child = (await import("node:child_process")).spawn(process.execPath, [path.join(target, "scripts", "start-standalone.mjs")], {
+    cwd: target,
+    detached: true,
+    stdio: "ignore",
+    env,
+  });
+  child.unref();
+}
+
+async function restartRelease(target, env) {
+  if (restartMode === "pm2") {
+    await run("pm2", ["stop", processName], sourceRoot, 30_000).catch(() => undefined);
+    await run("pm2", ["startOrReload", path.join(target, "ecosystem.config.js"), "--only", processName, "--update-env"], target, 30_000, env);
+    return;
+  }
+  await stopDirectServer();
+  await startDirectServer(target, env);
+}
+
 async function cleanupReleases(activeTargets) {
   const directories = fs.readdirSync(releasesRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && /^[0-9a-f]{40}$/i.test(entry.name))
@@ -168,7 +215,7 @@ try {
   if (!fs.existsSync(databasePath)) throw new Error(`数据库不存在：${databasePath}`);
   fs.mkdirSync(releasesRoot, { recursive: true, mode: 0o700 });
   lockFd = fs.openSync(lockFile, "wx", 0o600);
-  await verifyPm2Ownership();
+  if (restartMode === "pm2") await verifyPm2Ownership();
 
   writeStatus("building");
   await run("git", ["fetch", "--prune", "origin", "main"], sourceRoot, 120_000);
@@ -193,7 +240,6 @@ try {
 
   previousTarget = fs.existsSync(currentLink) ? fs.realpathSync(currentLink) : sourceRoot;
   writeStatus("switching", { commit: revision.slice(0, 7) });
-  await run("pm2", ["stop", processName], sourceRoot, 30_000);
   const backupDirectory = path.join(stateRoot, "data", "backups");
   fs.mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
   const beforeBackups = new Set(fs.readdirSync(backupDirectory));
@@ -202,7 +248,7 @@ try {
 
   switchCurrent(release);
   switched = true;
-  await run("pm2", ["startOrReload", path.join(currentLink, "ecosystem.config.js"), "--only", processName, "--update-env"], currentLink, 30_000, {
+  await restartRelease(currentLink, {
     ...releaseEnv,
     BLOG_BUILD_READONLY: "false",
   });
@@ -215,10 +261,9 @@ try {
   if (switched && databaseSnapshot) {
     writeStatus("rolling_back", { error: detail });
     try {
-      await run("pm2", ["stop", processName], sourceRoot, 30_000).catch(() => undefined);
       switchCurrent(previousTarget);
       restoreDatabase(databaseSnapshot);
-      await run("pm2", ["startOrReload", path.join(previousTarget, "ecosystem.config.js"), "--only", processName, "--update-env"], previousTarget, 30_000, {
+      await restartRelease(previousTarget, {
         ...process.env,
         ...stableEnvironment,
         BLOG_ROOT: stateRoot,
