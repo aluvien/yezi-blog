@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, LATEST_DB_SCHEMA_VERSION } from "@/lib/db";
+import { deployedBuildCommit } from "@/lib/deploy-build";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export function GET() {
     db.prepare("SELECT count(*) AS count FROM fts_posts").get();
     return NextResponse.json({
       status: "ok",
-      commit: process.env.DEPLOY_BUILD_COMMIT || "development",
+      commit: deployedBuildCommit(),
       schemaVersion,
       supportedSchemaVersion: LATEST_DB_SCHEMA_VERSION,
     }, { headers: { "cache-control": "no-store" } });

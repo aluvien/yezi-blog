@@ -70,13 +70,13 @@ async function reservePort() {
   return address.port;
 }
 
-async function verifyHttp(baseUrl, commit, attempts = 80) {
+async function verifyHttp(baseUrl, commit, attempts = 80, requireCommit = true) {
   let lastError = "尚未监听";
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const health = await fetch(baseUrl, { cache: "no-store", signal: AbortSignal.timeout(1_500) });
       const payload = await health.json();
-      if (!health.ok || payload?.status !== "ok" || payload?.commit !== commit) {
+      if (!health.ok || payload?.status !== "ok" || (requireCommit && payload?.commit !== commit)) {
         const actualCommit = typeof payload?.commit === "string" ? `（实际 ${payload.commit.slice(0, 12)}）` : "";
         throw new Error(`health ${health.status}${actualCommit}`);
       }
@@ -84,7 +84,7 @@ async function verifyHttp(baseUrl, commit, attempts = 80) {
       const home = await fetch(`${origin}/`, { cache: "no-store", signal: AbortSignal.timeout(2_000) });
       const csp = home.headers.get("content-security-policy") || "";
       const html = await home.text();
-      if (!home.ok || !csp.includes("nonce-") || !html.includes(commit.slice(0, 7))) throw new Error("首页/build commit 校验失败");
+      if (!home.ok || !csp.includes("nonce-") || (requireCommit && !html.includes(commit.slice(0, 7)))) throw new Error("首页/build commit 校验失败");
       const chunkPath = html.match(/\/_next\/static\/chunks\/[^"']+\.js/)?.[0];
       if (!chunkPath) throw new Error("首页没有可验证的 JS chunk");
       const chunk = await fetch(`${origin}${chunkPath}`, { signal: AbortSignal.timeout(2_000) });
@@ -106,7 +106,7 @@ async function smokeRelease(release, commit, env) {
     stdio: "ignore",
   });
   try {
-    await verifyHttp(`http://127.0.0.1:${port}/api/health/deploy`, commit, 60);
+    await verifyHttp(`http://127.0.0.1:${port}/api/health/deploy`, commit, 60, false);
   } finally {
     if (child.exitCode === null) child.kill("SIGTERM");
     await Promise.race([once(child, "exit"), new Promise((resolve) => setTimeout(resolve, 5_000))]);
@@ -141,6 +141,28 @@ function restoreDatabase(snapshot) {
   fs.rmSync(`${databasePath}-wal`, { force: true });
   fs.rmSync(`${databasePath}-shm`, { force: true });
   fs.renameSync(temporary, databasePath);
+}
+
+const commitMarkerPath = path.join(stateRoot, "data", "deploy-commit");
+
+function readCommitMarker() {
+  try { return fs.readFileSync(commitMarkerPath, "utf8"); } catch { return null; }
+}
+
+function writeCommitMarker(commit) {
+  const temporary = `${commitMarkerPath}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, `${commit}\n`, { mode: 0o600 });
+  fs.renameSync(temporary, commitMarkerPath);
+  fs.chmodSync(commitMarkerPath, 0o600);
+}
+
+function restoreCommitMarker(previous) {
+  if (previous === null) {
+    fs.rmSync(commitMarkerPath, { force: true });
+    return;
+  }
+  fs.writeFileSync(commitMarkerPath, previous, { mode: 0o600 });
+  fs.chmodSync(commitMarkerPath, 0o600);
 }
 
 async function verifyPm2Ownership() {
@@ -215,6 +237,7 @@ let previousTarget = sourceRoot;
 let databaseSnapshot = "";
 let switched = false;
 let stableEnvironment = {};
+let previousCommitMarker = null;
 try {
   if (!fs.existsSync(envFile)) throw new Error(`缺少稳定外部环境文件：${envFile}`);
   if ((fs.statSync(envFile).mode & 0o077) !== 0) throw new Error(`外部环境文件权限必须为 0600：${envFile}`);
@@ -255,6 +278,8 @@ try {
 
   switchCurrent(release);
   switched = true;
+  previousCommitMarker = readCommitMarker();
+  writeCommitMarker(revision);
   await restartRelease(currentLink, {
     ...releaseEnv,
     BLOG_BUILD_READONLY: "false",
@@ -270,6 +295,7 @@ try {
     try {
       switchCurrent(previousTarget);
       restoreDatabase(databaseSnapshot);
+      restoreCommitMarker(previousCommitMarker);
       await restartRelease(previousTarget, {
         ...process.env,
         ...stableEnvironment,
