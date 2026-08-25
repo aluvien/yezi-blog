@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createQQMusicSpec, parseMusicSpec } from "../src/lib/music.ts";
+import { createQQMusicSpec, normalizeMusicDisplayText, parseMusicSpec } from "../src/lib/music.ts";
 import { normalizeQQSearchTracks } from "../src/lib/qq-music-api.ts";
 
 test("QQ search accepts a top-level albummid and builds its cover URL", () => {
@@ -44,4 +44,10 @@ test("QQ search music spec keeps a safe display snapshot for player fallback", (
     cover: "https://y.gtimg.cn/music/photo_new/T002R300x300M000001UAAKE4QJguW.jpg",
   });
   assert.equal(createQQMusicSpec("002u1lkd1zb2Ie"), "qqvip:002u1lkd1zb2Ie:song");
+});
+
+test("legacy player labels are constrained to plain text before reaching APlayer", () => {
+  assert.equal(normalizeMusicDisplayText('<img onerror="alert(1)">歌名'), 'img onerror="alert(1)" 歌名');
+  assert.equal(normalizeMusicDisplayText("<style>body{display:none}</style>"), "style body{display:none} /style");
+  assert.equal(normalizeMusicDisplayText("\u0000\n 正常歌名 "), "正常歌名");
 });

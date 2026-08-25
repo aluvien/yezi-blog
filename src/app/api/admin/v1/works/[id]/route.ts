@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorizeAdminApi();
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const { id: rawId } = await params;
   const id = parseAdminId(rawId);
@@ -45,8 +45,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorizeAdminApi();
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const { id: rawId } = await params;
   const id = parseAdminId(rawId);

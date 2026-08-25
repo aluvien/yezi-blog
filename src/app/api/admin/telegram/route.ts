@@ -26,7 +26,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
+  if (!await requireAdminApi(request)) return noCache({ error: "未登录或请求来源无效" }, 401);
   let body: { op?: unknown };
   try {
     body = await readLimitedJson(request, 4 * 1024);

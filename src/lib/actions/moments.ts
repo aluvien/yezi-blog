@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createMoment, deleteMoment, getMoment, updateMoment } from "@/lib/db";
 import type { ActionResult } from "@/lib/actions/posts";
+import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
+import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
 
 const MAX_MOMENT_CONTENT_LENGTH = 20_000;
 
@@ -26,7 +28,7 @@ function normalizeMomentImages(value: unknown): string[] | null {
 export async function createMomentAction(data: { content: string; images: string[] }): Promise<ActionResult> {
   await requireAdmin();
   if (!data || typeof data.content !== "string") return { ok: false, error: "想法数据格式无效" };
-  const content = data.content.trim();
+  const content = normalizeMediaShortcodes(data.content.trim());
   if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "想法内容不能超过 2 万个字符" };
   const images = normalizeMomentImages(data.images);
   if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
@@ -35,6 +37,7 @@ export async function createMomentAction(data: { content: string; images: string
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
+  invalidateQQMusicAccessCache();
   return { ok: true, data: moment };
 }
 
@@ -45,7 +48,7 @@ export async function updateMomentAction(
   await requireAdmin();
   if (!Number.isInteger(id) || id < 1 || !data || typeof data.content !== "string") return { ok: false, error: "想法数据格式无效" };
   if (!getMoment(id)) return { ok: false, error: "想法不存在" };
-  const content = data.content.trim();
+  const content = normalizeMediaShortcodes(data.content.trim());
   if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "想法内容不能超过 2 万个字符" };
   const images = normalizeMomentImages(data.images);
   if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
@@ -54,6 +57,7 @@ export async function updateMomentAction(
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
+  invalidateQQMusicAccessCache();
   return { ok: true, data: moment };
 }
 
@@ -64,5 +68,6 @@ export async function deleteMomentAction(id: number): Promise<ActionResult> {
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
+  invalidateQQMusicAccessCache();
   return { ok: true, data: { id } };
 }

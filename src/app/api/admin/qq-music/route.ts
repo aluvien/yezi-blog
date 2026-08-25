@@ -56,7 +56,7 @@ async function status() {
 }
 
 export async function GET(request: Request) {
-  if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
+  if (!await requireAdminApi(request)) return noCache({ error: "未登录" }, 401);
   const url = new URL(request.url);
   const op = url.searchParams.get("op") ?? "status";
   try {
@@ -116,7 +116,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
+  if (!await requireAdminApi(request)) return noCache({ error: "未登录或请求来源无效" }, 401);
   let body: { op?: unknown; qrsig?: unknown; ptqrtoken?: unknown };
   try {
     body = await readLimitedJson(request, 8 * 1024);

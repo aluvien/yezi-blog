@@ -18,8 +18,8 @@ async function referenceId(params: Promise<{ id: string }>): Promise<number | nu
   return parseAdminId((await params).id);
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorizeAdminApi();
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const id = await referenceId(params);
   if (id === null) return adminError("INVALID_ID", "引用 ID 必须是正整数", 400);
@@ -33,7 +33,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorizeAdminApi();
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const id = await referenceId(params);
   if (id === null) return adminError("INVALID_ID", "引用 ID 必须是正整数", 400);
@@ -57,8 +57,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorizeAdminApi();
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const id = await referenceId(params);
   if (id === null) return adminError("INVALID_ID", "引用 ID 必须是正整数", 400);

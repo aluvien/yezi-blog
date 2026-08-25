@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { parseVideoSpec, VIDEO_PLATFORMS, type VideoPlatform } from "@/lib/video";
+import { isBilibiliShortUrl, parseVideoSpec, VIDEO_PLATFORMS, type VideoPlatform } from "@/lib/video";
 
 /** 视频插入对话框：接受 Bilibili/YouTube 链接或视频 ID，返回规范化规格。 */
 export function VideoInsertDialog({ onClose }: { onClose: (spec: string | null) => void }) {
@@ -12,7 +12,11 @@ export function VideoInsertDialog({ onClose }: { onClose: (spec: string | null) 
   function confirm() {
     const spec = parseVideoSpec(input, platform);
     if (!spec) {
-      setError(platform === "bilibili" ? "请输入有效的 Bilibili 视频链接、BV 号或 av 号" : "请输入有效的 YouTube 视频链接或 11 位视频 ID");
+      setError(platform === "bilibili"
+        ? isBilibiliShortUrl(input)
+          ? "暂不直接支持 b23.tv 短链，请在浏览器展开后粘贴 bilibili.com/video 完整链接"
+          : "请输入有效的 Bilibili 视频链接、BV 号或 av 号"
+        : "请输入有效的 YouTube 视频链接或 11 位视频 ID");
       return;
     }
     const serialized = `${spec.platform}:${spec.id}${spec.page && spec.page > 1 ? `:${spec.page}` : ""}`;

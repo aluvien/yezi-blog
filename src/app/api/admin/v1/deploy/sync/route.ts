@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 let syncInFlight = false;
 
 export async function POST(request: Request) {
-  const auth = await authorizeAdminApi();
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const invalidBody = await requireEmptyAdminJsonBody(request);
   if (invalidBody) return invalidBody;

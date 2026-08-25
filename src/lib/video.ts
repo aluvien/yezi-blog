@@ -25,6 +25,14 @@ const VIDEO_PLATFORM_SET = new Set<string>(VIDEO_PLATFORMS);
 const BILIBILI_ID_PATTERN = /^(?:BV[a-zA-Z0-9]+|av\d+)$/i;
 const YOUTUBE_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 
+export function isBilibiliShortUrl(input: string): boolean {
+  try {
+    return new URL(input.trim()).hostname.toLowerCase() === "b23.tv";
+  } catch {
+    return false;
+  }
+}
+
 function parseBilibiliInput(input: string): Pick<VideoSpec, "id" | "page"> | null {
   const direct = input.match(BILIBILI_ID_PATTERN);
   if (direct) return { id: direct[0] };
@@ -32,7 +40,11 @@ function parseBilibiliInput(input: string): Pick<VideoSpec, "id" | "page"> | nul
   try {
     const url = new URL(input);
     const hostname = url.hostname.toLowerCase();
-    if (hostname !== "bilibili.com" && !hostname.endsWith(".bilibili.com") && hostname !== "b23.tv") return null;
+    // b23.tv uses opaque redirect IDs. Public rendering never performs network
+    // expansion; the editor reports this as unsupported instead of silently
+    // saving a shortcode that later renders as plain text.
+    if (hostname === "b23.tv") return null;
+    if (hostname !== "bilibili.com" && !hostname.endsWith(".bilibili.com")) return null;
     const match = url.pathname.match(/\/video\/(BV[a-zA-Z0-9]+|av\d+)/i);
     if (!match) return null;
     const pageValue = Number.parseInt(url.searchParams.get("p") ?? "1", 10);

@@ -9,6 +9,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { MusicInsertDialog } from "./MusicInsertDialog";
 import { VideoInsertDialog } from "./VideoInsertDialog";
 import { MarkdownToolbar, STANDARD_MARKDOWN_TOOLS, type MarkdownTool } from "./MarkdownToolbar";
+import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 
 type TextRange = { start: number; end: number };
 
@@ -177,7 +178,7 @@ export default function AboutPageForm({ initialValue }: { initialValue: string }
       const form = new FormData();
       form.append("file", file);
       form.append("original", "false");
-      const response = await fetch("/api/admin/upload", { method: "POST", body: form });
+      const response = await fetch("/api/admin/upload", { method: "POST", headers: ADMIN_CSRF_HEADER, body: form });
       const data = await response.json().catch(() => ({})) as { attachment?: Attachment; error?: unknown };
       if (!response.ok || !data.attachment) throw new Error(typeof data.error === "string" ? data.error : "图片上传失败");
       setDialogAttachment(data.attachment);

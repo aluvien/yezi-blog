@@ -4,6 +4,7 @@ import { getCommentAvatar } from "@/lib/author";
 import { validateCommentInput } from "@/lib/comment-validation";
 import { getClientIp, readLimitedJson, RequestBodyError } from "@/lib/request";
 import { notifyNewComment } from "@/lib/telegram";
+import { validatePublicWriteRequest } from "@/lib/request-security";
 
 export type CommentResult = { data: unknown; status: number };
 
@@ -16,6 +17,8 @@ function commentTargetLabel(targetType: "post" | "moment", targetId: number): st
 }
 
 export async function submitComment(request: Request): Promise<CommentResult> {
+  const sourceRejection = validatePublicWriteRequest(request);
+  if (sourceRejection) return { data: { error: sourceRejection.message }, status: sourceRejection.status };
   let body: Record<string, unknown>;
   try {
     body = await readLimitedJson<Record<string, unknown>>(request, 16 * 1024);

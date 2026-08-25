@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 import {
   articleReferenceCoverSrc,
   encodeArticleReferenceMarker,
@@ -76,7 +77,7 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
     try {
       const response = await fetch("/api/admin/article-references/summarize", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...ADMIN_CSRF_HEADER },
         body: JSON.stringify({ url: target.url }),
       });
       const data = await response.json().catch(() => ({})) as SummaryResponse;
@@ -117,7 +118,7 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
     try {
       const response = await fetch("/api/admin/article-references/preview", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...ADMIN_CSRF_HEADER },
         body: JSON.stringify({ url: value, cacheReader, cacheImages }),
       });
       const data = await response.json().catch(() => ({})) as PreviewResponse;

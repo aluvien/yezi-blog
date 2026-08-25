@@ -8,7 +8,7 @@ import { createAttachment, getPost, type Attachment } from "@/lib/db";
 import { getUploadDir } from "@/lib/uploads";
 import { getClientIp, hashIp } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
-import { ALLOWED_UPLOAD_TYPES, hasSafeImageDimensions, hasValidUploadSignature, MAX_UPLOAD_SIZE } from "@/lib/upload-validation";
+import { ALLOWED_UPLOAD_TYPES, hasSafeImageDimensions, hasValidUploadSignature, MAX_UPLOAD_REQUEST_SIZE, MAX_UPLOAD_SIZE } from "@/lib/upload-validation";
 import { writeUploadWithRecord } from "@/lib/upload-storage";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ const UPLOAD_WINDOW_MS = 60 * 1000;
 const UPLOAD_MAX = 30;
 const allowUpload = createSlidingWindowLimiter({ windowMs: UPLOAD_WINDOW_MS, maxRequests: UPLOAD_MAX, maxKeys: 1_000 });
 export async function POST(request: Request) {
-  const session = await requireAdminApi();
+  const session = await requireAdminApi(request);
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const rateKey = hashIp(getClientIp(request));
   if (!allowUpload(rateKey)) {
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const declaredLength = Number(request.headers.get("content-length"));
   // 文件本体上限 20MB，另给 multipart 边界与字段留 1MB；先看 Content-Length，
   // 避免 request.formData() 在发现文件过大前就把整个请求缓冲进内存。
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_SIZE + 1024 * 1024) {
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_REQUEST_SIZE) {
     return NextResponse.json({ error: "上传请求不能超过 21MB" }, { status: 413 });
   }
 
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   if (!file) return NextResponse.json({ error: "缺少文件" }, { status: 400 });
   const ext = ALLOWED_UPLOAD_TYPES[file.type];
   if (!ext) return NextResponse.json({ error: "不支持的文件类型" }, { status: 400 });
-  if (file.size > MAX_UPLOAD_SIZE) return NextResponse.json({ error: "文件不能超过 20MB" }, { status: 400 });
+  if (file.size > MAX_UPLOAD_SIZE) return NextResponse.json({ error: "文件不能超过 20MB" }, { status: 413 });
 
   // 图片默认服务端精压(转 webp + resize 上限 1920 + 质量 80);勾选原图或 gif(保动画)或非图则保留原文件
   const shouldCompress = file.type.startsWith("image/") && file.type !== "image/gif" && !original;

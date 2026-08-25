@@ -37,6 +37,7 @@ export async function qqMusicRequest(pathname: string, options: {
   body?: unknown;
   /** QR login itself does not need the existing account session. */
   useSession?: boolean;
+  signal?: AbortSignal;
 } = {}): Promise<unknown> {
   const session = options.useSession === false ? null : getQQMusicSession();
   const response = await fetch(apiUrl(pathname, options.query), {
@@ -47,7 +48,9 @@ export async function qqMusicRequest(pathname: string, options: {
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     cache: "no-store",
-    signal: AbortSignal.timeout(12_000),
+    signal: options.signal
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(12_000)])
+      : AbortSignal.timeout(12_000),
   });
   const text = await response.text();
   let data: unknown = null;

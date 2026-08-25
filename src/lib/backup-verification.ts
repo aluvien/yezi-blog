@@ -26,6 +26,8 @@ export function verifyDatabaseBackup(inputPath: string): DatabaseBackupVerificat
     try {
       const integrity = database.pragma("integrity_check", { simple: true });
       if (integrity !== "ok") throw new Error("备份完整性校验失败");
+      const foreignKeyErrors = database.pragma("foreign_key_check") as unknown[];
+      if (foreignKeyErrors.length > 0) throw new Error("备份外键一致性校验失败");
 
       const placeholders = REQUIRED_TABLES.map(() => "?").join(",");
       const rows = database.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${placeholders})`).all(...REQUIRED_TABLES) as Array<{ name: string }>;
@@ -39,6 +41,10 @@ export function verifyDatabaseBackup(inputPath: string): DatabaseBackupVerificat
       };
     } finally {
       database.close();
+      // A readonly verification of a WAL-mode database may still create empty
+      // sidecars on some SQLite builds. They are not part of the backup artifact.
+      fs.rmSync(`${backupPath}-wal`, { force: true });
+      fs.rmSync(`${backupPath}-shm`, { force: true });
     }
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("备份")) throw error;

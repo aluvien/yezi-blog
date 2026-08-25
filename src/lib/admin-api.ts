@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireAdminApi } from "@/lib/auth";
+import { requireAdminApi, requireAdminApiRequest } from "@/lib/auth";
+import { requestContentType, validateSameOriginWrite } from "@/lib/request-security";
 import type { PostInput } from "@/lib/actions/posts";
 import type { Comment, CommentWithTarget, Moment, Post, ReferenceLibraryItem, Session, Work } from "@/lib/db";
 import { normalizeArticleReferenceSnapshot, type ArticleReferenceSnapshot } from "@/lib/article-reference";
@@ -37,8 +38,17 @@ export type AdminAuthResult =
   | { ok: false; response: NextResponse };
 
 /** 所有 /api/admin/v1 路由统一从 admin_session Cookie 读取会话，绝不 redirect 到 HTML 登录页。 */
-export async function authorizeAdminApi(): Promise<AdminAuthResult> {
-  const session = await requireAdminApi();
+export async function authorizeAdminApi(request?: Request): Promise<AdminAuthResult> {
+  const unsafe = request && !["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase());
+  const bearer = request?.headers.get("authorization")?.startsWith("Bearer ") ?? false;
+  if (unsafe && !bearer) {
+    const rejection = validateSameOriginWrite(request, { requireCsrfHeader: true });
+    if (rejection) return { ok: false, response: adminError("CSRF_REJECTED", rejection.message, rejection.status) };
+    if (requestContentType(request) === "text/plain") {
+      return { ok: false, response: adminError("UNSUPPORTED_MEDIA_TYPE", "管理写接口不接受 text/plain", 415) };
+    }
+  }
+  const session = request ? await requireAdminApiRequest(request) : await requireAdminApi();
   if (!session) {
     return {
       ok: false,

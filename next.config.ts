@@ -3,6 +3,19 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const configuredServerActionOrigins = [
+  process.env.NEXT_PUBLIC_SITE_URL ?? "",
+  ...(process.env.SERVER_ACTION_ALLOWED_ORIGINS ?? "").split(","),
+].flatMap((value) => {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  try {
+    return [new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`).host];
+  } catch {
+    return [];
+  }
+});
+const serverActionAllowedOrigins = [...new Set(configuredServerActionOrigins)];
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -21,8 +34,11 @@ const nextConfig: NextConfig = {
   // Server Actions 同源校验（origin vs host）失败、后台所有保存操作报
   // "Invalid Server Actions request"。显式放行站点域名。
   experimental: {
+    // 文件本体最多 20 MiB，Route Handler 允许 1 MiB multipart 开销；
+    // Proxy/Nginx 再留 1 MiB，并由 Nginx 在公开入口稳定返回 413。
+    proxyClientMaxBodySize: "22mb",
     serverActions: {
-      allowedOrigins: ["yezi.biaozhu.me", "yezi.me", "www.yezi.me"],
+      allowedOrigins: serverActionAllowedOrigins,
       // 文章 Markdown 与引用快照可能略超默认 1MB；服务端 Action 仍会把正文
       // 严格限制在 1.5MB，额外空间仅用于 Action 序列化开销。
       bodySizeLimit: "2mb",

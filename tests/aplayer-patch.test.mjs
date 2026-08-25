@@ -1,0 +1,26 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { parseHTML } from "linkedom";
+import { normalizeMusicDisplayText } from "../src/lib/music.ts";
+
+test("reproducible APlayer patch replaces the current-track HTML sinks", () => {
+  const bundle = fs.readFileSync(path.resolve("node_modules/aplayer/dist/APlayer.min.js"), "utf8");
+  assert.match(bundle, /template\.title\.textContent=t\.name/);
+  assert.match(bundle, /template\.author\.textContent=t\.artist/);
+  assert.doesNotMatch(bundle, /template\.title\.innerHTML=t\.name/);
+  assert.doesNotMatch(bundle, /template\.author\.innerHTML=t\.artist/);
+});
+
+test("hostile upstream labels remain text at the final player DOM boundary", () => {
+  const { document } = parseHTML("<div><span id=title></span><span id=artist></span></div>");
+  const title = document.getElementById("title");
+  const artist = document.getElementById("artist");
+  title.textContent = normalizeMusicDisplayText('<img src=x onerror=alert(1)> &lt;style&gt;', "QQ 音乐");
+  artist.textContent = normalizeMusicDisplayText("<style>body{display:none}</style>");
+  assert.equal(title.querySelector("img"), null);
+  assert.equal(artist.querySelector("style"), null);
+  assert.equal(title.childElementCount, 0);
+  assert.equal(artist.childElementCount, 0);
+});

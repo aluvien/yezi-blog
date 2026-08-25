@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Attachment } from "@/lib/db";
+import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 
 /** 客户端 canvas 预压缩:大图 resize 到 maxDim；有透明通道的图片保留为 WebP。 */
 async function resizeImage(file: File, maxDim: number, quality: number): Promise<Blob> {
@@ -59,6 +60,7 @@ async function uploadImageData(file: File, original = false, endpoint = "/api/ad
   try {
     res = await fetch(endpoint, {
       method: "POST",
+      headers: ADMIN_CSRF_HEADER,
       body: fd,
       credentials: "same-origin",
       cache: "no-store",

@@ -13,6 +13,7 @@ import { MusicInsertDialog } from "./MusicInsertDialog";
 import { VideoInsertDialog } from "./VideoInsertDialog";
 import { ArticleReferenceDialog } from "./ArticleReferenceDialog";
 import { ARTICLE_MARKDOWN_TOOLS, MarkdownToolbar, type MarkdownTool } from "./MarkdownToolbar";
+import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 
 type TextRange = { start: number; end: number };
 
@@ -239,7 +240,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
       form.append("file", file);
       form.append("original", String(attachmentOriginal));
       // 先不绑定文章，只有点击“插入图片”后才将附件加入当前文章。
-      const response = await fetch("/api/admin/upload", { method: "POST", body: form });
+      const response = await fetch("/api/admin/upload", { method: "POST", headers: ADMIN_CSRF_HEADER, body: form });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.attachment) throw new Error(data.error || "图片上传失败");
       setDialogAttachment(data.attachment as Attachment);
@@ -286,7 +287,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
         form.append("file", file);
         if (post?.id) form.append("post_id", String(post.id));
         form.append("original", String(attachmentOriginal));
-        const response = await fetch("/api/admin/upload", { method: "POST", body: form });
+        const response = await fetch("/api/admin/upload", { method: "POST", headers: ADMIN_CSRF_HEADER, body: form });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.attachment) throw new Error(data.error || "附件上传失败");
         setAttachments((current) => [data.attachment as Attachment, ...current]);

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 import { ReactCrop as _ReactCrop, type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 
@@ -33,7 +34,7 @@ export function AttachmentCrop({ attachmentId, src }: { attachmentId: number; sr
     try {
       const res = await fetch(`/api/admin/attachments/${attachmentId}/crop`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...ADMIN_CSRF_HEADER },
         body: JSON.stringify({
           x: Math.round(completedCrop.x * scaleX),
           y: Math.round(completedCrop.y * scaleY),

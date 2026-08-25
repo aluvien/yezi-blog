@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderMarkdown, extractHeadings, stripMarkdown } from "../src/lib/markdown.ts";
+import { normalizeMediaShortcodes } from "../src/lib/media-shortcodes.ts";
 
 test("escapes raw HTML instead of executing it", () => {
   const html = renderMarkdown('<script>alert(1)</script>\n\n<img src="x" onerror="alert(2)">');
@@ -79,6 +80,27 @@ test("article media shortcodes render music and supported video embeds", () => {
   assert.ok(html.includes("page=2"));
   assert.ok(!html.includes("!music"));
   assert.ok(!html.includes("!video"));
+});
+
+test("article shortcodes work without Markdown paragraph spacing and use the compact video form", () => {
+  const html = renderMarkdown([
+    "正文前。",
+    "!music qqvip:abc123:song",
+    "正文中。",
+    "!video bilibili:BV13JMi6yE4p:2",
+    "正文后。",
+  ].join("\n"));
+  assert.ok(html.includes('data-server="qqvip"'));
+  assert.ok(html.includes('data-video-platform="bilibili"'));
+  assert.ok(html.includes("bvid=BV13JMi6yE4p"));
+  assert.ok(html.includes("page=2"));
+  assert.ok(!html.includes("!music"));
+  assert.ok(!html.includes("!video"));
+});
+
+test("saving media shortcodes canonicalizes pasted video URLs to compact specs", () => {
+  const content = normalizeMediaShortcodes("!video https://www.bilibili.com/video/BV13JMi6yE4p?p=2\n!video https://youtu.be/dQw4w9WgXcQ");
+  assert.equal(content, "!video bilibili:BV13JMi6yE4p:2\n!video youtube:dQw4w9WgXcQ");
 });
 
 test("invalid media shortcodes remain plain text", () => {

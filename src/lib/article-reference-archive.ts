@@ -528,9 +528,8 @@ async function downloadReferenceImage(input: string, referer: string): Promise<{
     current = await assertPublicRemoteUrl(current);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
-    let response: Response;
     try {
-      response = await safeRemoteFetch(current, {
+      const response = await safeRemoteFetch(current, {
         signal: controller.signal,
         headers: {
           accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
@@ -538,22 +537,26 @@ async function downloadReferenceImage(input: string, referer: string): Promise<{
           "user-agent": "Mozilla/5.0 (compatible; YeziBlogReference/1.0; +https://yezi.me)",
         },
       });
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        await response.body?.cancel().catch(() => undefined);
+        if (!location || redirect === IMAGE_REDIRECT_LIMIT) throw new Error("图片跳转次数过多");
+        current = normalizeReferenceUrl(new URL(location, current).toString());
+        continue;
+      }
+      if (!response.ok) throw new Error(`图片返回 ${response.status}`);
+      const declaredType = cacheImageResponseType(response.headers.get("content-type") || "");
+      if (declaredType === "image/svg+xml") throw new Error("SVG 图片不进入远程缓存");
+      const bytes = await readLimitedImage(response);
+      const contentType = detectSafeRasterImageMime(bytes);
+      if (!contentType || !IMAGE_EXTENSIONS[contentType]) throw new Error("图片内容或格式不支持缓存");
+      return { bytes, contentType };
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) throw new Error("图片读取超时");
+      throw error;
     } finally {
       clearTimeout(timer);
     }
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location || redirect === IMAGE_REDIRECT_LIMIT) throw new Error("图片跳转次数过多");
-      current = normalizeReferenceUrl(new URL(location, current).toString());
-      continue;
-    }
-    if (!response.ok) throw new Error(`图片返回 ${response.status}`);
-    const declaredType = cacheImageResponseType(response.headers.get("content-type") || "");
-    if (declaredType === "image/svg+xml") throw new Error("SVG 图片不进入远程缓存");
-    const bytes = await readLimitedImage(response);
-    const contentType = detectSafeRasterImageMime(bytes);
-    if (!contentType || !IMAGE_EXTENSIONS[contentType]) throw new Error("图片内容或格式不支持缓存");
-    return { bytes, contentType };
   }
   throw new Error("图片读取失败");
 }

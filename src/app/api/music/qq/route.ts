@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
-import { getVisitorKey } from "@/lib/request";
+import { requireAdminApi } from "@/lib/auth";
+import { getClientIp, hashIp } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
+import { isPublicQQMusicSpec, lyricUrl, verifyLyricAuthorization } from "@/lib/qq-music-access";
+import { normalizeMusicDisplayText } from "@/lib/music";
+import { BoundedSingleFlight } from "@/lib/bounded-single-flight";
 import {
   findRecord,
   findString,
@@ -18,8 +22,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 24;
+const MAX_REQUESTS = 12;
 const allowQQMusicRequest = createSlidingWindowLimiter({ windowMs: WINDOW_MS, maxRequests: MAX_REQUESTS, maxKeys: 5_000 });
+const RESOLUTION_TIMEOUT_MS = 25_000;
+const FAILURE_CACHE_MS = 15_000;
+const MAX_CONCURRENT_RESOLUTIONS = 4;
+const expensiveResolution = new BoundedSingleFlight({
+  timeoutMs: RESOLUTION_TIMEOUT_MS,
+  failureCacheMs: FAILURE_CACHE_MS,
+  maxConcurrent: MAX_CONCURRENT_RESOLUTIONS,
+});
 
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status, headers: { "cache-control": "no-store" } });
@@ -27,6 +39,15 @@ function jsonError(error: string, status: number) {
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
+}
+
+function safeHttpsUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
 }
 
 /** Locate the actual song object across both batch and legacy response envelopes. */
@@ -70,18 +91,18 @@ function trackInfo(raw: unknown, mid: string) {
   const albumMid = (album ? getRecordString(album, ["mid", "albummid", "albumMid"]) : "")
     || getRecordString(song, ["albummid", "albumMid"])
     || findString(data, ["albummid", "albumMid"]);
-  const cover = normalizeQQCover(
+  const cover = safeHttpsUrl(normalizeQQCover(
     getRecordString(song, ["cover", "pic", "image", "picurl", "picUrl"])
       || (album ? getRecordString(album, ["pic", "cover", "image", "picurl", "picUrl"]) : "")
       || findString(data, ["cover", "pic", "image", "picurl", "picUrl"]),
-  ) || (albumMid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : "");
+  ) || (albumMid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : ""));
   return {
-    name: getRecordString(song, ["name", "songname", "songName", "title"])
+    name: normalizeMusicDisplayText(getRecordString(song, ["name", "songname", "songName", "title"])
       || findString(data, ["songname", "songName", "name", "title"])
-      || "QQ 音乐",
-    artist: singerNames(song.singer ?? song.singers ?? song.singerInfo)
+      || "QQ 音乐", "QQ 音乐"),
+    artist: normalizeMusicDisplayText(singerNames(song.singer ?? song.singers ?? song.singerInfo)
       || getRecordString(song, ["singername", "singerName", "artist", "author"])
-      || findString(data, ["singername", "singerName", "artist", "author"]),
+      || findString(data, ["singername", "singerName", "artist", "author"])),
     cover,
     key: `qqvip:${mid}`,
   };
@@ -92,7 +113,7 @@ function trackInfo(raw: unknown, mid: string) {
  * QQ 的公开单曲详情接口不需要登录 Cookie，作为“仅补展示信息”的后备；
  * 播放地址仍始终由已登录的本地 sidecar 获取。
  */
-async function publicTrackInfo(mid: string): Promise<ReturnType<typeof trackInfo> | null> {
+async function publicTrackInfo(mid: string, signal?: AbortSignal): Promise<ReturnType<typeof trackInfo> | null> {
   try {
     const endpoint = new URL("https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg");
     endpoint.searchParams.set("songmid", mid);
@@ -100,7 +121,7 @@ async function publicTrackInfo(mid: string): Promise<ReturnType<typeof trackInfo
     const response = await fetch(endpoint, {
       headers: { referer: "https://y.qq.com/" },
       cache: "no-store",
-      signal: AbortSignal.timeout(8_000),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000),
     });
     if (!response.ok) return null;
     const raw = await response.json() as unknown;
@@ -114,7 +135,7 @@ async function publicTrackInfo(mid: string): Promise<ReturnType<typeof trackInfo
 
 function playbackUrl(raw: unknown): string {
   const data = unwrapData(raw);
-  return normalizeQQAudio(findString(data, ["url", "purl", "playUrl", "play_url"]));
+  return safeHttpsUrl(normalizeQQAudio(findString(data, ["url", "purl", "playUrl", "play_url"])));
 }
 
 function isPlaylistSong(value: JsonRecord): boolean {
@@ -168,17 +189,17 @@ function playlistSongs(raw: unknown): JsonRecord[] {
 
 type ResolvedPlaylistTrack = ReturnType<typeof trackInfo> & { url: string; lrc: string };
 
-async function resolvePlaylistTrack(song: JsonRecord): Promise<ResolvedPlaylistTrack | null> {
+async function resolvePlaylistTrack(song: JsonRecord, signal: AbortSignal): Promise<ResolvedPlaylistTrack | null> {
   const mid = getRecordString(song, ["songmid", "mid", "songMid", "songid", "songId"]);
   if (!/^[A-Za-z0-9_-]{4,80}$/.test(mid)) return null;
   try {
-    const raw = await qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" } });
+    const raw = await qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" }, signal });
     const url = playbackUrl(raw);
     if (!url) return null;
     return {
       ...trackInfo({ data: song }, mid),
       url,
-      lrc: `/api/music/qq?mid=${encodeURIComponent(mid)}&type=lyric`,
+      lrc: lyricUrl(mid),
     };
   } catch {
     // 单首歌曲没有播放权限时跳过，不影响歌单中其他歌曲继续播放。
@@ -188,7 +209,7 @@ async function resolvePlaylistTrack(song: JsonRecord): Promise<ResolvedPlaylistT
 
 const playlistCache = new Map<string, { expiresAt: number; data: { tracks: ResolvedPlaylistTrack[]; total: number; skipped: number } }>();
 const PLAYLIST_CACHE_MS = 90_000;
-const MAX_PLAYLIST_TRACKS = 100;
+const MAX_PLAYLIST_TRACKS = 20;
 const publicCoverCache = new Map<string, { expiresAt: number; cover: string }>();
 const PUBLIC_COVER_CACHE_MS = 10 * 60_000;
 
@@ -239,18 +260,18 @@ async function publicSearchCover(mid: string, title: string): Promise<string> {
   return cover;
 }
 
-async function resolvePlaylist(disstid: string) {
+async function resolvePlaylist(disstid: string, signal: AbortSignal) {
   const cached = playlistCache.get(disstid);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
-  const raw = await qqMusicRequest("/getSongListDetail", { query: { disstid } });
+  const raw = await qqMusicRequest("/getSongListDetail", { query: { disstid }, signal });
   const songs = playlistSongs(raw);
   if (songs.length === 0) throw new Error("QQ 音乐歌单没有返回歌曲");
   const source = songs.slice(0, MAX_PLAYLIST_TRACKS);
   const tracks: ResolvedPlaylistTrack[] = [];
   // 限制并发，避免一个歌单同时触发大量播放地址请求。
   for (let index = 0; index < source.length; index += 4) {
-    const batch = await Promise.all(source.slice(index, index + 4).map((song) => resolvePlaylistTrack(song)));
+    const batch = await Promise.all(source.slice(index, index + 4).map((song) => resolvePlaylistTrack(song, signal)));
     tracks.push(...batch.flatMap((track) => track ? [track] : []));
   }
   if (tracks.length === 0) throw new Error("歌单中的歌曲暂时都无法播放，请检查 QQ 音乐登录或会员状态");
@@ -264,49 +285,62 @@ async function resolvePlaylist(disstid: string) {
 }
 
 export async function GET(request: Request) {
-  if (!allowQQMusicRequest(getVisitorKey(request))) return jsonError("请求过于频繁，请稍后再试", 429);
+  if (!allowQQMusicRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);
   const url = new URL(request.url);
   const kind = url.searchParams.get("type") ?? "track";
   const identifier = (url.searchParams.get("id") ?? url.searchParams.get("mid") ?? "").trim();
+  if (!["track", "playlist", "lyric", "song"].includes(kind)) return jsonError("请求类型无效", 400);
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(identifier)) return jsonError(kind === "playlist" ? "歌单标识无效" : "歌曲标识无效", 400);
+  const admin = await requireAdminApi();
+  const publicType = kind === "playlist" ? "playlist" : "song";
+  if (kind === "lyric") {
+    const token = url.searchParams.get("token") ?? "";
+    if (!admin && !verifyLyricAuthorization(identifier, token)) return jsonError("歌词授权无效或已过期", 403);
+  } else if (!admin && !isPublicQQMusicSpec(publicType, identifier)) {
+    return jsonError("音乐未在公开内容中授权", 403);
+  }
   try {
     if (kind === "playlist") {
-      const data = await resolvePlaylist(identifier);
+      const data = await expensiveResolution.run(`playlist:${identifier}`, (signal) => resolvePlaylist(identifier, signal));
       return NextResponse.json(data, { headers: { "cache-control": "private, max-age=60" } });
     }
     const mid = identifier;
     if (!/^[A-Za-z0-9_-]{4,80}$/.test(mid)) return jsonError("歌曲标识无效", 400);
     if (kind === "lyric") {
-      const raw = await qqMusicRequest("/getLyric", { query: { songmid: mid, isFormat: "1" } });
-      const lyric = findString(unwrapData(raw), ["lyric", "lrc"]);
+      const lyric = await expensiveResolution.run(`lyric:${mid}`, async (signal) => {
+        const raw = await qqMusicRequest("/getLyric", { query: { songmid: mid, isFormat: "1" }, signal });
+        return findString(unwrapData(raw), ["lyric", "lrc"]).slice(0, 512 * 1024);
+      });
       return new Response(lyric, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "private, max-age=300" } });
     }
-    const [infoRaw, playRaw] = await Promise.all([
-      // getSongInfo is only a legacy alias in some sidecar versions. The
-      // documented batch endpoint is available in v2.4 and returns full song,
-      // singer and album metadata for the player card.
-      qqMusicRequest("/batchGetSongInfo", { method: "POST", body: { songs: [[mid]] } }),
-      qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" } }),
-    ]);
-    const audio = playbackUrl(playRaw);
-    if (!audio) return jsonError("暂时无法获取这首歌的播放地址，请确认 QQ 音乐登录状态和会员权限", 422);
-    const primaryInfo = trackInfo(infoRaw, mid);
-    const fallbackInfo = (!primaryInfo.artist || !primaryInfo.cover || primaryInfo.name === "QQ 音乐")
-      ? await publicTrackInfo(mid)
-      : null;
-    const info = fallbackInfo
-      ? {
-          name: fallbackInfo.name === "QQ 音乐" ? primaryInfo.name : fallbackInfo.name,
-          artist: fallbackInfo.artist || primaryInfo.artist,
-          cover: fallbackInfo.cover || primaryInfo.cover,
-          key: primaryInfo.key,
-      }
-      : primaryInfo;
-    const cover = info.cover || await publicSearchCover(mid, info.name);
-    return NextResponse.json({ ...info, cover, url: audio, lrc: `/api/music/qq?mid=${encodeURIComponent(mid)}&type=lyric` }, {
+    const track = await expensiveResolution.run(`track:${mid}`, async (signal) => {
+      const [infoRaw, playRaw] = await Promise.all([
+        qqMusicRequest("/batchGetSongInfo", { method: "POST", body: { songs: [[mid]] }, signal }),
+        qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" }, signal }),
+      ]);
+      const audio = playbackUrl(playRaw);
+      if (!audio) throw new Error("播放地址不可用");
+      const primaryInfo = trackInfo(infoRaw, mid);
+      const fallbackInfo = (!primaryInfo.artist || !primaryInfo.cover || primaryInfo.name === "QQ 音乐")
+        ? await publicTrackInfo(mid, signal)
+        : null;
+      const info = fallbackInfo
+        ? {
+            name: fallbackInfo.name === "QQ 音乐" ? primaryInfo.name : fallbackInfo.name,
+            artist: fallbackInfo.artist || primaryInfo.artist,
+            cover: fallbackInfo.cover || primaryInfo.cover,
+            key: primaryInfo.key,
+        }
+        : primaryInfo;
+      const cover = safeHttpsUrl(info.cover || await publicSearchCover(mid, info.name));
+      return { ...info, cover, url: audio, lrc: lyricUrl(mid) };
+    });
+    return NextResponse.json(track, {
       headers: { "cache-control": "private, max-age=120" },
     });
   } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "QQ 音乐服务暂不可用", 502);
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    console.warn(`[qq-music] ${kind} resolution failed${timedOut ? " (timeout)" : ""}`);
+    return jsonError(timedOut ? "QQ 音乐解析超时，请稍后再试" : "QQ 音乐服务暂不可用，请稍后再试", timedOut ? 504 : 502);
   }
 }

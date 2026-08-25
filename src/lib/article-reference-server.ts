@@ -102,9 +102,8 @@ async function fetchHtml(input: string): Promise<{ html: string; finalUrl: strin
     current = await assertPublicRemoteUrl(current);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    let response: Response;
     try {
-      response = await safeRemoteFetch(current, {
+      const response = await safeRemoteFetch(current, {
         signal: controller.signal,
         headers: {
           accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
@@ -113,25 +112,28 @@ async function fetchHtml(input: string): Promise<{ html: string; finalUrl: strin
           "user-agent": "Mozilla/5.0 (compatible; YeziBlogReference/1.0; +https://yezi.me)",
         },
       });
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        await response.body?.cancel().catch(() => undefined);
+        if (!location || redirect === MAX_REDIRECTS) throw new Error("文章跳转次数过多");
+        current = normalizeReferenceUrl(new URL(location, current).toString());
+        continue;
+      }
+      if (!response.ok) throw new Error(`文章页面返回 ${response.status}`);
+      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+      if (contentType && !contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
+        throw new Error("这个链接不是网页文章");
+      }
+      return { html: await readLimitedText(response), finalUrl: current };
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") throw new Error("读取文章超时，请稍后重试");
+      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
+        throw new Error("读取文章超时，请稍后重试");
+      }
+      if (error instanceof Error && /跳转|不是网页|页面返回|过大/.test(error.message)) throw error;
       throw new Error("读取文章失败，请检查网址是否可访问");
     } finally {
       clearTimeout(timer);
     }
-
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location || redirect === MAX_REDIRECTS) throw new Error("文章跳转次数过多");
-      current = normalizeReferenceUrl(new URL(location, current).toString());
-      continue;
-    }
-    if (!response.ok) throw new Error(`文章页面返回 ${response.status}`);
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-    if (contentType && !contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
-      throw new Error("这个链接不是网页文章");
-    }
-    return { html: await readLimitedText(response), finalUrl: current };
   }
   throw new Error("读取文章失败");
 }

@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorizeAdminApi();
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const id = parseAdminId((await params).id);
   if (id === null) return adminError("INVALID_ID", "分类 ID 必须是正整数", 400);
@@ -33,8 +33,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorizeAdminApi();
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const id = parseAdminId((await params).id);
   if (id === null) return adminError("INVALID_ID", "分类 ID 必须是正整数", 400);

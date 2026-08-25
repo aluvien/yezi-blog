@@ -30,6 +30,13 @@ export interface MusicSpec {
 const SERVER_SET = new Set<string>(MUSIC_SERVERS);
 const TYPE_SET = new Set<string>(MUSIC_TYPES);
 
+/** Upstream labels eventually reach a legacy APlayer innerHTML sink; keep them strict plain text. */
+export function normalizeMusicDisplayText(value: unknown, fallback = "", maxLength = 180): string {
+  const raw = typeof value === "string" || typeof value === "number" ? String(value) : "";
+  const text = raw.replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
+  return text || fallback;
+}
+
 function stringMetadata(value: unknown, maxLength: number): string {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
@@ -194,8 +201,8 @@ export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
           const url = firstScalar(track.url);
           if (!url) return [];
           return [{
-            name: firstScalar(track.name) || "QQ 音乐",
-            artist: firstScalar(track.artist),
+            name: normalizeMusicDisplayText(firstScalar(track.name), "QQ 音乐"),
+            artist: normalizeMusicDisplayText(firstScalar(track.artist)),
             url,
             cover: compactMusicCoverUrl(firstScalar(track.cover)),
             lrc: firstScalar(track.lrc),
@@ -210,8 +217,8 @@ export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
   const track = payload;
   if (!track.url || typeof track.url !== "string") throw new Error("未能获取 QQ 音乐播放地址");
   return [{
-    name: firstScalar(track.name) || spec.title || "QQ 音乐",
-    artist: firstScalar(track.artist) || spec.artist || "",
+    name: normalizeMusicDisplayText(firstScalar(track.name) || spec.title, "QQ 音乐"),
+    artist: normalizeMusicDisplayText(firstScalar(track.artist) || spec.artist),
     url: track.url,
     cover: compactMusicCoverUrl(firstScalar(track.cover) || spec.cover || ""),
     lrc: firstScalar(track.lrc),

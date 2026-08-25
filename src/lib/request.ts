@@ -81,8 +81,7 @@ export function getVisitorKey(request: Request): string {
  */
 export function getVisitorRateLimitKey(request: Request): string {
   const ip = getClientIp(request);
-  const userAgent = request.headers.get("user-agent")?.slice(0, 300) ?? "";
-  return hashVisitorKey(ip, userAgent);
+  return hashVisitorKey("rate-limit", ip);
 }
 
 // hashIp 已抽到 src/lib/ip-hash.ts（不依赖 next/headers，供 db.ts 单测加载）；

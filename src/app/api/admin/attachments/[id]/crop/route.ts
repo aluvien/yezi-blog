@@ -7,12 +7,13 @@ import { requireAdminApi } from "@/lib/auth";
 import { createAttachment, getAttachment } from "@/lib/db";
 import { getUploadDir, uploadAbsolutePath } from "@/lib/uploads";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
+import { writeUploadWithRecord } from "@/lib/upload-storage";
 
 export const runtime = "nodejs";
 
 /** 按选区裁切图片,另存为新附件(保留原图)。 */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdminApi();
+  const session = await requireAdminApi(request);
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
   const { id } = await params;
@@ -63,14 +64,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const dir = path.join(getUploadDir(), ym);
     await fsPromises.mkdir(dir, { recursive: true });
     const relativePath = `/uploads/${ym}/${name}`;
-    await fsPromises.writeFile(path.join(dir, name), cropped, { mode: 0o640 });
-    const newAttachment = createAttachment({
-      post_id: attachment.post_id,
-      path: relativePath,
-      original_name: `crop-${attachment.original_name}`.slice(0, 160),
-      mime_type: "image/webp",
-      size: cropped.length,
-    });
+    const absolutePath = path.join(dir, name);
+    const newAttachment = await writeUploadWithRecord(absolutePath, cropped, () => createAttachment({
+        post_id: attachment.post_id,
+        path: relativePath,
+        original_name: `crop-${attachment.original_name}`.slice(0, 160),
+        mime_type: "image/webp",
+        size: cropped.length,
+      }));
     return NextResponse.json({ attachment: newAttachment });
   } catch {
     return NextResponse.json({ error: "裁切失败,请检查选区是否超出图片范围" }, { status: 500 });

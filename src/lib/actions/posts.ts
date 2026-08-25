@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { attachAttachmentsToPost, createPost, db, deletePost, getPost, listArticleReferenceSnapshotsForPost, normalizePostTags, syncArticleReferences, updatePost, upsertReferenceLibrarySnapshot } from "@/lib/db";
 import { compactArticleReferenceMarkers, encodeArticleReferenceMarker, normalizeArticleReferenceSnapshot, parseArticleReferenceMarkers, type ArticleReferenceSnapshot } from "@/lib/article-reference";
+import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
+import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
 
 export interface PostInput {
   title: string;
@@ -73,7 +75,7 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
   const validationError = validatePostInput(data);
   if (validationError) return { ok: false, error: validationError };
   const referenceSnapshots = data.referenceSnapshots ?? [];
-  const content = compactArticleReferenceMarkers(data.content, referenceSnapshots);
+  const content = normalizeMediaShortcodes(compactArticleReferenceMarkers(data.content, referenceSnapshots));
   let createdPost: ReturnType<typeof getPost>;
   try {
     db.transaction(() => {
@@ -100,6 +102,7 @@ export async function createPostAction(data: PostInput): Promise<ActionResult> {
   if (data.category.trim()) revalidatePath(`/categories/${encodeURIComponent(data.category.trim())}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");
+  invalidateQQMusicAccessCache();
   return { ok: true, data: createdPost };
 }
 
@@ -111,7 +114,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
   const validationError = validatePostInput(data);
   if (validationError) return { ok: false, error: validationError };
   const referenceSnapshots = data.referenceSnapshots ?? [];
-  const content = compactArticleReferenceMarkers(data.content, referenceSnapshots);
+  const content = normalizeMediaShortcodes(compactArticleReferenceMarkers(data.content, referenceSnapshots));
   let updatedSlug = existing.slug;
   let updatedPost: ReturnType<typeof getPost>;
   try {
@@ -142,6 +145,7 @@ export async function updatePostAction(id: number, data: PostInput): Promise<Act
   revalidatePath(`/posts/${updatedSlug}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");
+  invalidateQQMusicAccessCache();
   return { ok: true, data: updatedPost };
 }
 
@@ -155,7 +159,7 @@ export async function attachArticleReferenceToPostAction(postId: number, input: 
   const snapshot = normalizeArticleReferenceSnapshot(input);
   if (!snapshot.url) return { ok: false, error: "引用网址无效" };
   const existingSnapshots = listArticleReferenceSnapshotsForPost(post.id);
-  let content = compactArticleReferenceMarkers(post.content, [...existingSnapshots, snapshot]);
+  let content = normalizeMediaShortcodes(compactArticleReferenceMarkers(post.content, [...existingSnapshots, snapshot]));
   const currentSnapshots = parseArticleReferenceMarkers(content, [...existingSnapshots, snapshot]);
   const key = snapshot.canonicalUrl || snapshot.url;
   if (!currentSnapshots.some((item) => (item.canonicalUrl || item.url) === key)) {
@@ -165,7 +169,7 @@ export async function attachArticleReferenceToPostAction(postId: number, input: 
     ...parseArticleReferenceMarkers(content, [...existingSnapshots, snapshot]).filter((item) => (item.canonicalUrl || item.url) !== key),
     snapshot,
   ];
-  const compactedContent = compactArticleReferenceMarkers(content, nextSnapshots);
+  const compactedContent = normalizeMediaShortcodes(compactArticleReferenceMarkers(content, nextSnapshots));
   if (compactedContent.length > MAX_POST_CONTENT_LENGTH || nextSnapshots.length > MAX_REFERENCE_SNAPSHOTS) {
     return { ok: false, error: "文章正文或引用数量已达到上限" };
   }
@@ -220,5 +224,6 @@ export async function deletePostAction(id: number): Promise<ActionResult> {
   revalidatePath(`/posts/${post.slug}`);
   revalidatePath("/rss.xml");
   revalidatePath("/sitemap.xml");
+  invalidateQQMusicAccessCache();
   return { ok: true, data: { id: post.id } };
 }

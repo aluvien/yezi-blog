@@ -10,6 +10,7 @@ test("parses supported Bilibili and YouTube inputs", () => {
 
 test("rejects arbitrary iframe schemes and builds fixed provider URLs", () => {
   assert.equal(parseVideoSpec("javascript:alert(1)"), null);
+  assert.equal(parseVideoSpec("https://b23.tv/opaque-id"), null);
   const youtube = buildVideoEmbedUrl({ platform: "youtube", id: "dQw4w9WgXcQ" });
   assert.equal(new URL(youtube).hostname, "www.youtube-nocookie.com");
   const bilibili = buildVideoEmbedUrl({ platform: "bilibili", id: "BV1xx411c7mD" });

@@ -16,6 +16,12 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL: "http://127.0.0.1:3100",
+    // APIRequestContext is not a browser and therefore does not add Origin.
+    // Keep native E2E writes on the same boundary as the browser admin UI.
+    extraHTTPHeaders: {
+      origin: "http://127.0.0.1:3100",
+      "x-yezi-csrf": "1",
+    },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

@@ -60,7 +60,7 @@ function resolveLlmEndpoint(input: string): string {
 }
 
 export async function POST(request: Request) {
-  if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
+  if (!await requireAdminApi(request)) return noCache({ error: "未登录或请求来源无效" }, 401);
   let body: { url?: unknown };
   try {
     body = await readLimitedJson(request, 8 * 1024);

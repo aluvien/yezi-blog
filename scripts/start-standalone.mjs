@@ -28,29 +28,34 @@ function restrictFilePermissions(filePath) {
 // 这样会让相对数据库、上传目录和环境文件指向错误位置。
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
-if (!process.env.BLOG_ROOT) process.env.BLOG_ROOT = root;
+const externalEnv = process.env.BLOG_ENV_FILE?.trim() ? path.resolve(process.env.BLOG_ENV_FILE.trim()) : "";
 const localEnv = path.join(root, ".env.local");
 const fallbackEnv = path.join(root, ".env");
+if (externalEnv) {
+  restrictFilePermissions(externalEnv);
+  loadEnvFile(externalEnv);
+}
 restrictFilePermissions(localEnv);
 restrictFilePermissions(fallbackEnv);
 loadEnvFile(localEnv);
 loadEnvFile(fallbackEnv);
+if (!process.env.BLOG_ROOT) process.env.BLOG_ROOT = root;
 if (!process.env.PORT) process.env.PORT = "3030";
-if (!process.env.HOSTNAME) process.env.HOSTNAME = "0.0.0.0";
+if (!process.env.HOSTNAME) process.env.HOSTNAME = "127.0.0.1";
 
 // standalone server 启动后可能把 cwd 切到 .next/standalone，数据库必须固定在项目根目录，
 // 否则本地数据和运行中的网站会各自使用一份 blog.db。
 if (!process.env.BLOG_DB_PATH) process.env.BLOG_DB_PATH = path.join(root, "data", "blog.db");
 // 上传文件只存到项目根 data/uploads（与 blog.db 同目录持久化），由 /uploads route 实时提供。
 // 不写入 public 或 standalone，避免多个目录造成数据分叉。
-const dataDir = path.join(root, "data");
+const dataDir = path.join(path.resolve(process.env.BLOG_ROOT || root), "data");
 const uploadDir = path.join(dataDir, "uploads");
 fs.mkdirSync(uploadDir, { recursive: true, mode: 0o700 });
 fs.chmodSync(dataDir, 0o700);
 fs.chmodSync(uploadDir, 0o700);
 
 // 维护只在真正启动服务时执行，避免 next build 加载数据库模块时修改生产数据。
-await import("./maintain-db.mjs");
+if (process.env.BLOG_BUILD_READONLY !== "true") await import("./maintain-db.mjs");
 
 // Next standalone 不会自动把静态资源复制到 standalone 目录；本地启动前补齐，
 // 否则 HTML 能打开但 CSS、图片和 favicon 会返回 404。

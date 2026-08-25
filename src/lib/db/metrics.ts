@@ -118,3 +118,16 @@ export function deleteContentInteractions(targetType: ContentTarget, targetId: n
   db.prepare("DELETE FROM content_interactions WHERE target_type = ? AND target_id = ?").run(targetType, targetId);
   db.prepare("DELETE FROM content_metrics WHERE target_type = ? AND target_id = ?").run(targetType, targetId);
 }
+
+/** Delete only expired view de-duplication rows; likes are durable user state. */
+export function deleteExpiredViewInteractions(referenceTime = Date.now()): number {
+  const momentBefore = new Date(referenceTime - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const postBefore = new Date(referenceTime - 180 * 24 * 60 * 60 * 1000).toISOString();
+  const removeMoment = db.prepare(
+    "DELETE FROM content_interactions WHERE target_type = 'moment' AND kind = 'view' AND created_at < ?",
+  ).run(momentBefore);
+  const removePost = db.prepare(
+    "DELETE FROM content_interactions WHERE target_type = 'post' AND kind = 'view' AND created_at < ?",
+  ).run(postBefore);
+  return removeMoment.changes + removePost.changes;
+}

@@ -2,7 +2,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { requireAdmin } from "@/lib/auth";
 
@@ -15,7 +14,7 @@ export type ScheduleGithubRestartActionResult =
   | { ok: false; error: string };
 
 export type GithubDeployStatus = {
-  status: "unknown" | "restarting" | "success" | "failed";
+  status: "unknown" | "queued" | "building" | "switching" | "checking" | "rolling_back" | "success" | "failed";
   updatedAt?: string;
   error?: string;
 };
@@ -118,144 +117,54 @@ function invalidateGithubVersionCache(): void {
 
 async function findPm2Name(projectDir: string): Promise<string | null> {
   const configuredName = process.env.DEPLOY_PM2_NAME?.trim();
-  if (configuredName) return configuredName;
   const result = await runCommand("pm2", ["jlist"], projectDir, 15_000, deploymentEnv());
   const processes = JSON.parse(result.stdout) as Pm2Process[];
+  if (configuredName) return processes.some((item) => item.name === configuredName) ? configuredName : null;
   const expectedDir = path.resolve(projectDir);
   const match = processes.find((item) => item.name && item.pm2_env?.pm_cwd && path.resolve(item.pm2_env.pm_cwd) === expectedDir);
   return match?.name ?? null;
-}
-
-function schedulePm2Restart(projectDir: string, processName: string): void {
-  const restartScript = path.join(projectDir, "scripts", "restart-pm2.mjs");
-  if (!fs.existsSync(restartScript)) throw new Error("缺少 PM2 重启脚本，请先同步最新源码");
-  const statusFile = path.join(projectDir, "data", "deploy-status.json");
-  fs.mkdirSync(path.dirname(statusFile), { recursive: true });
-  fs.writeFileSync(statusFile, JSON.stringify({ status: "restarting", processName, updatedAt: new Date().toISOString() }), { mode: 0o600 });
-  const child = spawn(process.execPath, [restartScript, processName], {
-    cwd: projectDir,
-    detached: true,
-    stdio: "ignore",
-    env: { ...deploymentEnv(), DEPLOY_STATUS_FILE: statusFile },
-  });
-  child.unref();
-}
-
-function fileDigest(filePath: string): string {
-  if (!fs.existsSync(filePath)) return "missing";
-  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
-}
-
-function acquireDeploymentLock(projectDir: string): () => void {
-  const lockPath = path.join(projectDir, ".deploy-sync.lock");
-  const staleAfterMs = 30 * 60 * 1000;
-  const tryOpen = (): number => fs.openSync(lockPath, "wx", 0o600);
-  let fd: number;
-  try {
-    fd = tryOpen();
-  } catch (error) {
-    if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
-    try {
-      const stat = fs.statSync(lockPath);
-      if (Date.now() - stat.mtimeMs < staleAfterMs) {
-        throw new Error("已有一次同步正在执行，请等待当前同步完成");
-      }
-      fs.unlinkSync(lockPath);
-      fd = tryOpen();
-    } catch (retryError) {
-      if (retryError instanceof Error && retryError.message.includes("已有一次同步")) throw retryError;
-      throw new Error("无法取得同步锁，请稍后重试");
-    }
-  }
-  fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
-  fs.closeSync(fd);
-  return () => {
-    try {
-      fs.unlinkSync(lockPath);
-    } catch {
-      // 同步异常或服务器清理锁文件时无需影响响应。
-    }
-  };
-}
-
-async function ensureDeploymentRepository(projectDir: string, env: NodeJS.ProcessEnv): Promise<void> {
-  const root = await runCommand("git", ["rev-parse", "--show-toplevel"], projectDir, 15_000, env);
-  if (path.resolve(root.stdout.trim()) !== path.resolve(projectDir)) {
-    throw new Error(`部署目录不是 Git 仓库根目录：${projectDir}`);
-  }
-
-  const branch = await runCommand("git", ["branch", "--show-current"], projectDir, 15_000, env);
-  if (branch.stdout.trim() !== "main") {
-    throw new Error(`当前分支不是 main：${branch.stdout.trim() || "未知分支"}`);
-  }
-
-  const status = await runCommand("git", ["status", "--porcelain=v1", "--untracked-files=no"], projectDir, 15_000, env);
-  if (status.stdout.trim()) {
-    throw new Error("服务器有未提交的源码改动，已停止同步，避免覆盖本地修改");
-  }
-}
-
-function getDatabasePath(projectDir: string): string {
-  const configuredPath = process.env.BLOG_DB_PATH?.trim();
-  return path.resolve(configuredPath || path.join(projectDir, "data", "blog.db"));
 }
 
 /** 在服务端直接拉取 GitHub main 并部署，不再依赖外部 hook。 */
 export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> {
   await requireAdmin();
   invalidateGithubVersionCache();
-  let releaseLock: (() => void) | null = null;
-
   try {
     const projectDir = deploymentProjectDir();
     if (!fs.existsSync(path.join(projectDir, "package.json"))) return { ok: false, error: `部署目录无效：${projectDir}` };
-    releaseLock = acquireDeploymentLock(projectDir);
-
-    const env = deploymentEnv();
-    await ensureDeploymentRepository(projectDir, env);
-
-    const databasePath = getDatabasePath(projectDir);
-    if (!fs.existsSync(databasePath)) return { ok: false, error: `数据库不存在，已停止同步：${databasePath}` };
-
-    const before = await runCommand("git", ["rev-parse", "--short", "HEAD"], projectDir, 15_000, env);
-    const packageBefore = fileDigest(path.join(projectDir, "package.json"));
-    const lockBefore = fileDigest(path.join(projectDir, "package-lock.json"));
-    // 先用 SQLite backup API 生成可恢复副本，再拉取代码和构建。
-    await runCommand("npm", ["run", "backup"], projectDir, 60_000, env);
-    await runCommand("git", ["pull", "--ff-only", "origin", "main"], projectDir, 120_000, env);
-    const after = await runCommand("git", ["rev-parse", "--short", "HEAD"], projectDir, 15_000, env);
-
-    const dependencyFilesChanged = packageBefore !== fileDigest(path.join(projectDir, "package.json"))
-      || lockBefore !== fileDigest(path.join(projectDir, "package-lock.json"));
-    const dependencyDirMissing = !fs.existsSync(path.join(projectDir, "node_modules", ".package-lock.json"));
-    if (dependencyFilesChanged || dependencyDirMissing) {
-      // 只有依赖清单变化或 node_modules 不完整时重装，避免每次同步都长时间 npm ci。
-      await runCommand("npm", ["ci", "--include=dev", "--no-audit", "--no-fund"], projectDir, 300_000, env);
-    }
-    // 构建需要读取站点数据生成 sitemap/metadata，但不应迁移、清理或写入正式库。
-    // 运行时重启不继承这个临时标记，正式服务仍使用可写数据库。
-    const buildEnv = {
-      ...env,
-      BLOG_BUILD_READONLY: "true",
-      BLOG_DB_PATH: databasePath,
-      BLOG_ROOT: projectDir,
-    };
-    await runCommand("npm", ["run", "build"], projectDir, 300_000, buildEnv);
     const processName = await findPm2Name(projectDir);
-    if (!processName) return { ok: false, error: "代码同步并构建成功，但没有找到对应的 PM2 进程" };
-    const changed = before.stdout.trim() !== after.stdout.trim();
+    if (!processName) return { ok: false, error: "未找到受当前 PM2 管理的目标进程；在线目录未做任何修改" };
+    const envFile = path.resolve(process.env.BLOG_ENV_FILE?.trim() || path.join(projectDir, ".env.local"));
+    if (!fs.existsSync(envFile)) return { ok: false, error: `缺少稳定外部环境文件：${envFile}` };
+    if ((fs.statSync(envFile).mode & 0o077) !== 0) return { ok: false, error: "外部环境文件权限必须为 0600" };
+    const releasesRoot = path.resolve(process.env.DEPLOY_RELEASES_DIR?.trim() || path.join(path.dirname(projectDir), "yezi-blog-releases"));
+    if (fs.existsSync(path.join(releasesRoot, ".deploy.lock"))) return { ok: false, error: "已有一次部署正在执行，请等待健康检查或回滚完成" };
+
+    const statusFile = path.join(process.env.BLOG_ROOT?.trim() || projectDir, "data", "deploy-status.json");
+    fs.mkdirSync(path.dirname(statusFile), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(statusFile, `${JSON.stringify({ status: "queued", updatedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
+    const runner = path.join(projectDir, "scripts", "deploy-release.mjs");
+    if (!fs.existsSync(runner)) return { ok: false, error: "缺少 release 部署脚本" };
+    const child = spawn(process.execPath, [runner], {
+      cwd: projectDir,
+      detached: true,
+      stdio: "ignore",
+      env: {
+        ...deploymentEnv(),
+        DEPLOY_PROJECT_DIR: projectDir,
+        DEPLOY_PM2_NAME: processName,
+        DEPLOY_STATUS_FILE: statusFile,
+        BLOG_ENV_FILE: envFile,
+      },
+    });
+    child.unref();
     return {
       ok: true,
-      // PM2 重启不能在这个 Server Action 返回前启动：更新时它会终止当前
-      // Next 进程，浏览器会把一次实际成功的同步误报成 unexpected response。
-      // 客户端收到此成功结果后，才调用下方单独的重启 Action。
-      message: changed ? "GitHub 代码已更新，数据库已备份并完成构建。" : "代码已经是最新版本，数据库已备份并完成构建。",
+      message: "已启动独立 release 部署任务；构建、切换、健康检查与失败回滚将在服务器端完成。",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "同步或部署异常";
     return { ok: false, error: `同步失败：${message}` };
-  } finally {
-    releaseLock?.();
   }
 }
 
@@ -267,16 +176,7 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
  */
 export async function scheduleGithubRestartAction(): Promise<ScheduleGithubRestartActionResult> {
   await requireAdmin();
-  try {
-    const projectDir = deploymentProjectDir();
-    const processName = await findPm2Name(projectDir);
-    if (!processName) return { ok: false, error: "代码已同步并构建成功，但没有找到对应的 PM2 进程" };
-    schedulePm2Restart(projectDir, processName);
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "无法安排 PM2 重启";
-    return { ok: false, error: `PM2 重启安排失败：${message}` };
-  }
+  return { ok: false, error: "release 部署已由服务器任务统一负责重启，不再接受独立重启请求" };
 }
 
 /** 查询 detached PM2 重启脚本写入的最终状态，供设置页确认重启是否完成。 */
@@ -286,8 +186,8 @@ export async function getGithubDeployStatusAction(): Promise<GithubDeployStatus>
   const statusFile = path.join(projectDir, "data", "deploy-status.json");
   try {
     const value = JSON.parse(fs.readFileSync(statusFile, "utf8")) as Partial<GithubDeployStatus>;
-    if (value.status === "restarting" || value.status === "success" || value.status === "failed") {
-      return { status: value.status, updatedAt: value.updatedAt, error: value.error };
+    if (["queued", "building", "switching", "checking", "rolling_back", "success", "failed"].includes(value.status ?? "")) {
+      return { status: value.status as GithubDeployStatus["status"], updatedAt: value.updatedAt, error: value.error };
     }
   } catch {
     // 状态文件还未生成或正在被重启脚本替换。

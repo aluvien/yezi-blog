@@ -17,7 +17,7 @@ function parseProfile(value: unknown): CompressionProfile | null {
 }
 
 export async function POST(request: Request) {
-  const auth = await authorizeAdminApi();
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const body = await readAdminJson(request);
   if (!body.ok) return body.response;

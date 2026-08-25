@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 
 type Props = {
   referenceId: number;
@@ -67,7 +68,7 @@ export function ArticleReferenceArchiveActions({ referenceId, url, cached, varia
     try {
       const response = await fetch("/api/admin/article-references/archive", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...ADMIN_CSRF_HEADER },
         credentials: "same-origin",
         body: JSON.stringify({ url, cacheImages: true }),
       });

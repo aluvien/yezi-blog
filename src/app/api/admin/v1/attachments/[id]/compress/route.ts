@@ -17,7 +17,7 @@ function parseProfile(value: unknown): CompressionProfile | null {
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorizeAdminApi();
+  const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;
   const id = parseAdminId((await params).id);
   if (id === null) return adminError("INVALID_ID", "附件 ID 必须是正整数", 400);

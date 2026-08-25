@@ -38,6 +38,17 @@ function nextResponse(security: ProxySecurityContext): NextResponse {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const security = createSecurityContext(request);
+  if (
+    process.env.NODE_ENV === "production"
+    && process.env.TRUST_PROXY !== "true"
+    && (request.headers.has("x-forwarded-for") || request.headers.has("x-real-ip"))
+  ) {
+    const warningState = globalThis as typeof globalThis & { __yeziProxyHeaderWarning?: boolean };
+    if (!warningState.__yeziProxyHeaderWarning) {
+      warningState.__yeziProxyHeaderWarning = true;
+      console.warn("[security] 收到代理 IP 头但 TRUST_PROXY 未开启；所有访客会共用 unknown 限流桶");
+    }
+  }
 
   // 对外隐藏 Next 图片优化器的内部路径；参数和响应仍由 /_next/image 处理。
   if (pathname === "/image") {

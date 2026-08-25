@@ -138,6 +138,37 @@ const MIGRATIONS: readonly Migration[] = [
       }
     },
   },
+  {
+    // 会话代际用于一次性撤销全部设备。管理员密码仍由环境变量提供；改密流程
+    // 必须同时递增 generation，避免旧 Cookie 在密码轮换后继续有效。
+    version: 8,
+    name: "session-generation",
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          created_at TEXT NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+      `);
+      ensureColumn(db, "sessions", "generation", "INTEGER NOT NULL DEFAULT 1");
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS auth_state (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          session_generation INTEGER NOT NULL DEFAULT 1 CHECK (session_generation > 0),
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS maintenance_leases (
+          name TEXT PRIMARY KEY,
+          last_run_at INTEGER NOT NULL
+        );
+      `);
+      db.prepare(`
+        INSERT OR IGNORE INTO auth_state (singleton, session_generation, updated_at)
+        VALUES (1, 1, ?)
+      `).run(new Date().toISOString());
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;
@@ -164,6 +195,10 @@ function assertMigrationSequence(migrations: readonly Migration[]): void {
 export function runMigrations(db: Database.Database, migrations: readonly Migration[] = MIGRATIONS): number {
   assertMigrationSequence(migrations);
   let current = readUserVersion(db);
+  const supported = migrations.at(-1)?.version ?? 0;
+  if (current > supported) {
+    throw new Error(`数据库 schema v${current} 高于当前代码支持的 v${supported}，已拒绝启动以避免旧代码写入未来结构`);
+  }
   for (const migration of migrations) {
     if (migration.version <= current) continue;
     const apply = db.transaction(() => {

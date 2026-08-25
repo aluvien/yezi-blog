@@ -5,7 +5,6 @@ import { useEffect, useState, useTransition } from "react";
 import {
   getGithubDeployStatusAction,
   getGithubVersionStatusAction,
-  scheduleGithubRestartAction,
   syncLatestGithubAction,
   type GithubVersionStatus,
 } from "@/lib/actions/sync";
@@ -60,15 +59,9 @@ export default function SyncGithubButton({ trailingAction }: Props) {
           setStatus({ kind: "error", text: result.error });
           return;
         }
-        setStatus({ kind: "success", text: `${result.message} 正在确认重启状态…` });
-        // 先等待同步 Action 的成功响应到达浏览器，再单独安排 PM2 重启。重启会
-        // 终止当前 standalone 进程，因此不能 await 此请求；状态文件与下方轮询
-        // 会给出最终结果，避免首次同步被浏览器误报为响应异常。
-        void scheduleGithubRestartAction().then((restart) => {
-          if (!restart.ok) setStatus({ kind: "error", text: restart.error });
-        }).catch(() => undefined);
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        setStatus({ kind: "pending", text: result.message });
+        for (let attempt = 0; attempt < 180; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 2000));
           let deploy: Awaited<ReturnType<typeof getGithubDeployStatusAction>>;
           try {
             deploy = await getGithubDeployStatusAction();
@@ -81,11 +74,18 @@ export default function SyncGithubButton({ trailingAction }: Props) {
             return;
           }
           if (deploy.status === "failed") {
-            setStatus({ kind: "error", text: `代码已构建，但 PM2 重启失败：${deploy.error || "未知错误"}` });
+            setStatus({ kind: "error", text: `部署失败：${deploy.error || "未知错误"}` });
             return;
           }
+          const stage = deploy.status === "queued" ? "等待部署任务启动"
+            : deploy.status === "building" ? "正在独立 release 中安装依赖并构建"
+            : deploy.status === "switching" ? "正在停止旧进程、备份数据库并切换 release"
+            : deploy.status === "checking" ? "新 release 已启动，正在执行健康检查"
+            : deploy.status === "rolling_back" ? "健康检查失败，正在自动回滚"
+            : "正在部署";
+          setStatus({ kind: "pending", text: stage });
         }
-        setStatus({ kind: "success", text: "代码已同步并完成构建，PM2 正在重启，请稍后刷新页面确认。" });
+        setStatus({ kind: "pending", text: "部署仍在服务器后台运行，可稍后刷新此页查看最终状态。" });
         await checkVersion();
       } catch (error) {
         setStatus({

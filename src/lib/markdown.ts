@@ -8,6 +8,7 @@ import {
 } from "@/lib/article-reference";
 import { musicContainerHtml, parseMusicBlock, parseMusicSpec } from "@/lib/music";
 import { parseVideoBlock, videoContainerHtml } from "@/lib/video";
+import { expandMediaShortcodes } from "@/lib/media-shortcodes";
 
 // 输出端白名单兜底：即使 renderer 层出现回归，也不放行任意标签/属性。
 // 只保留文章实际用到的标签与属性；data-* 为 music 播放器容器所需。
@@ -177,7 +178,7 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
     return defaultCode(token);
   };
 
-  const expandedContent = expandArticleReferenceMarkers(content);
+  const expandedContent = expandMediaShortcodes(expandArticleReferenceMarkers(content));
   return sanitizeHtml(marked.parse(expandedContent, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
 }
 

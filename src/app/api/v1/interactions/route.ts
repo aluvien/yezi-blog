@@ -2,6 +2,7 @@ import { apiJson, apiOptions } from "@/lib/api";
 import { getMoment, getPost, getContentMetrics, recordContentInteraction, toggleContentLike, type ContentTarget, type InteractionKind } from "@/lib/db";
 import { getVisitorKey, getVisitorRateLimitKey, readLimitedJson, RequestBodyError } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
+import { validatePublicWriteRequest } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const sourceRejection = validatePublicWriteRequest(request);
+  if (sourceRejection) return apiJson({ error: sourceRejection.message }, sourceRejection.status);
   let body: { target_type?: unknown; target_id?: unknown; kind?: unknown };
   try {
     body = await readLimitedJson(request, 4 * 1024);

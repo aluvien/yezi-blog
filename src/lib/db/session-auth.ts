@@ -11,22 +11,39 @@ function hashSessionToken(token: string): string {
 
 export function createSession(token: string, expiresAt: number): void {
   const hashedToken = hashSessionToken(token);
-  db.prepare("INSERT INTO sessions (id, created_at, expires_at) VALUES (?, ?, ?)").run(hashedToken, now(), expiresAt);
+  db.prepare("INSERT INTO sessions (id, created_at, expires_at, generation) VALUES (?, ?, ?, ?)")
+    .run(hashedToken, now(), expiresAt, getSessionGeneration());
+}
+
+export function getSessionGeneration(): number {
+  const row = db.prepare("SELECT session_generation FROM auth_state WHERE singleton = 1").get() as { session_generation: number } | undefined;
+  return Math.max(1, Number(row?.session_generation) || 1);
+}
+
+/** Revoke every existing session without exposing or rewriting stored tokens. */
+export function revokeAllSessions(): number {
+  return db.transaction(() => {
+    const next = getSessionGeneration() + 1;
+    db.prepare("UPDATE auth_state SET session_generation = ?, updated_at = ? WHERE singleton = 1").run(next, now());
+    db.prepare("DELETE FROM sessions").run();
+    return next;
+  })();
 }
 
 export function getSessionByToken(token: string): Session | undefined {
   const hashedToken = hashSessionToken(token);
   const hashed = db.prepare("SELECT * FROM sessions WHERE id = ?").get(hashedToken) as Session | undefined;
-  if (hashed) return hashed;
+  if (hashed) return hashed.generation === getSessionGeneration() ? hashed : undefined;
   // 兼容升级前已经存在的明文会话；首次使用时立即迁移为哈希存储。
   const legacy = db.prepare("SELECT * FROM sessions WHERE id = ?").get(token) as Session | undefined;
   if (!legacy) return undefined;
   const migrate = db.transaction(() => {
     db.prepare("DELETE FROM sessions WHERE id = ?").run(token);
-    db.prepare("INSERT OR REPLACE INTO sessions (id, created_at, expires_at) VALUES (?, ?, ?)").run(hashedToken, legacy.created_at, legacy.expires_at);
+    db.prepare("INSERT OR REPLACE INTO sessions (id, created_at, expires_at, generation) VALUES (?, ?, ?, ?)")
+      .run(hashedToken, legacy.created_at, legacy.expires_at, getSessionGeneration());
   });
   migrate();
-  return { ...legacy, id: hashedToken };
+  return { ...legacy, id: hashedToken, generation: getSessionGeneration() };
 }
 
 export function deleteSession(token: string): void {

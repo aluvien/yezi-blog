@@ -126,6 +126,18 @@ test("a failed migration rolls back its schema work and does not advance its ver
   }
 });
 
+test("future schema versions are rejected before any migration or write", () => {
+  const temporary = createTemporaryDatabase();
+  try {
+    temporary.db.exec(`CREATE TABLE sentinel (value TEXT); INSERT INTO sentinel VALUES ('unchanged'); PRAGMA user_version = ${LATEST_DB_SCHEMA_VERSION + 1};`);
+    assert.throws(() => runMigrations(temporary.db), /高于当前代码支持/);
+    assert.equal(temporary.db.prepare("SELECT value FROM sentinel").get().value, "unchanged");
+    assert.equal(temporary.db.pragma("user_version", { simple: true }), LATEST_DB_SCHEMA_VERSION + 1);
+  } finally {
+    closeTemporaryDatabase(temporary);
+  }
+});
+
 test("reference library tag migration adds an empty JSON tag list without losing existing metadata", () => {
   const temporary = createTemporaryDatabase();
   try {

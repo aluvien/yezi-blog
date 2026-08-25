@@ -1,4 +1,5 @@
 export const MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
+export const MAX_UPLOAD_REQUEST_SIZE = 21 * 1024 * 1024;
 export const MAX_UPLOAD_PIXELS = 60 * 1024 * 1024;
 
 export const ALLOWED_UPLOAD_TYPES: Readonly<Record<string, string>> = {

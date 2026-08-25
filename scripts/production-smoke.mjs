@@ -102,16 +102,68 @@ try {
   for (let index = 0; index < 25; index += 1) {
     await fetch(`${baseUrl}/api/admin/login`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-real-ip": `198.51.100.${index + 1}` },
+      headers: { "content-type": "application/json", origin: baseUrl, "x-real-ip": `198.51.100.${index + 1}` },
       body: JSON.stringify({ password: "wrong-password" }),
     });
   }
   const validLogin = await fetch(`${baseUrl}/api/admin/login`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-real-ip": "198.51.100.201" },
+    headers: { "content-type": "application/json", origin: baseUrl, "x-real-ip": "198.51.100.201" },
     body: JSON.stringify({ password: "production-smoke-password" }),
   });
   if (!validLogin.ok) throw new Error("全局登录保护错误地拒绝了正确密码");
+
+  for (let index = 0; index < 5; index += 1) {
+    await fetch(`${baseUrl}/api/admin/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: baseUrl, "x-real-ip": "198.51.100.220" },
+      body: JSON.stringify({ password: "wrong-password" }),
+    });
+  }
+  const validLoginAfterIpLock = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: baseUrl, "x-real-ip": "198.51.100.220" },
+    body: JSON.stringify({ password: "production-smoke-password" }),
+  });
+  if (!validLoginAfterIpLock.ok) throw new Error("单 IP 登录保护错误地拒绝了正确密码");
+  const adminCookie = validLoginAfterIpLock.headers.get("set-cookie")?.split(";", 1)[0] || "";
+  if (!adminCookie) throw new Error("standalone 登录未返回管理员会话 Cookie");
+
+  async function uploadSizedText(endpoint, bytes, expectedStatus = 200) {
+    const form = new FormData();
+    form.append("file", new File([new Uint8Array(bytes)], `smoke-${bytes}.txt`, { type: "text/plain" }));
+    form.append("original", "true");
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      method: "POST",
+      headers: { cookie: adminCookie, origin: baseUrl, "x-yezi-csrf": "1" },
+      body: form,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (response.status !== expectedStatus) {
+      throw new Error(`${endpoint} ${bytes} 字节上传预期 ${expectedStatus}，实际 ${response.status}`);
+    }
+  }
+
+  await uploadSizedText("/api/admin/upload", 11 * 1024 * 1024);
+  await uploadSizedText("/api/moments/upload", 20 * 1024 * 1024);
+  const oversizedUpload = await fetch(`${baseUrl}/api/admin/upload`, {
+    method: "POST",
+    headers: {
+      cookie: adminCookie,
+      origin: baseUrl,
+      "x-yezi-csrf": "1",
+      "content-type": "multipart/form-data; boundary=smoke",
+    },
+    body: new Uint8Array(21 * 1024 * 1024 + 1),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (oversizedUpload.status !== 413) throw new Error(`21 MiB 以上上传未返回 413：${oversizedUpload.status}`);
+  const unauthenticatedUpload = await fetch(`${baseUrl}/api/moments/upload`, {
+    method: "POST",
+    headers: { origin: baseUrl, "x-yezi-csrf": "1" },
+    body: new FormData(),
+  });
+  if (unauthenticatedUpload.status !== 401) throw new Error("未认证上传未返回 401");
 
   const discovery = await waitForResponse(`${baseUrl}/api/v1`, () => output.join(""));
   const discoveryBody = await discovery.json();

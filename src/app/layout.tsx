@@ -69,6 +69,7 @@ export default async function RootLayout({
       data-palette={palette}
       data-layout-theme={layoutTheme}
       data-display-mode="browser"
+      data-build-commit={process.env.DEPLOY_BUILD_COMMIT?.slice(0, 7) || "development"}
       // data-theme 由内联脚本在 React 接管前设置（避免闪烁），
       // 用 suppressHydrationWarning 让 React 跳过对该元素的属性比对，防止水合报错 #418
       suppressHydrationWarning

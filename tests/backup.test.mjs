@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-backup-"));
+const mirrorRoot = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-backup-mirror-"));
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.env.BLOG_ROOT = tempRoot;
 process.env.BLOG_DB_PATH = path.join(tempRoot, "data", "blog.db");
@@ -15,10 +16,12 @@ process.env.BLOG_DB_PATH = path.join(tempRoot, "data", "blog.db");
 const { createPost, db } = await import("../src/lib/db.ts");
 const { runDbBackup } = await import("../src/lib/backup.ts");
 const { verifyDatabaseBackup } = await import("../src/lib/backup-verification.ts");
+const { runCompleteDataBackup, verifyCompleteDataBackup } = await import("../src/lib/data-backup.ts");
 
 test.after(() => {
   db.close();
   fs.rmSync(tempRoot, { recursive: true, force: true });
+  fs.rmSync(mirrorRoot, { recursive: true, force: true });
 });
 
 test("online SQLite backup passes integrity verification and preserves recoverable content", async () => {
@@ -69,4 +72,37 @@ test("manual backup and verification commands work against a recoverable databas
   });
   assert.equal(verification.status, 0, verification.stderr || verification.stdout);
   assert.match(verification.stdout, /"status": "ok"/);
+});
+
+test("concurrent database backups are serialized and never leave orphan sidecars", async () => {
+  const results = await Promise.allSettled([runDbBackup({ keep: 20 }), runDbBackup({ keep: 20 })]);
+  assert.equal(results.filter((item) => item.status === "fulfilled").length, 1);
+  assert.equal(results.filter((item) => item.status === "rejected").length, 1);
+  assert.match(String(results.find((item) => item.status === "rejected").reason), /已有备份任务/);
+  const backupDir = path.join(tempRoot, "data", "backups");
+  assert.deepEqual(fs.readdirSync(backupDir).filter((name) => /\.db-(?:wal|shm)$/.test(name)), []);
+});
+
+test("encrypted complete backup contains persistent data and only the online SQLite snapshot", async () => {
+  fs.mkdirSync(path.join(tempRoot, "data", "uploads", "202608"), { recursive: true });
+  fs.mkdirSync(path.join(tempRoot, "data", "reference-archives", "entry"), { recursive: true });
+  fs.writeFileSync(path.join(tempRoot, "data", "uploads", "202608", "photo.png"), "image");
+  fs.writeFileSync(path.join(tempRoot, "data", "reference-archives", "entry", "reader.md"), "reader");
+  fs.writeFileSync(path.join(tempRoot, "data", "qq-music-session.json"), "{\"cookie\":\"encrypted-at-rest-in-backup\"}");
+  fs.writeFileSync(path.join(tempRoot, "data", "telegram-bot-state.json"), "{\"offset\":42}");
+  process.env.DATA_BACKUP_KEY = Buffer.alloc(32, 7).toString("base64");
+  process.env.DATA_BACKUP_MIRROR_DIR = mirrorRoot;
+
+  const result = await runCompleteDataBackup({ keep: 2 });
+  const checked = await verifyCompleteDataBackup(result.path);
+  assert.ok(result.mirroredPath?.startsWith(mirrorRoot));
+  assert.equal(fs.readFileSync(result.mirroredPath).equals(fs.readFileSync(result.path)), true);
+  assert.deepEqual(checked.entries, [
+    "data/blog.db",
+    "data/qq-music-session.json",
+    "data/reference-archives/entry/reader.md",
+    "data/telegram-bot-state.json",
+    "data/uploads/202608/photo.png",
+  ]);
+  assert.equal(checked.entries.some((name) => /blog\.db-(?:wal|shm)$/.test(name)), false);
 });

@@ -14,6 +14,8 @@ import {
 } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { refreshQQMusicHealthScheduler } from "@/lib/qq-music-scheduler";
+import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
+import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
 
 export type SettingsActionResult = { ok: true; data?: unknown } | { ok: false; error: string };
 
@@ -67,12 +69,19 @@ export async function updateSiteSettingsAction(values: Record<string, string>): 
     }
     const limit = key === "about_content" ? 20000 : 2000;
     const value = String(values[key] ?? "").trim().slice(0, limit);
+    if (key === "about_content") {
+      safeValues[key] = normalizeMediaShortcodes(value);
+      continue;
+    }
     safeValues[key] = key === "music_position" ? (value === "bottom" ? "bottom" : "left") : value;
   }
   const schedulerChanged = ["qq_music_health_check_enabled", "qq_music_health_check_interval_hours"]
     .some((key) => safeValues[key] !== (existing[key] ?? ""));
   setSiteSettings(safeValues);
   if (schedulerChanged) refreshQQMusicHealthScheduler();
+  if (safeValues.about_content !== (existing.about_content ?? "") || safeValues.default_music !== (existing.default_music ?? "")) {
+    invalidateQQMusicAccessCache();
+  }
   revalidatePath("/", "layout");
   revalidatePath("/about");
   revalidatePath("/admin/attachments");

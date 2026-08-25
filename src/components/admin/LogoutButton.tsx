@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
+import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 
 export default function LogoutButton() {
   const router = useRouter();
@@ -13,7 +14,7 @@ export default function LogoutButton() {
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          await fetch("/api/admin/logout", { method: "POST" });
+          await fetch("/api/admin/logout", { method: "POST", headers: ADMIN_CSRF_HEADER });
           router.replace("/admin/login");
           router.refresh();
         })

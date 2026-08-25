@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 
 type Status = {
   configured: boolean;
@@ -17,7 +18,11 @@ type Props = {
 };
 
 async function api<T>(init?: RequestInit): Promise<T> {
-  const response = await fetch("/api/admin/telegram", { ...init, cache: "no-store" });
+  const response = await fetch("/api/admin/telegram", {
+    ...init,
+    headers: { ...ADMIN_CSRF_HEADER, ...Object.fromEntries(new Headers(init?.headers).entries()) },
+    cache: "no-store",
+  });
   const data = await response.json() as T & { error?: unknown };
   if (!response.ok || typeof data.error === "string") throw new Error(typeof data.error === "string" ? data.error : "请求失败");
   return data;

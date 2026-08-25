@@ -14,7 +14,7 @@ function noCache(data: unknown, status = 200): NextResponse {
 }
 
 export async function POST(request: Request) {
-  if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
+  if (!await requireAdminApi(request)) return noCache({ error: "未登录或请求来源无效" }, 401);
   let body: { url?: unknown; cacheImages?: unknown };
   try {
     body = await readLimitedJson(request, 8 * 1024);
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
+  if (!await requireAdminApi(request)) return noCache({ error: "未登录" }, 401);
   const jobId = new URL(request.url).searchParams.get("job");
   if (!jobId || !/^[0-9a-f-]{36}$/i.test(jobId)) return noCache({ error: "归档任务不存在" }, 404);
   const job = getArticleReferenceArchiveJob(jobId);

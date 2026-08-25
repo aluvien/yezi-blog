@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import crypto from "node:crypto";
 import { getProjectRoot } from "@/lib/uploads";
 import { verifyDatabaseBackup, type DatabaseBackupVerification } from "./backup-verification";
 
@@ -9,7 +10,7 @@ const DEFAULT_KEEP = 30;
 export interface DbBackupResult {
   /** 生成的备份文件绝对路径。 */
   path: string;
-  /** 备份文件名里的时间戳（YYYYMMDDHHMM）。 */
+  /** 备份文件名里的时间戳（含毫秒）。 */
   stamp: string;
   /** 本次清理掉的旧备份文件名。 */
   cleaned: string[];
@@ -32,21 +33,38 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string } = 
   const backupDir = path.join(root, "data", "backups");
   fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(backupDir, 0o700);
-  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
-  const target = path.join(backupDir, `blog-${stamp}.db`);
+  const lockPath = path.join(backupDir, ".backup.lock");
+  let lockFd: number;
+  try {
+    lockFd = fs.openSync(lockPath, "wx", 0o600);
+  } catch {
+    throw new Error("已有备份任务正在执行");
+  }
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "");
+  const suffix = crypto.randomBytes(4).toString("hex");
+  const target = path.join(backupDir, `blog-${stamp}-${suffix}.db`);
+  const temporary = `${target}.${process.pid}.tmp`;
 
-  const db = new Database(source, { readonly: true });
+  let db: Database.Database | undefined;
   let verification: DatabaseBackupVerification;
   try {
-    await db.backup(target);
-    fs.chmodSync(target, 0o600);
-    verification = verifyDatabaseBackup(target);
+    db = new Database(source, { readonly: true });
+    await db.backup(temporary);
+    fs.chmodSync(temporary, 0o600);
+    const checked = verifyDatabaseBackup(temporary);
+    fs.renameSync(temporary, target);
+    verification = { ...checked, path: target };
   } catch (error) {
     // 不把无法重新打开的文件保留为“成功备份”，避免恢复时才发现不可用。
+    fs.rmSync(temporary, { force: true });
+    fs.rmSync(`${temporary}-wal`, { force: true });
+    fs.rmSync(`${temporary}-shm`, { force: true });
     fs.rmSync(target, { force: true });
     throw error;
   } finally {
-    db.close();
+    db?.close();
+    fs.closeSync(lockFd!);
+    fs.rmSync(lockPath, { force: true });
   }
 
   const parsedKeep = Number.parseInt(String(options.keep ?? process.env.BACKUP_KEEP ?? ""), 10);
@@ -59,8 +77,15 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string } = 
     .sort((a, b) => b.mtime - a.mtime)
     .slice(keep);
   for (const file of stale) {
-    fs.unlinkSync(path.join(backupDir, file.name));
+    const stalePath = path.join(backupDir, file.name);
+    fs.unlinkSync(stalePath);
+    fs.rmSync(`${stalePath}-wal`, { force: true });
+    fs.rmSync(`${stalePath}-shm`, { force: true });
     cleaned.push(file.name);
+  }
+  // Clean sidecars left by older verifier versions without touching the DB snapshots.
+  for (const name of fs.readdirSync(backupDir).filter((item) => /^blog-.*\.db-(?:wal|shm)$/.test(item))) {
+    fs.rmSync(path.join(backupDir, name), { force: true });
   }
   return { path: target, stamp, cleaned, verification: verification! };
 }

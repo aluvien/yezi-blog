@@ -1,4 +1,5 @@
 import { runDbBackup, lastBackupTimestamp } from "@/lib/backup";
+import { runCompleteDataBackup } from "@/lib/data-backup";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INITIALIZATION_RETRY_MS = 60 * 1000;
@@ -64,8 +65,13 @@ async function runScheduledBackup(): Promise<void> {
   current.running = true;
   let nextDelay = msUntilNextBackup();
   try {
-    const result = await runDbBackup();
-    console.log(`[backup-scheduler] 每日备份完成：${result.path}`);
+    if (process.env.DATA_BACKUP_KEY?.trim()) {
+      const result = await runCompleteDataBackup();
+      console.log(`[backup-scheduler] 每日完整加密备份完成：${result.mirroredPath || result.path}`);
+    } else {
+      const result = await runDbBackup();
+      console.log(`[backup-scheduler] 每日数据库备份完成：${result.path}；未配置 DATA_BACKUP_KEY，完整数据归档未启用`);
+    }
   } catch (error) {
     nextDelay = backupRetryDelay(error, nextDelay);
     if (isDatabaseNotInitializedError(error)) {

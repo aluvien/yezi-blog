@@ -12,7 +12,7 @@ function noCache(data: unknown, status = 200): NextResponse {
   return NextResponse.json(data, { status, headers: { "cache-control": "no-store" } });
 }
 export async function POST(request: Request) {
-  if (!await requireAdminApi()) return noCache({ error: "未登录" }, 401);
+  if (!await requireAdminApi(request)) return noCache({ error: "未登录或请求来源无效" }, 401);
   let body: { url?: unknown; cacheReader?: unknown; cacheImages?: unknown };
   try {
     body = await readLimitedJson(request, 8 * 1024);

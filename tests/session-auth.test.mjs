@@ -17,6 +17,7 @@ const {
   getLoginAttempt,
   getSessionByToken,
   recordLoginFailure,
+  revokeAllSessions,
 } = await import("../src/lib/db.ts");
 
 test.after(() => {
@@ -40,6 +41,20 @@ test("expired sessions are removed before they can authenticate a request", () =
   createSession(token, Date.now() - 1);
   deleteExpiredSessions();
   assert.equal(getSessionByToken(token), undefined);
+});
+
+test("session generation revokes every existing device while allowing new sessions", () => {
+  const first = "c".repeat(64);
+  const second = "d".repeat(64);
+  createSession(first, Date.now() + 60_000);
+  createSession(second, Date.now() + 60_000);
+  const nextGeneration = revokeAllSessions();
+  assert.ok(nextGeneration >= 2);
+  assert.equal(getSessionByToken(first), undefined);
+  assert.equal(getSessionByToken(second), undefined);
+  const fresh = "e".repeat(64);
+  createSession(fresh, Date.now() + 60_000);
+  assert.equal(getSessionByToken(fresh)?.generation, nextGeneration);
 });
 
 test("login failure counters block both a client and the account-wide key", () => {

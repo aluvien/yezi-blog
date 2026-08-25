@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { login } from "@/lib/auth";
 import { getClientIp, readLimitedJson, RequestBodyError } from "@/lib/request";
+import { validateSameOriginWrite } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const sourceRejection = validateSameOriginWrite(request, { requireJson: true });
+  if (sourceRejection) return NextResponse.json({ error: sourceRejection.message }, { status: sourceRejection.status });
   let password = "";
   try {
     const body = await readLimitedJson<{ password?: unknown }>(request, 4 * 1024);

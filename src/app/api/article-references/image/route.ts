@@ -86,9 +86,8 @@ export async function GET(request: Request) {
       current = await assertPublicRemoteUrl(current);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-      let response: Response;
       try {
-        response = await safeRemoteFetch(current, {
+        const response = await safeRemoteFetch(current, {
           signal: controller.signal,
           headers: {
             accept: "image/avif,image/webp,image/apng,image/png,image/jpeg,image/gif,image/x-icon,*/*;q=0.1",
@@ -96,35 +95,35 @@ export async function GET(request: Request) {
             "user-agent": "Mozilla/5.0 (compatible; YeziBlogReference/1.0; +https://yezi.me)",
           },
         });
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get("location");
+          await response.body?.cancel().catch(() => undefined);
+          if (!location || redirect === MAX_REDIRECTS) throw new Error("图片跳转次数过多");
+          current = await assertPublicRemoteUrl(new URL(location, current).toString());
+          continue;
+        }
+        if (!response.ok) throw new Error(`图片返回 ${response.status}`);
+
+        const bytes = await readImageBytes(response);
+        const contentType = detectSafeRasterImageMime(bytes);
+        if (!contentType) throw new Error("返回内容不是受支持的安全图片");
+        const body = new ArrayBuffer(bytes.byteLength);
+        new Uint8Array(body).set(bytes);
+        return new NextResponse(body, {
+          headers: {
+            "cache-control": knownPublicCover
+              ? "public, max-age=86400, stale-while-revalidate=604800"
+              : "private, no-store, max-age=0",
+            "content-type": contentType,
+            "x-content-type-options": "nosniff",
+          },
+        });
       } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") throw new Error("图片读取超时");
-        throw new Error("图片读取失败");
+        if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) throw new Error("图片读取超时");
+        throw error;
       } finally {
         clearTimeout(timer);
       }
-
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
-        if (!location || redirect === MAX_REDIRECTS) throw new Error("图片跳转次数过多");
-        current = await assertPublicRemoteUrl(new URL(location, current).toString());
-        continue;
-      }
-      if (!response.ok) throw new Error(`图片返回 ${response.status}`);
-
-      const bytes = await readImageBytes(response);
-      const contentType = detectSafeRasterImageMime(bytes);
-      if (!contentType) throw new Error("返回内容不是受支持的安全图片");
-      const body = new ArrayBuffer(bytes.byteLength);
-      new Uint8Array(body).set(bytes);
-      return new NextResponse(body, {
-        headers: {
-          "cache-control": knownPublicCover
-            ? "public, max-age=86400, stale-while-revalidate=604800"
-            : "private, no-store, max-age=0",
-          "content-type": contentType,
-          "x-content-type-options": "nosniff",
-        },
-      });
     }
   } catch (error) {
     return imageError(error instanceof Error ? error.message : "图片读取失败");

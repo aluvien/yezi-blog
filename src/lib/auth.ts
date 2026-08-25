@@ -47,13 +47,12 @@ export async function login(password: string, options: { secure?: boolean; ip?: 
   const existing = getLoginAttempt(ip);
   const globalExisting = getLoginAttempt(GLOBAL_LOGIN_KEY);
   const ipBlockedUntil = existing?.blocked_until ?? 0;
-  if (ipBlockedUntil > now) {
-    return { ok: false, blocked: true, retryAfter: Math.ceil((ipBlockedUntil - now) / 1000) };
-  }
-
   const passwordMatches = verifyPassword(password);
   const globalBlockedUntil = globalExisting?.blocked_until ?? 0;
   if (!passwordMatches) {
+    if (ipBlockedUntil > now) {
+      return { ok: false, blocked: true, retryAfter: Math.ceil((ipBlockedUntil - now) / 1000) };
+    }
     // The account-wide guard blocks distributed guessing, but an attacker must
     // not be able to use it to reject the administrator's correct password.
     if (globalBlockedUntil > now) {
@@ -124,6 +123,28 @@ export async function requireAdmin(): Promise<Session> {
 }
 
 /** API 用：未登录返回 null，由调用方返回 401 */
-export async function requireAdminApi(): Promise<Session | null> {
-  return getSession();
+export async function requireAdminApi(request?: Request): Promise<Session | null> {
+  return request ? requireAdminApiRequest(request) : getSession();
+}
+
+/** Cookie-authenticated write routes must prove same-origin intent. */
+export async function requireAdminApiRequest(request: Request): Promise<Session | null> {
+  const authorization = request.headers.get("authorization") ?? "";
+  const configuredToken = process.env.ADMIN_API_TOKEN?.trim() ?? "";
+  if (authorization.startsWith("Bearer ") && configuredToken.length >= 32) {
+    const supplied = authorization.slice("Bearer ".length).trim();
+    const a = crypto.createHash("sha256").update(supplied).digest();
+    const b = crypto.createHash("sha256").update(configuredToken).digest();
+    if (crypto.timingSafeEqual(a, b)) {
+      return { id: "bearer", created_at: "", expires_at: Number.MAX_SAFE_INTEGER, generation: 0 };
+    }
+  }
+  const session = await getSession();
+  if (!session) return null;
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) {
+    const { requestContentType, validateSameOriginWrite } = await import("@/lib/request-security");
+    if (validateSameOriginWrite(request, { requireCsrfHeader: true })) return null;
+    if (requestContentType(request) === "text/plain") return null;
+  }
+  return session;
 }

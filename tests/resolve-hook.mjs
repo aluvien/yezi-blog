@@ -27,7 +27,7 @@ function resolveRelative(specifier, parentUrl) {
 export async function resolve(specifier, context, nextResolve) {
   // Route Handler 测试会直接加载 Next 的 ESM 模块；应用构建器可解析
   // `next/server`，而裸 Node ESM 需要显式入口文件。仅测试钩子处理此差异。
-  if (specifier === "next/server" || specifier === "next/headers") {
+  if (specifier === "next/server" || specifier === "next/headers" || specifier === "next/navigation") {
     return nextResolve(`${specifier}.js`, context);
   }
   if (specifier.startsWith("@/")) {

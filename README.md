@@ -85,13 +85,18 @@ Playwright、性能和 standalone 测试均使用独立的临时 SQLite 数据�
 | 变量 | 说明 | 默认值 |
 | --- | --- | --- |
 | `ADMIN_PASSWORD` | 后台登录密码 | 无（必填） |
+| `ADMIN_API_TOKEN` | 可选的原生管理 API Bearer Token，至少 32 字符；轮换并重启即可撤销 | 空 |
 | `NEXT_PUBLIC_SITE_URL` | 站点对外 URL，用于 metadata / sitemap / RSS，末尾不带斜杠 | `http://localhost:3030` |
 | `BLOG_DB_PATH` | 可选的 SQLite 绝对路径，适合容器挂载或隔离测试 | `data/blog.db` |
 | `API_CORS_ORIGIN` | 可选的 App/Web API 跨域来源；不设置时仅允许同源访问 | 空（同源） |
 | `TRUST_PROXY` | 是否信任 Nginx/Cloudflare 覆盖后的 `X-Real-IP`、`X-Forwarded-For`；直连 Node 端口保持关闭 | `false` |
+| `HOSTNAME` | Node 监听地址；PM2/裸机默认只监听回环，容器内需显式使用 `0.0.0.0` | `127.0.0.1` |
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 | `QQ_MUSIC_SESSION_PATH` | QQ 扫码会话文件路径；留空时放在数据库同目录，必须持久化且不可公开访问 | `data/qq-music-session.json` |
 | `QQ_MUSIC_HEALTH_CHECK_MID` | 用于验证 QQ Cookie 真实播放授权的歌曲 MID；建议选择一首可稳定播放的歌曲 | 内置测试歌曲 |
+| `QQ_MUSIC_SIGNING_KEY` | 歌词短时授权签名密钥，生产建议至少 32 个随机字符 | 进程临时密钥 |
+| `DATA_BACKUP_KEY` | 完整数据归档的 32 字节 base64 AES-256-GCM 密钥 | 空（只做 DB 备份） |
+| `DATA_BACKUP_MIRROR_DIR` | 可选的异机挂载/独立故障域镜像目录，不得放在 `BLOG_ROOT` 内 | 空 |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选，Telegram Bot 通知凭据；用于新评论和 QQ 音乐状态提醒 | 空（不发送） |
 | `TELEGRAM_ADMIN_USER_ID` | 推荐配置的管理员个人 User ID；管理命令、审核和 QQ 登录仅接受该用户的私聊操作 | 空（仅兼容通知 Chat ID 为管理员私聊的旧配置） |
 | `LLM_API_KEY` / `OPENAI_API_KEY` | 可选，文章引用 AI 摘要服务的密钥；兼容 OpenAI Chat Completions 格式 | 空（不生成摘要） |
@@ -104,7 +109,16 @@ Playwright、性能和 standalone 测试均使用独立的临时 SQLite 数据�
 
 ### 在文章和想法中插入
 
-文章使用独立的 `music` Markdown 代码块，一行一首或一个歌单：
+文章和想法都优先使用独占一行的短代码：
+
+```text
+!music qqvip:歌曲MID:song
+!music qqvip:歌单ID:playlist
+!video https://www.bilibili.com/video/BVxxxxxxxxxx
+!video https://youtu.be/VIDEO_ID
+```
+
+旧文章中的 `music` Markdown 代码块仍保持兼容，一行一首或一个歌单：
 
 ````md
 ```music
@@ -112,12 +126,6 @@ qqvip:歌单ID:playlist
 qqvip:歌曲MID:song
 ```
 ````
-
-想法正文中使用独占行标记：
-
-```text
-!music qqvip:歌曲MID:song
-```
 
 常规格式为 `平台:ID:类型[:random]`：
 
@@ -128,6 +136,8 @@ qqvip:歌曲MID:song
 | `random` | 可选；打乱歌单顺序 |
 
 后台文章和想法编辑器的“+ 音乐”按钮也支持手动填写上述格式。
+
+Bilibili 支持完整视频 URL、BV/av ID 和分 P 参数，YouTube 支持完整 URL 与视频 ID。`b23.tv` 不透明短链不会在公开渲染时联网展开；编辑器会明确提示先在浏览器中展开为完整 Bilibili 地址。
 
 ### QQ 音乐扫码登录、搜索与播放
 
@@ -186,9 +196,9 @@ POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 
 ## Admin REST API（原生 iOS 管理端）
 
-网页后台继续使用 Server Actions；原生 App 应使用 `/api/admin/v1` 的 REST JSON 接口，不需要 WebView，也不能调用 Next.js Server Actions 协议。登录仍使用 `POST /api/admin/login`，服务器会写入 httpOnly 的 `admin_session` Cookie；iOS `URLSession` 必须保留并随后的请求一并发送该 Cookie。
+网页后台继续使用 Server Actions；原生 App 应使用 `/api/admin/v1` 的 REST JSON 接口，不需要 WebView，也不能调用 Next.js Server Actions 协议。推荐在服务器配置独立的 `ADMIN_API_TOKEN`，原生客户端通过 `Authorization: Bearer <token>` 调用；令牌至少 32 字符，轮换环境变量并重启即可撤销，不能写入 URL、普通日志或前端代码。
 
-所有 `/api/admin/v1/*` 路由都会验证该 Cookie，且不会重定向到 HTML 登录页。响应带 `Cache-Control: private, no-store` 和 `X-API-Version: v1`。
+网页 Cookie 模式只允许精确同源请求：写操作必须携带浏览器产生的同源 `Origin` 和 `X-Yezi-Csrf: 1`，并拒绝跨站、`Origin: null` 和 `text/plain`。无 Origin 的原生请求不要复用 Cookie，应使用 Bearer Token。所有路由失败时返回 JSON，不重定向到 HTML；响应带 `Cache-Control: private, no-store` 和 `X-API-Version: v1`。
 
 成功响应：
 
@@ -283,27 +293,32 @@ POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 
 | 方法 | 路径 | 请求 JSON | `data` |
 | --- | --- | --- | --- |
-| GET | `/api/admin/v1/deploy/status` | — | `{ "status": "unknown" \| "restarting" \| "success" \| "failed", "updatedAt": "…", "error": "…" }` |
+| GET | `/api/admin/v1/deploy/status` | — | `{ "status": "unknown" \| "queued" \| "building" \| "switching" \| "checking" \| "rolling_back" \| "success" \| "failed", "updatedAt": "…", "error": "…" }` |
 | GET | `/api/admin/v1/deploy/version` | — | `{ "status": "up-to-date" \| "outdated" \| "dirty" \| "unavailable", "localCommit": "…", "remoteCommit": "…" }` |
 | POST | `/api/admin/v1/deploy/sync` | `{}` 或无 body | `{ "status": "success", "message": "…" }` |
-| POST | `/api/admin/v1/deploy/restart` | `{}` 或无 body | `{ "status": "restarting" }` |
+| POST | `/api/admin/v1/deploy/restart` | `{}` 或无 body | 已禁用独立重启；部署只能通过受健康检查和回滚保护的同步状态机执行 |
 
-重复同步或重启返回 HTTP `409` 与 `DEPLOY_IN_PROGRESS`；同步/重启失败返回统一 `error` envelope。项目没有额外的部署开关时，这些 API 与网页端同步按钮使用同一套 `DEPLOY_PROJECT_DIR`、`DEPLOY_PM2_NAME`、部署锁及状态文件配置。
+重复同步返回 HTTP `409` 与 `DEPLOY_IN_PROGRESS`；失败返回统一 `error` envelope。API 与网页端同步按钮使用同一套固定的 `DEPLOY_PROJECT_DIR`、`DEPLOY_PM2_NAME`、部署锁及状态文件配置，不接受客户端传入命令、路径、分支或进程名。
 
 ## 数据与上传文件
 
 - SQLite 数据库：`data/blog.db`（首次运行自动建表）
-- 后台上传的图片：`public/uploads/`
+- 后台上传：`data/uploads/`
+- 引用阅读归档与图片：`data/reference-archives/`、`data/ref/`
+- QQ/Telegram 本地状态：`data/qq-music-session.json`、`data/telegram-bot-state.json`
 
-**这两个目录都需要在部署时持久化并定期备份。** 可使用 `npm run backup` 手动生成带时间戳的 SQLite 备份；每个备份会用全新的只读连接执行 SQLite `integrity_check`，未通过校验的文件会立即删除。服务启动后也会自动每日备份（本地 04:17，若距上次备份超过 24 小时则启动后立即补一次），备份保留最近 `BACKUP_KEEP` 份（默认 30）。备份目录 `data/backups/` 不要直接暴露到 Web。
+整个 `data/` 都必须持久化。`npm run backup` 生成 SQLite online snapshot，并执行 `integrity_check`、`foreign_key_check` 与核心表校验。配置 `DATA_BACKUP_KEY` 后，自动任务和 `npm run backup:data` 还会生成 AES-256-GCM 加密的完整归档；归档包含一份经过校验的 DB snapshot、上传、引用归档和本地状态，明确排除在线 `blog.db-wal`/`blog.db-shm` 与备份目录。`DATA_BACKUP_MIRROR_DIR` 应指向异机挂载或独立故障域；程序拒绝把它放进 `BLOG_ROOT`。备份目录不得暴露到 Web，密钥不得写进 Git 或日志。
 
 恢复演练或实际恢复前，先校验目标文件：
 
 ```bash
 npm run backup:verify -- /absolute/path/to/blog-YYYYMMDDHHMMSS.db
+npm run backup:data:verify -- /absolute/path/to/data-YYYYMMDDHHMMSS-xxxxxxxx.tar.gz.enc
 ```
 
-校验通过后，在维护窗口停止 PM2、保留当前数据库副本，再将备份文件恢复为 `BLOG_DB_PATH` 指向的数据库并重启服务。首次请求会自动运行缺失的兼容 migration 与 FTS 校验；恢复操作应始终先在副本或预发布环境演练。
+恢复必须先在隔离目录验证归档和数据库，再进入维护窗口停止 PM2。恢复顺序为：保留当前状态副本；解密完整归档；将 `data/blog.db`、`uploads`、引用归档和约定的本地状态恢复到稳定 `BLOG_ROOT/data`；确认文件权限为目录 `0700`、敏感文件 `0600`；最后启动服务并检查 `/api/health/deploy`、文章图片和引用 reader。不要把在线 WAL/SHM 复制进恢复结果。真实异机上传、远端保留删除和恢复演练必须先由运维者明确目标与范围。
+
+修改 `ADMIN_PASSWORD` 时，在同一维护窗口运行 `npm run auth:revoke-all`，然后重启并验证旧 Cookie 失效、新密码可登录；只改环境变量不会自动撤销已签发的会话。
 
 ## 演示数据
 
@@ -327,18 +342,17 @@ pm2 start ecosystem.config.js   # standalone server，端口 3030
 pm2 save && pm2 startup         # 开机自启
 ```
 
-后台“同步 GitHub”按钮会在服务器项目目录中执行安全的 `git pull --ff-only origin main`，
-同步前自动备份 SQLite，随后构建并重启 `yezi-blog`。它不会执行 `git reset --hard`、`git clean`、
-`rsync --delete` 或复制数据库的操作。生产环境请在 `.env.local` 中配置 `BLOG_DB_PATH` 和 `UPLOAD_DIR`
-的绝对路径，并确保服务器 Git 已配置 GitHub 访问凭证。同步过程带有互斥锁，不会并发构建；只有依赖清单变化或 `node_modules` 不完整时才执行 `npm ci`。后台会继续查询 PM2 重启状态，确认成功或报告失败。
+后台“同步 GitHub”会把 `origin/main` 构建到独立的版本化 Git worktree，使用回环临时端口完成健康、首页 CSP/commit 和真实 JS chunk 检查，再停止旧进程、建立经校验的 SQLite 快照、原子切换 `current` 软链并启动新 release。最终健康失败时会先恢复与旧 release 匹配的数据库快照，再切回旧代码。浏览器不会再额外触发第二次 PM2 重启。
+
+生产环境应把 `BLOG_ROOT`、`BLOG_DB_PATH` 和 `BLOG_ENV_FILE` 放在 release 之外的稳定目录；`BLOG_ENV_FILE` 权限必须为 `0600`。同时设置固定的 `DEPLOY_PM2_NAME`，并按 `.env.local.example` 配置 `DEPLOY_RELEASES_DIR`、`DEPLOY_CURRENT_LINK` 等路径。部署前置检查会在拉代码前确认 PM2 进程、环境文件权限和互斥锁，避免误管其他 PM2 namespace。
 
 如果没有设置 `BLOG_DB_PATH`，程序会固定使用项目根目录下的 `data/blog.db`；`start-standalone.mjs` 会在 PM2 工作目录变化时仍把默认路径指回项目根目录。若数据库放在项目外部，再显式填写绝对路径。
 
 生产构建命令已固定使用 Next 的 webpack 路径（`npm run build`），适合宝塔/PM2 的非交互部署。PM2 进程的工作目录必须是项目根目录，且建议设置 `DEPLOY_PM2_NAME=yezi-blog`；未设置时程序会按 PM2 的 `pm_cwd` 自动查找同目录进程。
 
-如果站点放在 Nginx 后面，请在 `.env.local` 设置 `TRUST_PROXY=true`，并确认 Nginx 覆盖而不是拼接客户端传入的 `X-Real-IP` / `X-Forwarded-For`。如果直接通过 `:3030` 访问，保持 `TRUST_PROXY=false`，避免访客伪造 IP 绕过限流和点赞去重。
+PM2/裸机默认 `HOSTNAME=127.0.0.1`，操作系统防火墙和安全组也应阻断公网 3030。站点放在 Nginx 后面时设置 `TRUST_PROXY=true`，并确认 Nginx覆盖而不是拼接客户端传入的 `X-Real-IP` / `X-Forwarded-For`。若确实直连 Node，则保持 `TRUST_PROXY=false`；容器内部显式监听 `0.0.0.0`，但 Docker 只把宿主端口映射到 `127.0.0.1`。
 
-Nginx 反向代理示例见 `deploy/nginx.conf.example`（含 `client_max_body_size` 上传大小限制）。上线后记得把 `NEXT_PUBLIC_SITE_URL` 改为正式域名并重新 build。
+Nginx 反向代理示例见 `deploy/nginx.conf.example`。文件上限为 20 MiB、应用 multipart 请求上限 21 MiB、Next Proxy/Nginx 上限 22 MiB；公开入口必须经过 Nginx，由其在缓冲完整请求前拒绝超限上传。上线后把 `NEXT_PUBLIC_SITE_URL` 改为正式域名并重新 build。
 
 ### 可选：部署 QQ Music API（宝塔 / PM2）
 
@@ -404,12 +418,11 @@ Bot 还会在同一 Node 进程中每约 3 秒读取一次管理员指令，不�
 docker build --build-arg NEXT_PUBLIC_SITE_URL=https://your-domain.com -t yezi-blog .
 docker run -d --name yezi-blog -p 3030:3030 \
   -v blog-data:/app/data \
-  -v blog-uploads:/app/public/uploads \
   yezi-blog
 ```
 
 注意：
 
 - `better-sqlite3` 是原生模块，镜像内编译，请勿跨平台直接拷贝 `node_modules`。
-- `/app/data`（数据库）和 `/app/public/uploads`（上传文件）必须挂卷持久化，否则容器重建后数据丢失。
+- `/app/data`（数据库、上传、引用归档和本地状态）必须整体挂卷持久化，否则容器重建后数据丢失。
 - `NEXT_PUBLIC_SITE_URL` 是构建期内联变量，务必在 `docker build` 时用 `--build-arg` 注入正式域名（见上方示例），否则镜像内为空、SEO 绝对链接会失效；改域名需要重新构建镜像。
