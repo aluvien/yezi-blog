@@ -185,11 +185,13 @@ export async function scheduleGithubRestartAction(): Promise<ScheduleGithubResta
   return { ok: false, error: "release 部署已由服务器任务统一负责重启，不再接受独立重启请求" };
 }
 
-/** 查询 detached PM2 重启脚本写入的最终状态，供设置页确认重启是否完成。 */
+/** 查询后台 release 部署任务写入的状态，供设置页确认部署与健康检查结果。 */
 export async function getGithubDeployStatusAction(): Promise<GithubDeployStatus> {
   await requireAdmin();
   const projectDir = deploymentProjectDir();
-  const statusFile = path.join(projectDir, "data", "deploy-status.json");
+  // 必须与 syncLatestGithubAction 使用同一根目录，否则 BLOG_ROOT 与部署目录不同时，
+  // 后台会持续读到旧状态，App 也无法获知 release 部署的真实进度。
+  const statusFile = path.join(process.env.BLOG_ROOT?.trim() || projectDir, "data", "deploy-status.json");
   try {
     const value = JSON.parse(fs.readFileSync(statusFile, "utf8")) as Partial<GithubDeployStatus>;
     if (["queued", "building", "switching", "checking", "rolling_back", "success", "failed"].includes(value.status ?? "")) {

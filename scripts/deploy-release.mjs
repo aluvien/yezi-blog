@@ -76,7 +76,10 @@ async function verifyHttp(baseUrl, commit, attempts = 80) {
     try {
       const health = await fetch(baseUrl, { cache: "no-store", signal: AbortSignal.timeout(1_500) });
       const payload = await health.json();
-      if (!health.ok || payload?.status !== "ok" || payload?.commit !== commit) throw new Error(`health ${health.status}`);
+      if (!health.ok || payload?.status !== "ok" || payload?.commit !== commit) {
+        const actualCommit = typeof payload?.commit === "string" ? `（实际 ${payload.commit.slice(0, 12)}）` : "";
+        throw new Error(`health ${health.status}${actualCommit}`);
+      }
       const origin = new URL(baseUrl).origin;
       const home = await fetch(`${origin}/`, { cache: "no-store", signal: AbortSignal.timeout(2_000) });
       const csp = home.headers.get("content-security-policy") || "";
@@ -158,7 +161,7 @@ async function portIsListening(port) {
 /** Direct/nohup deployments have no supervisor. Only target the configured HTTP port. */
 async function stopDirectServer() {
   const port = Number.parseInt(new URL(finalHealthUrl).port || "80", 10);
-  const result = await run("ss", ["-ltnp", `sport = :${port}`], sourceRoot, 15_000).catch(() => ({ stdout: "" }));
+  const result = await run("ss", ["-ltnp", "sport", "=", `:${port}`], sourceRoot, 15_000).catch(() => ({ stdout: "" }));
   const pids = [...new Set([...result.stdout.matchAll(/pid=(\d+)/g)].map((match) => Number(match[1])).filter((pid) => pid > 1 && pid !== process.pid))];
   for (const pid of pids) {
     try { process.kill(pid, "SIGTERM"); } catch { /* Process may already be gone. */ }
@@ -171,6 +174,10 @@ async function stopDirectServer() {
       try { process.kill(pid, "SIGKILL"); } catch { /* Process may already be gone. */ }
     }
   }
+  for (let attempt = 0; attempt < 20 && await portIsListening(port); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (await portIsListening(port)) throw new Error(`无法停止 ${port} 端口上的旧 Next 进程，已取消切换`);
 }
 
 async function startDirectServer(target, env) {
