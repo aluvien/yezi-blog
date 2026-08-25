@@ -27,21 +27,14 @@ test("QQ search accepts a top-level albummid and builds its cover URL", () => {
   }]);
 });
 
-test("QQ search music spec keeps a safe display snapshot for player fallback", () => {
-  const value = createQQMusicSpec("002u1lkd1zb2Ie", {
-    title: "一生所爱",
-    artist: "卢冠廷",
-    cover: "https://y.gtimg.cn/music/photo_new/T002R300x300M000001UAAKE4QJguW.jpg",
-  });
+test("QQ search music spec remains a compact shortcode", () => {
+  const value = createQQMusicSpec("002u1lkd1zb2Ie");
 
   assert.deepEqual(parseMusicSpec(value), {
     server: "qqvip",
     id: "002u1lkd1zb2Ie",
     type: "song",
     shuffle: false,
-    title: "一生所爱",
-    artist: "卢冠廷",
-    cover: "https://y.gtimg.cn/music/photo_new/T002R300x300M000001UAAKE4QJguW.jpg",
   });
   assert.equal(createQQMusicSpec("002u1lkd1zb2Ie"), "qqvip:002u1lkd1zb2Ie:song");
 });

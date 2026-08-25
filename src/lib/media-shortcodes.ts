@@ -6,17 +6,7 @@ export type MediaShortcode =
   | { kind: "video"; spec: VideoSpec; value: string };
 
 function serializeMusicSpec(spec: MusicSpec): string {
-  let mode = "";
-  if (spec.shuffle) {
-    mode = ":random";
-  } else if (spec.title || spec.artist || spec.cover) {
-    mode = `:meta-${encodeURIComponent(JSON.stringify({
-      title: spec.title ?? "",
-      artist: spec.artist ?? "",
-      cover: spec.cover ?? "",
-    }))}`;
-  }
-  return `${spec.server}:${spec.id}:${spec.type}${mode}`;
+  return `${spec.server}:${spec.id}:${spec.type}${spec.shuffle ? ":random" : ""}`;
 }
 
 export function serializeVideoSpec(spec: VideoSpec): string {

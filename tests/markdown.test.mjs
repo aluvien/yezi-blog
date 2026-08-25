@@ -103,6 +103,11 @@ test("saving media shortcodes canonicalizes pasted video URLs to compact specs",
   assert.equal(content, "!video bilibili:BV13JMi6yE4p:2\n!video youtube:dQw4w9WgXcQ");
 });
 
+test("saving media shortcodes removes legacy music metadata snapshots", () => {
+  const legacy = "!music qqvip:abc123:song:meta-%7B%22title%22%3A%22%E6%AD%8C%22%7D";
+  assert.equal(normalizeMediaShortcodes(legacy), "!music qqvip:abc123:song");
+});
+
 test("invalid media shortcodes remain plain text", () => {
   const html = renderMarkdown("!video https://evil.example/embed");
   assert.ok(html.includes("!video"));
