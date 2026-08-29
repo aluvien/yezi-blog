@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { requireAdmin } from "@/lib/auth";
+import { readDeployedBuildCommit } from "@/lib/deploy-build";
 
 export type SyncGithubActionResult =
   | { ok: true; message: string }
@@ -271,7 +272,7 @@ export async function getGithubDeployStatusAction(): Promise<GithubDeployStatus>
 }
 
 /**
- * 检查服务器当前提交是否与 GitHub origin/main 一致。
+ * 检查服务器当前已部署 release 是否与 GitHub origin/main 一致。
  * 只执行只读 Git 命令，不会拉取代码、构建项目或修改数据库。
  */
 export async function getGithubVersionStatusAction(): Promise<GithubVersionStatus> {
@@ -302,8 +303,14 @@ export async function getGithubVersionStatusAction(): Promise<GithubVersionStatu
     }
 
     const local = await runCommand("git", ["rev-parse", "HEAD"], projectDir, 5_000, env);
-    const localCommit = local.stdout.trim().split(/\s+/)[0] || "";
-    if (!/^[0-9a-f]{40}$/i.test(localCommit)) throw new Error("无法读取服务器当前提交");
+    const sourceCommit = local.stdout.trim().split(/\s+/)[0] || "";
+    if (!/^[0-9a-f]{40}$/i.test(sourceCommit)) throw new Error("无法读取服务器源码提交");
+
+    // Release 部署只 fetch origin/main 并切换 yezi-blog-current，不会推进稳定
+    // 源码目录的 main。版本提示必须优先比较持久化的活动 release 标记，
+    // 否则每次成功部署后仍会把旧源码 HEAD 误报为“本地版本”。首次部署或
+    // 开发环境没有标记时，才回退到源码 HEAD。
+    const localCommit = readDeployedBuildCommit(process.env.BLOG_ROOT?.trim() || projectDir) || sourceCommit;
 
     const changes = await runCommand("git", ["status", "--porcelain=v1", "--untracked-files=no"], projectDir, 5_000, env);
     if (changes.stdout.trim()) {
