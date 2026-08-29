@@ -470,15 +470,7 @@ html[data-theme="dark"] .admin-login-card .admin-button-primary:hover {
 
 @media (max-width: 699px) {
   .admin-theme-toggle {
-    width: 30px;
-    height: 30px;
-    flex-basis: 30px;
-    border-radius: 8px;
-  }
-
-  .admin-theme-icon {
-    width: 16px;
-    height: 16px;
+    display: none;
   }
 }
 
