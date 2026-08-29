@@ -6,6 +6,7 @@ import { createMomentAction, updateMomentAction } from "@/lib/actions/moments";
 import type { Moment } from "@/lib/db";
 import { uploadImage } from "./ImageUpload";
 import { MusicInsertDialog } from "./MusicInsertDialog";
+import { parsePostTags } from "@/lib/post-tags";
 
 const MAX_IMAGES = 9;
 
@@ -23,6 +24,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [content, setContent] = useState(moment?.content ?? "");
+  const [tags, setTags] = useState(() => parsePostTags(moment?.tags).join(", "));
   const [images, setImages] = useState<string[]>(() => initialImages(moment));
   const [original, setOriginal] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -59,8 +61,8 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
     setError("");
     startTransition(async () => {
       const r = moment
-        ? await updateMomentAction(moment.id, { content, images })
-        : await createMomentAction({ content, images });
+        ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags) })
+        : await createMomentAction({ content, images, tags: parsePostTags(tags) });
       if (!r.ok) {
         setError(r.error);
         return;
@@ -84,6 +86,13 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
           rows={3}
           className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm leading-6 resize-y"
           placeholder="记录一个想法…"
+        />
+        <input
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm"
+          placeholder="标签（可选，多个用逗号分隔）"
+          aria-label="想法标签"
         />
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -173,6 +182,13 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
         rows={6}
         className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base leading-6"
         placeholder="记录一个想法…"
+      />
+      <input
+        value={tags}
+        onChange={(e) => setTags(e.target.value)}
+        className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+        placeholder="标签（可选，多个用逗号分隔）"
+        aria-label="想法标签"
       />
       <div className="flex flex-wrap gap-2">
         <button

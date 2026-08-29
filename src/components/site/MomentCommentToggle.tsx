@@ -37,7 +37,7 @@ export function MomentCommentToggle({
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen((value) => !value)}
-          className="-m-1 inline-flex min-h-7 items-center gap-1 rounded-full px-1 transition-colors hover:bg-accent/10 hover:text-accent"
+          className="-m-1 ml-auto inline-flex min-h-7 items-center gap-1 rounded-full px-1 transition-colors hover:bg-accent/10 hover:text-accent"
         >
           <MetricIcon type="comment" />
           <span>{count}</span>

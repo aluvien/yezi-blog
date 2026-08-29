@@ -1,6 +1,7 @@
 // 想法 DAO。
 import { db, now } from "./core";
 import type { Moment } from "./types";
+import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
 
 /** 想法列表。传 options 时走 SQL 分页，不传则返回全部（首页/归档合并时间流依赖全量）。 */
 export function listMoments(options?: { limit?: number; offset?: number }): Moment[] {
@@ -22,18 +23,21 @@ export function getMoment(id: number): Moment | undefined {
   return db.prepare("SELECT * FROM moments WHERE id = ?").get(id) as Moment | undefined;
 }
 
-export function createMoment(data: { content: string; images?: string[] }): Moment {
+export function createMoment(data: { content: string; images?: string[]; tags?: string[] }): Moment {
   const ts = now();
   const info = db
-    .prepare("INSERT INTO moments (content, images, created_at, updated_at) VALUES (?, ?, ?, ?)")
-    .run(data.content, JSON.stringify(data.images ?? []), ts, ts);
+    .prepare("INSERT INTO moments (content, images, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+    .run(data.content, JSON.stringify(data.images ?? []), JSON.stringify(normalizePostTags(data.tags)), ts, ts);
   return getMoment(Number(info.lastInsertRowid))!;
 }
 
-export function updateMoment(id: number, data: { content: string; images?: string[] }): Moment | undefined {
-  db.prepare("UPDATE moments SET content = ?, images = ?, updated_at = ? WHERE id = ?").run(
+export function updateMoment(id: number, data: { content: string; images?: string[]; tags?: string[] }): Moment | undefined {
+  const current = getMoment(id);
+  const tags = data.tags === undefined ? parsePostTags(current?.tags) : normalizePostTags(data.tags);
+  db.prepare("UPDATE moments SET content = ?, images = ?, tags = ?, updated_at = ? WHERE id = ?").run(
     data.content,
     JSON.stringify(data.images ?? []),
+    JSON.stringify(tags),
     now(),
     id,
   );

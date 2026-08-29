@@ -6,6 +6,7 @@ import { createMoment, deleteMoment, getMoment, updateMoment } from "@/lib/db";
 import type { ActionResult } from "@/lib/actions/posts";
 import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
 import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
+import { normalizePostTags } from "@/lib/post-tags";
 
 const MAX_MOMENT_CONTENT_LENGTH = 20_000;
 
@@ -25,7 +26,7 @@ function normalizeMomentImages(value: unknown): string[] | null {
   return valid ? [...new Set(images)] : null;
 }
 
-export async function createMomentAction(data: { content: string; images: string[] }): Promise<ActionResult> {
+export async function createMomentAction(data: { content: string; images: string[]; tags?: string[] }): Promise<ActionResult> {
   await requireAdmin();
   if (!data || typeof data.content !== "string") return { ok: false, error: "想法数据格式无效" };
   const content = normalizeMediaShortcodes(data.content.trim());
@@ -33,7 +34,7 @@ export async function createMomentAction(data: { content: string; images: string
   const images = normalizeMomentImages(data.images);
   if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
   if (!content && images.length === 0) return { ok: false, error: "写点什么或至少传一张图" };
-  const moment = createMoment({ content, images });
+  const moment = createMoment({ content, images, tags: normalizePostTags(data.tags) });
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
@@ -43,7 +44,7 @@ export async function createMomentAction(data: { content: string; images: string
 
 export async function updateMomentAction(
   id: number,
-  data: { content: string; images: string[] },
+  data: { content: string; images: string[]; tags?: string[] },
 ): Promise<ActionResult> {
   await requireAdmin();
   if (!Number.isInteger(id) || id < 1 || !data || typeof data.content !== "string") return { ok: false, error: "想法数据格式无效" };
@@ -53,7 +54,8 @@ export async function updateMomentAction(
   const images = normalizeMomentImages(data.images);
   if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
   if (!content && images.length === 0) return { ok: false, error: "写点什么或至少保留一张图" };
-  const moment = updateMoment(id, { content, images });
+  const tags = data.tags === undefined ? undefined : normalizePostTags(data.tags);
+  const moment = updateMoment(id, { content, images, ...(tags === undefined ? {} : { tags }) });
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");

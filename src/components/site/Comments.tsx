@@ -282,7 +282,7 @@ export function Comments({
               autoComplete="off"
             />
           </div>
-          <div className="comment-form-row">
+          <div className="comment-form-row comment-form-row--identity">
             <input
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
@@ -294,11 +294,13 @@ export function Comments({
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="邮箱（选填，不公开）"
+              placeholder="邮箱（选填，用于头像，不公开）"
               type="email"
               maxLength={100}
               className={inputCls}
             />
+          </div>
+          <div className="comment-form-row comment-form-row--website">
             <input
               value={profileUrl}
               onChange={(e) => setProfileUrl(e.target.value)}

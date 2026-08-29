@@ -12,6 +12,7 @@ import {
 import { deleteMomentAction, updateMomentAction } from "@/lib/actions/moments";
 import { getContentMetrics, getMoment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
+import { parsePostTags } from "@/lib/post-tags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,9 +30,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!body.ok) return body.response;
   const content = hasOwn(body.value, "content") ? body.value.content : existing.content;
   const images = hasOwn(body.value, "images") ? body.value.images : parseMomentImages(existing);
+  const tags = hasOwn(body.value, "tags")
+    ? parsePostTags(typeof body.value.tags === "string" ? body.value.tags : JSON.stringify(body.value.tags ?? []))
+    : parsePostTags(existing.tags);
 
   try {
-    const result = await updateMomentAction(id, { content: content as string, images: images as string[] });
+    const result = await updateMomentAction(id, { content: content as string, images: images as string[], tags });
     if (!result.ok) return adminActionError(result);
     const moment = getMoment(id);
     if (!moment) return adminInternalError("update moment response", new Error("moment is missing"));

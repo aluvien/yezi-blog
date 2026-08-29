@@ -42,15 +42,18 @@ export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string,
   const latestInteractions = listLatestApprovedComments(8);
   const tags = getCachedPublishedTags(12);
   const socialLinks = parseSocialLinks(siteSettings.social_links, 8);
+  const routes = siteSettings.layout_theme === "classic"
+    ? { essay: "/essay", bits: "/bits", memo: "/memo" }
+    : { essay: "/posts", bits: "/moments", memo: "/works" };
 
   return (
     <>
       <div className="site-sidebar-card">
         <Label icon="content">内容</Label>
         <div className="site-sidebar-stat-grid mt-3">
-          <Link href="/posts" className="site-sidebar-stat"><strong>{postCount}</strong><span>文章</span></Link>
-          <Link href="/moments" className="site-sidebar-stat"><strong>{momentCount}</strong><span>想法</span></Link>
-          <Link href="/works" className="site-sidebar-stat"><strong>{workCount}</strong><span>作品</span></Link>
+          <Link href={routes.essay} className="site-sidebar-stat"><strong>{postCount}</strong><span>随笔</span></Link>
+          <Link href={routes.bits} className="site-sidebar-stat"><strong>{momentCount}</strong><span>絮语</span></Link>
+          <Link href={routes.memo} className="site-sidebar-stat"><strong>{workCount}</strong><span>小记</span></Link>
         </div>
       </div>
 
@@ -91,8 +94,8 @@ export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string,
           <div className="site-sidebar-interactions mt-3">
             {latestInteractions.map((comment) => {
               const href = comment.target_type === "post" && comment.target_slug
-                ? `/posts/${comment.target_slug}#comments`
-                : `/moments#moment-${comment.target_id}`;
+                ? `${routes.essay}/${comment.target_slug}#comments`
+                : `${routes.bits}#moment-${comment.target_id}`;
               return (
                 <Link key={comment.id} href={href} className="site-sidebar-interaction">
                   <span>{comment.nickname} · {formatDateOnly(comment.created_at)}</span>

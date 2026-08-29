@@ -1,0 +1,270 @@
+/* Admin Images Results
+   负责分页、结果列表与卡片视图。
+*/
+
+.admin-images-browser__pager {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-images-browser__pager-btn {
+  font-size: var(--admin-text-sm);
+  line-height: 1;
+}
+
+.admin-images-browser__page-progress {
+  min-width: 48px;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--admin-text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.admin-images-browser__results {
+  display: grid;
+  gap: 14px;
+  background: transparent;
+}
+
+.admin-images-browser__items {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-images-browser__items[data-view='grid'] {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-content: start;
+  align-items: start;
+  gap: 14px 12px;
+}
+
+.admin-images-browser__item-shell {
+  display: grid;
+  min-width: 0;
+}
+
+.admin-images-browser__source-heading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--admin-text-xs);
+  font-weight: 700;
+  letter-spacing: var(--admin-tracking-wide);
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.admin-images-browser__items[data-view='grid'] .admin-images-browser__source-heading {
+  grid-column: 1 / -1;
+}
+
+.admin-images-browser__card {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--admin-border) 76%, transparent 24%);
+  border-radius: var(--admin-control-radius);
+  background: var(--admin-images-browser-list-surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.admin-images-browser__items[data-view='grid'] .admin-images-browser__card {
+  display: block;
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.admin-images-browser__thumb {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 128px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--admin-control-radius);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--code-content-bg) 84%, var(--bg) 16%);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent 28%);
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.admin-images-browser__items[data-view='grid'] .admin-images-browser__thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-color: color-mix(in srgb, var(--border) 78%, transparent 22%);
+  border-radius: var(--admin-control-radius);
+  box-shadow: none;
+}
+
+.admin-images-browser__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition:
+    transform 220ms ease,
+    filter 180ms ease;
+}
+
+.admin-images-browser__card:hover .admin-images-browser__thumb img,
+.admin-images-browser__card:focus-visible .admin-images-browser__thumb img,
+.admin-images-browser__card--active .admin-images-browser__thumb img {
+  filter: saturate(1.04);
+}
+
+.admin-images-browser__items[data-view='list'] .admin-images-browser__card:hover,
+.admin-images-browser__items[data-view='list'] .admin-images-browser__card:focus-visible {
+  border-color: var(--admin-images-browser-list-hover-border);
+  background: var(--admin-images-browser-list-hover-surface);
+  box-shadow: 0 14px 24px -24px color-mix(in srgb, var(--text) 18%, transparent 82%);
+}
+
+.admin-images-browser__items[data-view='list'] .admin-images-browser__card--active {
+  border-color: var(--admin-images-browser-list-active-border);
+  background: var(--admin-images-browser-list-active-surface);
+  box-shadow: 0 16px 28px -24px color-mix(in srgb, var(--text) 20%, transparent 80%);
+}
+
+.admin-images-browser__items[data-view='grid'] .admin-images-browser__card:hover .admin-images-browser__thumb,
+.admin-images-browser__items[data-view='grid'] .admin-images-browser__card:focus-visible .admin-images-browser__thumb {
+  border-color: color-mix(in srgb, var(--text) 44%, var(--border) 56%);
+  box-shadow: none;
+}
+
+.admin-images-browser__items[data-view='grid'] .admin-images-browser__card--active .admin-images-browser__thumb {
+  border-color: color-mix(in srgb, var(--text) 58%, var(--border) 42%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 58%, var(--border) 42%);
+}
+
+.admin-images-browser__card:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--admin-focus-ring),
+    0 14px 24px -24px color-mix(in srgb, var(--text) 18%, transparent 82%);
+}
+
+.admin-images-browser__item-copy {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.admin-images-browser__item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-images-browser__item-title,
+.admin-images-browser__item-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-images-browser__item-title {
+  color: var(--text);
+  font-size: var(--admin-text-base);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.admin-images-browser__item-path {
+  color: color-mix(in srgb, var(--text) 82%, var(--muted) 18%);
+  font-family: var(--admin-font-mono);
+  font-size: var(--admin-text-sm);
+  line-height: 1.45;
+}
+
+.admin-images-browser__item-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--admin-text-xs);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-images-browser__item-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.admin-images-browser__items[data-view='grid'] .admin-images-browser__item-copy {
+  display: none;
+}
+
+.admin-images-browser__thumb-overlay {
+  position: absolute;
+  inset: auto 0 0;
+  display: grid;
+  gap: 4px;
+  padding: 28px 12px 12px;
+  background: linear-gradient(180deg, transparent 0%, var(--overlay-85) 100%);
+  color: var(--lightbox-text);
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+  pointer-events: none;
+}
+
+.admin-images-browser__card:hover .admin-images-browser__thumb-overlay,
+.admin-images-browser__card:focus-visible .admin-images-browser__thumb-overlay {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.admin-images-browser__thumb-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-images-browser__thumb-fallback {
+  color: var(--muted);
+  font-size: var(--admin-text-sm);
+  letter-spacing: var(--admin-tracking-wide);
+  text-transform: uppercase;
+}

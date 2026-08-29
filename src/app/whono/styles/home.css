@@ -1,0 +1,116 @@
+/* home.css
+   只承载首页私有规则；禁止回填 about/memo 或正文相关样式。
+*/
+
+.hero {
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.hero img {
+  display: block;
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+}
+
+.home .intro {
+  margin-top: 16px;
+}
+
+.home--no-hero .intro {
+  margin-top: 4px;
+}
+
+.intro__lead {
+  display: block;
+  font-size: 15px;
+  white-space: pre-line;
+}
+
+.intro__more {
+  display: block;
+  margin-top: 10px;
+  white-space: pre-line;
+}
+
+.intro__link-tail {
+  white-space: nowrap;
+}
+
+.intro__tail-punct {
+  margin-left: 0.12em;
+}
+
+.intro--serif {
+  font-family: var(--font-readable);
+}
+
+.intro--serif a {
+  font-family: var(--font-copy);
+}
+
+.section-title--index {
+  margin-left: 14px;
+  margin-top: 4px;
+}
+
+.home--no-intro .section-title--index {
+  margin-top: 24px;
+}
+
+.home--compact-start .section-title--index {
+  margin-top: 0;
+}
+
+.home--compact-start .content {
+  padding-top: 62px;
+}
+
+.home--compact-start .list {
+  margin-top: 10px;
+}
+
+@media (max-width: 900px) {
+  .home--compact-start .content {
+    padding-top: calc(4px + env(safe-area-inset-top));
+  }
+
+  .home--no-intro .section-title--index {
+    margin-top: 18px;
+  }
+
+  .home--compact-start .section-title--index {
+    margin-top: 4px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 900px) {
+  .home--compact-start .content {
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 640px) {
+  .hero img {
+    height: 150px;
+  }
+
+  .home--compact-start .content {
+    padding-top: calc(env(safe-area-inset-top));
+  }
+
+  .home--no-intro .section-title--index {
+    margin-top: 16px;
+  }
+
+  .home--compact-start .section-title--index {
+    margin-top: 2px;
+  }
+
+  .hero {
+    margin: 0 0 8px;
+  }
+}

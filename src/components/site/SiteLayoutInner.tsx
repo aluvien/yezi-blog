@@ -9,15 +9,18 @@ import { NavIcon } from "@/components/site/NavIcon";
 import { SiteSearch } from "@/components/site/SiteSearch";
 import { ReadingProgress } from "@/components/site/ReadingProgress";
 import { MusicInitializer } from "@/components/site/MusicInitializer";
+import { CodeCopyInitializer } from "@/components/site/CodeCopyInitializer";
 import { GlobalMusicPlayer } from "@/components/site/GlobalMusicPlayer";
 import { ErrorBoundary } from "@/components/site/ErrorBoundary";
 import { SiteImage } from "@/components/site/SiteImage";
 import { NavigationFeedback } from "@/components/site/NavigationFeedback";
 import { SiteScrollManager } from "@/components/site/SiteScrollManager";
+import { ClassicReaderToggle } from "@/components/site/ClassicReaderToggle";
+import { ClassicShell } from "@/components/site/ClassicShell";
 
 export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [] }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }> }) {
   const pathname = usePathname();
-  const isPost = pathname.startsWith("/posts/");
+  const isPost = pathname.startsWith("/posts/") || pathname.startsWith("/essay/") || pathname.startsWith("/archive/");
   const [menuState, setMenuState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
   const menuOpen = menuState.pathname === pathname && menuState.open;
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
@@ -77,7 +80,36 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
   const socialLinks = parseSocialLinks(siteSettings.social_links, 6);
   const navItems = getVisibleNavItems(siteSettings);
+  const classicNavItems = [
+    { href: "/essay", label: "随笔" },
+    { href: "/bits", label: "絮语" },
+    { href: "/memo", label: "小记" },
+    { href: "/archive", label: "归档" },
+    { href: "/about", label: "关于" },
+  ];
+  const renderedNavItems = siteSettings.layout_theme === "classic" ? classicNavItems : navItems;
   const pwaNavItems = PWA_NAV_ITEMS.filter((item) => siteSettings[item.settingKey] !== "0");
+
+  if (siteSettings.layout_theme === "classic") {
+    return (
+      <>
+        <ClassicShell siteSettings={siteSettings}>{children}</ClassicShell>
+        <ErrorBoundary label="MusicInitializer">
+          <MusicInitializer />
+        </ErrorBoundary>
+        <CodeCopyInitializer />
+        <ErrorBoundary label="GlobalMusicPlayer">
+          <GlobalMusicPlayer
+            defaultMusic={siteSettings.default_music?.trim()}
+            defaultMusicShuffle={siteSettings.default_music_shuffle === "1"}
+            musicFloatEnabled={siteSettings.music_float_enabled !== "0"}
+            musicFloatInfoEnabled={siteSettings.music_float_info_enabled !== "0"}
+            musicPosition={siteSettings.music_position}
+          />
+        </ErrorBoundary>
+      </>
+    );
+  }
 
   return (
     <div className="site-canvas flex min-h-full flex-1 flex-col">
@@ -102,7 +134,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
           </Link>
           <div className="flex items-center gap-2">
             <nav className="hidden items-center gap-0.5 md:flex" aria-label="主导航">
-              {navItems.map((item) => (
+              {renderedNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -115,6 +147,15 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
                 </Link>
               ))}
             </nav>
+            {siteSettings.layout_theme === "classic" && <ClassicReaderToggle />}
+            {siteSettings.layout_theme === "classic" && (
+              <Link href="/rss.xml" className="classic-rss-link" aria-label="RSS" title="RSS">
+                <svg className="classic-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                  <path strokeLinecap="round" d="M5 5.5a13.5 13.5 0 0 1 13.5 13.5M5 11a8 8 0 0 1 8 8" />
+                  <circle cx="5.5" cy="18.5" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              </Link>
+            )}
             <SiteSearch />
             {/* 深色模式切换：仅桌面显示，位于搜索图标右侧（需求 F3） */}
             <button
@@ -203,9 +244,10 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
             <section className="site-mobile-menu-card">
               <h2>◉ IN SITE</h2>
               <nav className="site-mobile-menu-grid" aria-label="站内导航">
-                {navItems.map((item) => (
+                {renderedNavItems.map((item) => (
                   <Link key={item.href} href={item.href} onClick={() => setMenuOpen(false)}>{item.label}</Link>
                 ))}
+                {siteSettings.layout_theme === "classic" && <Link href="/search" onClick={() => setMenuOpen(false)}>搜索</Link>}
                 <Link href="/rss.xml" onClick={() => setMenuOpen(false)}>RSS</Link>
               </nav>
             </section>
@@ -246,6 +288,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
       <ErrorBoundary label="MusicInitializer">
         <MusicInitializer />
       </ErrorBoundary>
+      <CodeCopyInitializer />
       <ErrorBoundary label="GlobalMusicPlayer">
         <GlobalMusicPlayer
           defaultMusic={siteSettings.default_music?.trim()}

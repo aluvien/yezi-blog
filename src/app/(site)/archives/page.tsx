@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { countApprovedCommentsBulk, getContentMetricsBulk, hasLikedBulk } from "@/lib/db";
 import { getSiteAuthor } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
@@ -11,7 +12,10 @@ import { PageHeader } from "@/components/site/PageHeader";
 import { getSession } from "@/lib/auth";
 import { stripMarkdown } from "@/lib/markdown";
 import { toPostSummary } from "@/lib/mobile-feed";
-import { getCachedMoments, getCachedPublishedPosts, getCachedSiteSettings } from "@/lib/server-data";
+import { getCachedMoments, getCachedPublishedPosts, getCachedPublishedTags, getCachedSiteSettings } from "@/lib/server-data";
+import { ClassicArchiveList } from "@/components/site/ClassicHome";
+import { ClassicEntrySearch } from "@/components/site/ClassicEntrySearch";
+import { ClassicEntryTags } from "@/components/site/ClassicEntryTags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,9 +24,38 @@ export const metadata: Metadata = { title: "归档", description: "按时间浏�
 
 export default async function ArchivesPage() {
   const posts = getCachedPublishedPosts();
-  const moments = getCachedMoments();
+  const archiveTags = getCachedPublishedTags(100);
   const siteSettings = getCachedSiteSettings();
   const authorName = getSiteAuthor(siteSettings);
+
+  // The classic archive only renders article title/date/tags. Avoid loading
+  // interaction counters and comment state that this view never displays.
+  if (siteSettings.layout_theme === "classic") {
+    const emptyMetrics = { views: 0, likes: 0 };
+    const classicItems: FeedItem[] = posts.map((post) => ({
+      type: "post" as const,
+      value: toPostSummary(post, ""),
+      commentCount: 0,
+      metrics: emptyMetrics,
+      initialLiked: false,
+    }));
+    return (
+      <>
+        <div className="entry-filters" data-entry-filters>
+          <div className="page-header page-header--with-search">
+            <div className="page-heading">
+              <div className="page-title-row"><h1 className="page-title">归档</h1></div>
+              <span className="page-subtitle page-subtitle--entry-filters"><span className="page-subtitle__text">共 {posts.length} 篇内容</span><Link className="page-subtitle__link page-subtitle__item" href="/archive/rss.xml">RSS</Link><ClassicEntryTags tags={archiveTags} /></span>
+            </div>
+            <div className="page-actions"><ClassicEntrySearch label="归档" /></div>
+          </div>
+        </div>
+        <div id="classic-entry-list"><ClassicArchiveList items={classicItems} /></div>
+      </>
+    );
+  }
+
+  const moments = getCachedMoments();
   const isAuthorized = !!(await getSession());
   const visitorKey = await getVisitorKeyFromRequest();
   const postIds = posts.map((post) => post.id);

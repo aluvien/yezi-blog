@@ -14,13 +14,13 @@ type Props = { initialValues: Record<string, string>; section?: SettingsSection 
 
 const SECTION_KEYS: Record<SettingsSection, string[]> = {
   site: [
-    "site_name", "site_subtitle", "site_logo", "site_logo_no_border", "footer_text", "social_links",
-    "show_related_posts", "show_more_posts", "show_table_of_contents", "show_home_page", "show_moments_page", "show_posts_page", "show_references_page", "show_works_page", "show_about_page", "author_name", "author_email",
+    "site_name", "site_subtitle", "site_logo", "site_logo_no_border", "classic_hero", "footer_text", "social_links",
+    "author_name", "author_email",
     "gravatar_enabled", "gravatar_mirror", "author_avatar", "author_avatar_no_border", "qq_music_health_check_enabled",
     "qq_music_health_check_interval_hours", "telegram_comment_notifications_enabled",
   ],
   music: ["default_music", "default_music_shuffle", "music_float_enabled", "music_float_info_enabled", "music_position"],
-  appearance: ["theme", "layout_theme", "dark_mode"],
+  appearance: ["theme", "layout_theme", "dark_mode", "classic_home_image", "classic_home_intro", "classic_home_more", "classic_home_section_title", "classic_home_include_bits", "classic_show_interactions", "classic_show_comments", "show_related_posts", "show_more_posts", "show_table_of_contents", "show_home_page", "show_moments_page", "show_posts_page", "show_references_page", "show_works_page", "show_about_page"],
 };
 
 export default function SiteSettingsForm({ initialValues, section = "site" }: Props) {
@@ -30,6 +30,14 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
     site_subtitle: initialValues.site_subtitle ?? "",
     site_logo: initialValues.site_logo ?? "",
     site_logo_no_border: initialValues.site_logo_no_border ?? "0",
+    classic_hero: initialValues.classic_hero ?? "",
+    classic_home_image: initialValues.classic_home_image ?? "",
+    classic_home_intro: initialValues.classic_home_intro ?? "",
+    classic_home_more: initialValues.classic_home_more ?? "",
+    classic_home_section_title: initialValues.classic_home_section_title ?? "",
+    classic_home_include_bits: initialValues.classic_home_include_bits ?? "1",
+    classic_show_interactions: initialValues.classic_show_interactions ?? "1",
+    classic_show_comments: initialValues.classic_show_comments ?? "1",
     footer_text: initialValues.footer_text ?? "",
     social_links: initialValues.social_links ?? "",
     show_related_posts: initialValues.show_related_posts ?? "1",
@@ -106,6 +114,10 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
           <label className="mb-1 block text-sm font-medium text-neutral-700">页脚文案</label>
           <input value={values.footer_text} onChange={(event) => update("footer_text", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="认真写字，也认真生活。" />
         </div>
+        </div>
+        <div className="mt-4 border-t border-neutral-200 pt-4">
+          <ImageUpload value={values.classic_hero || null} onChange={(path) => update("classic_hero", path ?? "")} label="经典版首页 Hero（可选）" />
+          <p className="mt-1 text-xs text-neutral-500">留空时自动使用最新文章封面；没有封面则按目标主题的无 Hero 首页显示。</p>
         </div>
       </section>
 
@@ -194,26 +206,6 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         commentNotificationsEnabled={values.telegram_comment_notifications_enabled === "1"}
         onCommentNotificationsEnabledChange={(enabled) => update("telegram_comment_notifications_enabled", enabled ? "1" : "0")}
       />
-      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:p-5">
-        <legend className="px-1 text-sm font-medium text-neutral-700">文章与列表显示</legend>
-        <div className="grid gap-3 md:grid-cols-3">
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_related_posts !== "0"} onChange={(event) => update("show_related_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章页“继续阅读”</label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_more_posts !== "0"} onChange={(event) => update("show_more_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章列表页“查看更多文章”</label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_table_of_contents !== "0"} onChange={(event) => update("show_table_of_contents", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章右侧目录</label>
-        </div>
-      </fieldset>
-      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:p-5">
-        <legend className="px-1 text-sm font-medium text-neutral-700">页面展示</legend>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_home_page !== "0"} onChange={(event) => update("show_home_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“首页”</label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_moments_page !== "0"} onChange={(event) => update("show_moments_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“想法”</label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_posts_page !== "0"} onChange={(event) => update("show_posts_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“文章”</label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_references_page !== "0"} onChange={(event) => update("show_references_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“引用”</label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_works_page !== "0"} onChange={(event) => update("show_works_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“作品”</label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_about_page !== "0"} onChange={(event) => update("show_about_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“关于”</label>
-        </div>
-        <p className="text-xs leading-5 text-neutral-500">控制桌面顶部导航和手机菜单中的页面入口；关闭入口不会删除页面，直接访问页面地址仍然有效。</p>
-      </fieldset>
       </>}
 
       {section === "music" && <section className="admin-card space-y-5 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
@@ -337,6 +329,59 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
             })}
           </div>
         </div>
+        {values.layout_theme === "classic" && (
+          <fieldset className="admin-settings-subsection space-y-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+            <legend className="px-1 text-sm font-medium text-neutral-700">经典版·书香自定义功能</legend>
+            <p className="text-xs leading-5 text-neutral-500">仅在经典版·书香启用。内容继续沿用本站数据，版式遵循书香主题的阅读节奏。</p>
+            <ImageUpload value={values.classic_home_image || null} onChange={(path) => update("classic_home_image", path ?? "")} label="首页图片（可选）" />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-neutral-600">首页引导文字</label>
+                <textarea value={values.classic_home_intro} onChange={(event) => update("classic_home_intro", event.target.value)} rows={3} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="个人博客：记录文章、想法与作品。" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-neutral-600">首页补充文字</label>
+                <textarea value={values.classic_home_more} onChange={(event) => update("classic_home_more", event.target.value)} rows={3} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="更多内容请访问" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-neutral-600">信息流标题</label>
+              <input value={values.classic_home_section_title} onChange={(event) => update("classic_home_section_title", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="索引" />
+            </div>
+            <fieldset className="space-y-3 rounded-lg border border-amber-200/80 bg-white/70 p-3">
+              <legend className="px-1 text-sm font-medium text-neutral-700">本站扩展</legend>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.classic_home_include_bits !== "0"} onChange={(event) => update("classic_home_include_bits", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />首页混入絮语时间流</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.classic_show_interactions !== "0"} onChange={(event) => update("classic_show_interactions", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示经典版互动信息（点赞、浏览、评论入口）</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.classic_show_comments !== "0"} onChange={(event) => update("classic_show_comments", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示经典版评论区</label>
+            </fieldset>
+          </fieldset>
+        )}
+        {values.layout_theme === "editorial" && (
+        <fieldset className="admin-settings-subsection space-y-4 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
+          <legend className="px-1 text-sm font-medium text-neutral-700">编辑版 · 新视觉设置</legend>
+          <p className="text-xs leading-5 text-neutral-500">文章列表、文章页和前台导航的显示选项统一放在这里管理。</p>
+          <fieldset className="space-y-3 rounded-lg border border-neutral-200 bg-white/70 p-3">
+            <legend className="px-1 text-sm font-medium text-neutral-700">文章与列表显示</legend>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_related_posts !== "0"} onChange={(event) => update("show_related_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章页“继续阅读”</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_more_posts !== "0"} onChange={(event) => update("show_more_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章列表页“查看更多文章”</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_table_of_contents !== "0"} onChange={(event) => update("show_table_of_contents", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章右侧目录</label>
+            </div>
+          </fieldset>
+          <fieldset className="space-y-3 rounded-lg border border-neutral-200 bg-white/70 p-3">
+            <legend className="px-1 text-sm font-medium text-neutral-700">页面展示</legend>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_home_page !== "0"} onChange={(event) => update("show_home_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“首页”</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_moments_page !== "0"} onChange={(event) => update("show_moments_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“想法”</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_posts_page !== "0"} onChange={(event) => update("show_posts_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“文章”</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_references_page !== "0"} onChange={(event) => update("show_references_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“引用”</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_works_page !== "0"} onChange={(event) => update("show_works_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“作品”</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_about_page !== "0"} onChange={(event) => update("show_about_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“关于”</label>
+            </div>
+            <p className="text-xs leading-5 text-neutral-500">控制桌面顶部导航和手机菜单中的页面入口；关闭入口不会删除页面，直接访问页面地址仍然有效。</p>
+          </fieldset>
+        </fieldset>
+        )}
         <div>
           <p className="text-sm text-neutral-600">深色模式（访客可在前台页头手动切换）</p>
           <div className="mt-3 flex flex-wrap gap-2">

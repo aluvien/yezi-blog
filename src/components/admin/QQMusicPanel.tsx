@@ -3,7 +3,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 
 type Status = { available: boolean; loggedIn: boolean; uin: string | null };
-type Qr = { image: string; qrsig: string; ptqrtoken: string };
+type LoginSource = { label: string; website: string };
+type Qr = {
+  channel: "qq";
+  image: string;
+  qrsig: string;
+  ptqrtoken: string;
+  expiresAt: number;
+  source: LoginSource;
+} | {
+  channel: "qqmusic";
+  image: string;
+  key: string;
+  expiresAt: number;
+  source: LoginSource;
+};
 type Playlist = {
   id: string;
   name: string;
@@ -117,12 +131,11 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
   useEffect(() => {
     if (!qr) return;
     let stopped = false;
-    const expiresAt = Date.now() + 2 * 60 * 1000;
     const poll = async () => {
       if (pollingRef.current || stopped) return;
-      if (Date.now() >= expiresAt) {
+      if (Date.now() >= qr.expiresAt) {
         setQr(null);
-        setMessage("二维码已过期，请重新生成后扫码。");
+        setMessage(`二维码已过期，请重新生成后扫码。来源：${qr.source.label}（${qr.source.website}）`);
         return;
       }
       pollingRef.current = true;
@@ -130,11 +143,16 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
         const result = await api<{ state?: string; uin?: string; message?: string }>("/api/admin/qq-music", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ op: "poll", qrsig: qr.qrsig, ptqrtoken: qr.ptqrtoken }),
+          body: JSON.stringify(qr.channel === "qq"
+            ? { op: "poll", qrsig: qr.qrsig, ptqrtoken: qr.ptqrtoken }
+            : { op: "native-poll", key: qr.key }),
         });
         if (result.state === "success") {
           setStatus({ available: true, loggedIn: true, uin: result.uin ?? null });
-          setMessage("QQ 音乐登录成功，会员权限已仅保存在服务器。");
+          setMessage(`${qr.channel === "qqmusic" ? "QQ 音乐 App" : "QQ"} 扫码登录成功，会员权限已仅保存在服务器。`);
+          setQr(null);
+        } else if (result.state === "expired") {
+          setMessage(result.message || `二维码已过期或登录失败。来源：${qr.source.label}（${qr.source.website}）`);
           setQr(null);
         } else if (result.message) {
           setMessage(result.message);
@@ -150,15 +168,24 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
     return () => {
       stopped = true;
       window.clearInterval(timer);
+      if (qr.channel === "qqmusic") {
+        void api("/api/admin/qq-music", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ op: "native-cancel", key: qr.key }),
+        }).catch(() => undefined);
+      }
     };
   }, [qr]);
 
-  async function openQr() {
+  async function openQr(channel: "qq" | "qqmusic") {
     setBusy(true);
     setMessage("");
     try {
-      setQr(await api<Qr>("/api/admin/qq-music?op=qr"));
-      setMessage("请用手机 QQ 扫码，并在手机上确认登录。");
+      setQr(await api<Qr>(`/api/admin/qq-music?op=${channel === "qq" ? "qr" : "native-qr"}`));
+      setMessage(channel === "qq"
+        ? "请用手机 QQ 扫码，并在手机上确认登录。"
+        : "请用 QQ 音乐 App 扫码，并在 App 中确认登录。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "无法生成二维码");
     } finally {
@@ -181,8 +208,11 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={busy} onClick={() => void openQr()} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">
-          {busy ? "生成中…" : status?.loggedIn ? "重新扫码登录" : "扫码登录 QQ 音乐"}
+        <button type="button" disabled={busy} onClick={() => void openQr("qq")} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">
+          {busy ? "生成中…" : "使用手机 QQ 扫码"}
+        </button>
+        <button type="button" disabled={busy} onClick={() => void openQr("qqmusic")} className="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50">
+          使用 QQ 音乐 App 扫码
         </button>
         <button type="button" onClick={() => void refreshStatus()} className="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm text-neutral-600 hover:bg-neutral-100">
           刷新状态
@@ -195,8 +225,9 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={qr.image} alt="QQ 音乐登录二维码" className="h-40 w-40 rounded-lg border border-neutral-100 object-contain" />
           <div className="text-center sm:text-left">
-            <p className="text-sm font-medium text-neutral-800">请使用手机 QQ 扫码</p>
-            <p className="mt-1 text-xs leading-5 text-neutral-500">二维码有效期有限。扫描后在 QQ 内确认，本页会自动完成登录。</p>
+            <p className="text-sm font-medium text-neutral-800">请使用{qr.channel === "qqmusic" ? " QQ 音乐 App" : "手机 QQ"}扫码</p>
+            <p className="mt-1 text-xs leading-5 text-neutral-500">二维码有效期有限。扫描并确认后，本页会自动保存登录 Cookie。</p>
+            <p className="mt-1 text-xs leading-5 text-neutral-400">来源：{qr.source.label}（{qr.source.website}）</p>
             <button type="button" onClick={() => setQr(null)} className="mt-3 text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-800">取消本次扫码</button>
           </div>
         </div>

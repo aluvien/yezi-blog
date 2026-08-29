@@ -1,0 +1,188 @@
+/* memo.css
+   只承载 memo 页面私有规则；禁止放共享正文样式或其他页面特例。
+*/
+
+.memo-page {
+  --memo-intro-mb: 32px;
+  --memo-toc-mt: 18px;
+  --memo-toc-mb: 46px;
+  --memo-section-heading-mt: 56px;
+}
+
+.memo-page .intro {
+  margin-bottom: var(--memo-intro-mb);
+}
+
+.memo-page .intro > :first-child {
+  margin-top: 0;
+}
+
+.memo-page .intro > :last-child {
+  margin-bottom: 0;
+}
+
+.memo-toc {
+  margin: 18px 0 46px;
+}
+
+.memo-page .memo-toc {
+  margin: var(--memo-toc-mt) 0 var(--memo-toc-mb);
+}
+
+.memo-toc details {
+  margin: 20px 0;
+}
+
+.memo-toc summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.memo-toc summary::-webkit-details-marker {
+  display: none;
+}
+
+.memo-toc summary::after {
+  content: "▶";
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+  margin-left: 4px;
+}
+
+.memo-toc details[open] summary::after {
+  transform: rotate(90deg);
+}
+
+.memo-toc summary::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--text);
+  opacity: 0.55;
+}
+
+.memo-toc .toc-items {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  padding: 12px 0 0 18px;
+  margin: 0;
+  list-style: none;
+}
+
+.memo-toc .toc-items a {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  border-bottom: none;
+}
+
+.toc-num {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme="dark"] .toc-num {
+  background: #242424;
+  border-color: #3a3a3a;
+  color: var(--muted);
+}
+
+.memo-content h2 {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  margin: var(--memo-section-heading-mt, 56px) 0 18px;
+  color: var(--muted);
+}
+
+.memo-content h2::before,
+.memo-content h2::after {
+  content: "-";
+  margin: 0 10px;
+  color: var(--border);
+}
+
+.memo-content h3 {
+  margin: 28px 0 10px;
+  font-size: 16px;
+  position: relative;
+  padding-left: 34px;
+}
+
+.memo-content h3::before {
+  content: attr(data-num);
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #f7f7f7;
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme="dark"] .memo-content h3::before {
+  background: #242424;
+  border-color: #3a3a3a;
+  color: var(--muted);
+}
+
+body.memo-page[data-reading="immersive"] .prose {
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+body.memo-page[data-reading="immersive"] .prose p {
+  margin: 14px 0;
+}
+
+@media (min-width: 901px) {
+  .memo-page {
+    --memo-intro-mb: 10px;
+    --memo-toc-mt: 8px;
+    --memo-toc-mb: 23px;
+  }
+}
+
+@media (max-width: 900px) {
+  .memo-page {
+    --memo-intro-mb: 12px;
+    --memo-toc-mt: 8px;
+    --memo-toc-mb: 24px;
+  }
+
+  .memo-page .memo-content > h2:first-child {
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .memo-toc .toc-items {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

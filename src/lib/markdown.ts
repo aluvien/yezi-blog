@@ -14,16 +14,17 @@ import { expandMediaShortcodes } from "@/lib/media-shortcodes";
 // 只保留文章实际用到的标签与属性；data-* 为 music 播放器容器所需。
 const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
-    "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "strong", "em", "del", "blockquote", "code", "pre",
-    "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "aside", "details", "summary", "time", "iframe",
+    "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "strong", "em", "del", "blockquote", "cite", "code", "pre",
+    "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "aside", "details", "summary", "time", "iframe", "button", "svg", "path", "rect",
   ],
   allowedAttributes: {
     a: ["href", "title", "target", "rel", "class"],
     img: ["src", "srcset", "sizes", "alt", "title", "loading", "decoding", "class", "data-original-src"],
     code: ["class"],
-    div: ["class", "data-hydrated", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover"],
+    blockquote: ["class"],
+    div: ["class", "data-hydrated", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover", "data-lang", "data-lines"],
     h3: ["class"],
-    p: ["class"],
+    p: ["class", "data-icon"],
     ul: ["class"],
     li: ["class"],
     aside: ["class", "aria-label"],
@@ -32,6 +33,11 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     time: ["class", "datetime"],
     iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
     span: ["class", "aria-hidden"],
+    button: ["class", "type", "aria-label", "title", "data-state", "data-code-copy"],
+    svg: ["class", "width", "height", "viewBox", "fill", "stroke", "stroke-width", "aria-hidden"],
+    path: ["d", "fill", "stroke", "stroke-width"],
+    rect: ["x", "y", "width", "height", "rx", "fill", "stroke", "stroke-width"],
+    cite: [],
     th: ["align"],
     td: ["align"],
     "*": ["id"],
@@ -110,11 +116,56 @@ function renderEmbedShortcode(text: string): string | null {
 }
 
 /**
+ * 将 Whono 兼容的容器语法转换为安全 HTML。
+ *
+ *   :::note[标题]
+ *   正文
+ *   :::
+ *
+ * Callout 的正文继续走完整 Markdown 渲染链，因而不会因为支持该语法而放开
+ * 原始 HTML。pullquote 是目标主题提供的引用变体，也用同一套围栏语法兼容。
+ */
+function expandCalloutDirectives(
+  content: string,
+  references: readonly ArticleReferenceSnapshot[],
+  blocks: Map<string, string>,
+): string {
+  const directivePattern = /^:::(note|tip|info|warning|pullquote)(?:\[([^\]\r\n]*)\])?[ \t]*\r?\n([\s\S]*?)^[ \t]*:::[ \t]*$/gim;
+  return content.replace(directivePattern, (_match, rawType: string, rawTitle: string | undefined, rawBody: string) => {
+    const type = rawType.toLowerCase();
+    const body = renderMarkdown(rawBody.trim(), references);
+    const token = `__YEZI_CALLOUT_${blocks.size}__`;
+    if (type === "pullquote") {
+      // 原始 HTML 默认会被转义；pullquote 只恢复无属性的 cite 标记，保留
+      // 引用来源的目标主题排版，同时不会放开任意 HTML。
+      const pullquoteBody = body.replace(/&lt;cite&gt;([\s\S]*?)&lt;\/cite&gt;/gi, "<cite>$1</cite>");
+      blocks.set(token, `<blockquote class="pullquote">${pullquoteBody}</blockquote>`);
+      return `\n${token}\n`;
+    }
+    const title = rawTitle?.trim();
+    const titleHtml = title ? `<p class="callout-title">${escapeHtml(title)}</p>` : "";
+    blocks.set(token, `<div class="callout ${type}">${titleHtml}${body}</div>`);
+    return `\n${token}\n`;
+  });
+}
+
+/** 保留目标主题文档中允许的两种 Callout HTML 写法，其余原始 HTML 仍会转义。 */
+function expandSafeCalloutHtml(content: string, blocks: Map<string, string>): string {
+  const htmlPattern = /<div\s+class=["']callout\s+(?:note|tip|info|warning)["'][^>]*>[\s\S]*?<\/div>|<blockquote\s+class=["']pullquote["'][^>]*>[\s\S]*?<\/blockquote>/gi;
+  return content.replace(htmlPattern, (rawHtml: string) => {
+    const token = `__YEZI_CALLOUT_${blocks.size}__`;
+    blocks.set(token, sanitizeHtml(rawHtml, SANITIZE_OPTIONS));
+    return `\n${token}\n`;
+  });
+}
+
+/**
  * 渲染文章 markdown 为 HTML。
  * h2/h3 会自动添加 id 属性用于 TOC 锚点。
  */
 export function renderMarkdown(content: string, references: readonly ArticleReferenceSnapshot[] = []): string {
   const renderer = new marked.Renderer();
+  const specialBlocks = new Map<string, string>();
   let counter = 0;
 
   renderer.html = function (this: Renderer, { text }: Tokens.HTML | Tokens.Tag) {
@@ -153,10 +204,13 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
   // ```music 代码块：渲染为 QQ VIP 播放器容器，交由前端 MusicInitializer 初始化。
   // ```video 代码块：只渲染由 parseVideoBlock 校验过的 Bilibili/YouTube iframe。
   // !reference:... 会先展开成 reference 代码块，使用正文内置的元数据卡片；不会在前台请求第三方网页。
-  // 非 music/video 语言走 marked 默认渲染，保持原有代码块样式不变。
+  // 非 music/video 语言使用与目标主题一致的代码容器：顶部语言/编码信息、
+  // 行号以及复制按钮。代码文本本身仍由 escapeHtml 处理，不打开任意 HTML。
   const defaultCode = renderer.code.bind(renderer);
   const defaultParagraph = renderer.paragraph.bind(renderer);
   renderer.paragraph = function (token: Tokens.Paragraph) {
+    const specialBlock = specialBlocks.get(token.text.trim());
+    if (specialBlock) return specialBlock;
     return renderEmbedShortcode(token.text) ?? defaultParagraph(token);
   };
   renderer.code = function (token: Tokens.Code) {
@@ -175,11 +229,34 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
       const snapshot = decodeArticleReferencePayload(token.text.trim(), references);
       return snapshot ? articleReferenceCardHtml(snapshot) : defaultCode(token);
     }
-    return defaultCode(token);
+    const languageLabel = language ? ({
+      js: "JavaScript",
+      javascript: "JavaScript",
+      ts: "TypeScript",
+      typescript: "TypeScript",
+      md: "Markdown",
+      markdown: "Markdown",
+      css: "CSS",
+      html: "HTML",
+      json: "JSON",
+      bash: "Bash",
+      sh: "Shell",
+      shell: "Shell",
+    } as Record<string, string>)[language] ?? language : "Text";
+    const lines = token.text.replace(/\r\n?/g, "\n").split("\n");
+    if (lines.length > 1 && lines.at(-1) === "") lines.pop();
+    const lineMarkup = lines.map((line) => `<span class="line">${escapeHtml(line) || " "}</span>`).join("\n");
+    const codeClass = language ? ` class="language-${escapeHtml(language)}"` : "";
+    const codeMarkup = `<pre><code${codeClass}>${lineMarkup}</code></pre>`;
+    const iconMarkup = `<svg class="code-lang-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 5h16v14H4zM6 7v10h12V7zM8 9h8v2H8zm0 4h5v2H8z"/></svg>`;
+    const copyMarkup = `<button class="code-copy" type="button" aria-label="复制代码" title="复制代码" data-code-copy="true" data-state="idle"><svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1 0-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>`;
+    return `<div class="code-block" data-lang="${escapeHtml(language)}" data-lines="${lines.length}"><div class="code-toolbar"><span class="code-lang">${iconMarkup}<span>${escapeHtml(languageLabel)}</span></span><div class="code-meta"><span class="code-info">UTF-8</span><span class="code-separator">|</span><span class="code-info">${lines.length} Lines</span><span class="code-separator">|</span>${copyMarkup}</div></div>${codeMarkup}</div>`;
   };
 
   const expandedContent = expandMediaShortcodes(expandArticleReferenceMarkers(content));
-  return sanitizeHtml(marked.parse(expandedContent, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
+  const safeHtmlContent = expandSafeCalloutHtml(expandedContent, specialBlocks);
+  const preparedContent = expandCalloutDirectives(safeHtmlContent, references, specialBlocks);
+  return sanitizeHtml(marked.parse(preparedContent, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
 }
 
 /** 从 markdown 提取 h2/h3 标题列表，用于生成目录 */

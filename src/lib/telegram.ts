@@ -1,4 +1,5 @@
 import { site } from "@/lib/site";
+import { TELEGRAM_SOURCE, withSource } from "@/lib/service-source";
 
 type TelegramConfig = {
   token: string;
@@ -28,6 +29,7 @@ const TELEGRAM_BOT_COMMANDS = [
   { command: "comments", description: "查看和审核待审评论" },
   { command: "qqstatus", description: "检测 QQ 音乐播放授权" },
   { command: "qqlogin", description: "获取 QQ 音乐登录二维码" },
+  { command: "qqmusiclogin", description: "用 QQ 音乐 App 扫码登录" },
   { command: "cancel", description: "取消当前回复或登录操作" },
   { command: "help", description: "查看可用指令" },
 ] as const;
@@ -107,7 +109,7 @@ function telegramErrorMessage(description: string): string {
   }
   if (/unauthorized|bot token/i.test(description)) return "Telegram Bot Token 无效或已失效。";
   if (/bot was blocked by the user/i.test(description)) return "该聊天已屏蔽 Bot，请先在 Telegram 中解除屏蔽并发送 /start。";
-  return compactText(description, 180);
+  return withSource(compactText(description, 180), TELEGRAM_SOURCE);
 }
 
 async function telegramRequest(method: string, init: RequestInit): Promise<{ response: Response; data: TelegramApiResponse | null } | TelegramNotificationResult> {
@@ -122,7 +124,7 @@ async function telegramRequest(method: string, init: RequestInit): Promise<{ res
     const data = await response.json().catch(() => null) as TelegramApiResponse | null;
     return { response, data };
   } catch {
-    return { ok: false, configured: true, error: "暂时无法连接 Telegram" };
+    return { ok: false, configured: true, error: withSource("暂时无法连接 Telegram", TELEGRAM_SOURCE) };
   }
 }
 
@@ -134,7 +136,7 @@ function requestResult(result: { response: Response; data: TelegramApiResponse |
   if (isNotificationResult(result)) return result;
   if (!result.response.ok || result.data?.ok !== true) {
     const description = typeof result.data?.description === "string" ? result.data.description.trim() : "Telegram 服务未接受通知";
-    return { ok: false, configured: true, error: telegramErrorMessage(description) };
+    return { ok: false, configured: true, error: withSource(telegramErrorMessage(description), TELEGRAM_SOURCE) };
   }
   return { ok: true, configured: true };
 }
@@ -180,7 +182,10 @@ export async function getTelegramUpdates(offset?: number): Promise<{ ok: true; u
   const result = await telegramRequest(`getUpdates?${query.toString()}`, { method: "GET" });
   if (isNotificationResult(result)) return { ok: false, error: result.error ?? "无法读取 Telegram 指令" };
   if (!result.response.ok || result.data?.ok !== true || !Array.isArray(result.data.result)) {
-    const description = typeof result.data?.description === "string" ? telegramErrorMessage(result.data.description) : "无法读取 Telegram 指令";
+    const description = withSource(
+      typeof result.data?.description === "string" ? telegramErrorMessage(result.data.description) : "无法读取 Telegram 指令",
+      TELEGRAM_SOURCE,
+    );
     return { ok: false, error: description };
   }
   return { ok: true, updates: result.data.result };
@@ -236,6 +241,6 @@ export async function sendTelegramTestNotification(): Promise<TelegramNotificati
     "<b>✅ 博客 Telegram 已连接</b>",
     "",
     "新评论审核与 QQ 音乐状态会推送到这里。",
-    "发送 <code>/qqlogin</code> 可接收 QQ 音乐授权二维码。",
+    "发送 <code>/qqlogin</code> 可用 QQ 扫码；发送 <code>/qqmusiclogin</code> 可用 QQ 音乐 App 扫码。",
   ].join("\n"), { parseMode: "HTML" });
 }

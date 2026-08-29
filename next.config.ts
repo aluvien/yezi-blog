@@ -3,6 +3,45 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const nativeQQMusicRuntimePackages = [
+  "@yakult-green-tea/qq-music-api",
+  "ws",
+  "axios",
+  "follow-redirects",
+  "form-data",
+  "asynckit",
+  "combined-stream",
+  "delayed-stream",
+  "es-set-tostringtag",
+  "es-errors",
+  "get-intrinsic",
+  "call-bind-apply-helpers",
+  "function-bind",
+  "es-define-property",
+  "es-object-atoms",
+  "get-proto",
+  "dunder-proto",
+  "gopd",
+  "has-symbols",
+  "hasown",
+  "math-intrinsics",
+  "has-tostringtag",
+  "mime-types",
+  "mime-db",
+  "https-proxy-agent",
+  "agent-base",
+  "debug",
+  "ms",
+  "chalk",
+  "ansi-styles",
+  "color-convert",
+  "color-name",
+  "supports-color",
+  "has-flag",
+  "colors",
+  "moment",
+  "lodash.get",
+] as const;
 const configuredServerActionOrigins = [
   process.env.NEXT_PUBLIC_SITE_URL ?? "",
   ...(process.env.SERVER_ACTION_ALLOWED_ORIGINS ?? "").split(","),
@@ -29,7 +68,7 @@ const nextConfig: NextConfig = {
     // 复用旧派生图；一分钟后重新验证源文件即可兼顾首屏速度与更新及时性。
     minimumCacheTTL: 60,
   },
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["better-sqlite3", "@yakult-green-tea/qq-music-api"],
   // 反代（nginx/tunnel）转发时 Host 可能变成 127.0.0.1，导致 Next 的
   // Server Actions 同源校验（origin vs host）失败、后台所有保存操作报
   // "Invalid Server Actions request"。显式放行站点域名。
@@ -52,6 +91,11 @@ const nextConfig: NextConfig = {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
+  // 原生 QQ 音乐扫码只加载固定包内的 Node 登录模块，不导入会自行监听端口的
+  // package root。动态绝对路径无法由 NFT 静态发现，因此显式带入 standalone。
+  outputFileTracingIncludes: {
+    "/*": nativeQQMusicRuntimePackages.map((packageName) => `node_modules/${packageName}/**/*`),
+  },
   // sharp 的 NFT 追踪在 Turbopack 下会误把整个项目打进 standalone
   // （警告 "Encountered unexpected file in NFT list"）。排除非运行必需文件，
   // 避免把源码、本地数据库（data/blog.db）等打进部署产物。
@@ -72,6 +116,19 @@ const nextConfig: NextConfig = {
       "tsconfig.json",
       "tsconfig.tsbuildinfo",
     ],
+  },
+  webpack(config) {
+    // This one dynamic require is intentional: importing the package root would
+    // start a second HTTP server. Its exact runtime closure is pinned above and
+    // exercised from the standalone output during release validation.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      {
+        module: /qq-music-native-login\.ts$/,
+        message: /Critical dependency: (?:the request of a dependency|require function)/,
+      },
+    ];
+    return config;
   },
   // 允许通过开发机 IP 或绑定域名访问 HMR 与 Server Actions；
   // 否则页面能打开，但登录、评论等客户端交互会像“没有反应”。

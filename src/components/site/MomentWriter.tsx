@@ -4,12 +4,15 @@ import { useState } from "react";
 import MomentForm from "@/components/admin/MomentForm";
 
 /** 前台想法页顶部：紧凑标题行（想法 + 记录数 + 写想法按钮），点击展开内联编辑器。 */
-export function MomentWriter({ count, isAuthorized }: { count: number; isAuthorized: boolean }) {
+export function MomentWriter({ count, isAuthorized, classic = false }: { count: number; isAuthorized: boolean; classic?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="site-moments-header mb-7">
       <div className="site-list-heading flex items-center justify-between gap-4 border-b border-divider pb-4">
-        <h1 className="text-xl font-semibold tracking-[-0.02em] text-foreground">想法</h1>
+        <div>
+          <h1 className="text-xl font-semibold tracking-[-0.02em] text-foreground">{classic ? "絮语" : "想法"}</h1>
+          {classic && <p className="classic-page-subtitle">生活不只是长篇</p>}
+        </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted">{count} 条记录</span>
           {isAuthorized && (

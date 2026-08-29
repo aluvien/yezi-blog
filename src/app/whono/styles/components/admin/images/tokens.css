@@ -1,0 +1,15 @@
+/* Admin Images Tokens
+   负责 browser / picker 共用的图片项交互 token。
+ */
+
+.admin-images-console,
+.admin-images-picker {
+  --admin-images-item-hover-surface: color-mix(in srgb, var(--bg) 78%, var(--panel) 22%);
+  --admin-images-item-active-surface: color-mix(in srgb, var(--panel) 78%, var(--bg) 22%);
+}
+
+:root[data-theme='dark'] .admin-images-console,
+:root[data-theme='dark'] .admin-images-picker {
+  --admin-images-item-hover-surface: color-mix(in srgb, var(--bg) 84%, #334155 16%);
+  --admin-images-item-active-surface: color-mix(in srgb, var(--bg) 74%, #334155 26%);
+}

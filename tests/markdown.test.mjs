@@ -57,6 +57,18 @@ test("stripMarkdown removes markdown syntax", () => {
   assert.equal(text, "标题 加粗和链接还有code");
 });
 
+test("renders target-style Markdown lists, links, divider and code metadata", () => {
+  const html = renderMarkdown("- 第一项\n- 第二项\n\n1. 第一步\n2. 第二步\n\n[目标链接](https://example.com)\n\n---\n\n```ts\nconst answer = 42;\n```");
+  assert.ok(html.includes("<ul>"));
+  assert.ok(html.includes("<ol>"));
+  assert.ok(html.includes('<a href="https://example.com"'));
+  assert.ok(html.includes("<hr"));
+  assert.ok(html.includes('<div class="code-block"'));
+  assert.ok(html.includes('data-lang="ts"'));
+  assert.ok(html.includes('data-code-copy="true"'));
+  assert.ok(html.includes('class="line"'));
+});
+
 test("music block renders a container card", () => {
   const html = renderMarkdown("```music\nqqvip:abc123:song\n```");
   assert.ok(html.includes("music"));
@@ -96,6 +108,28 @@ test("article shortcodes work without Markdown paragraph spacing and use the com
   assert.ok(html.includes("page=2"));
   assert.ok(!html.includes("!music"));
   assert.ok(!html.includes("!video"));
+});
+
+test("renders Whono callout directives with safe nested Markdown", () => {
+  const html = renderMarkdown(":::note[提示]\n这是 **正文**。\n:::");
+  assert.ok(html.includes('<div class="callout note">'));
+  assert.ok(html.includes('<p class="callout-title">提示</p>'));
+  assert.ok(html.includes("<strong>正文</strong>"));
+  assert.ok(!html.includes(":::"));
+});
+
+test("renders the pullquote variant and keeps citation markup", () => {
+  const html = renderMarkdown(":::pullquote\n一句重要的话。\n<cite>— 作者</cite>\n:::");
+  assert.ok(html.includes('<blockquote class="pullquote">'));
+  assert.ok(html.includes("<cite>— 作者</cite>"));
+  assert.ok(!html.includes(":::"));
+});
+
+test("preserves only the supported callout HTML shape", () => {
+  const html = renderMarkdown('<div class="callout note"><p class="callout-title" data-icon="none">标题</p><p>正文<script>alert(1)</script></p></div>');
+  assert.ok(html.includes('<div class="callout note">'));
+  assert.ok(html.includes('data-icon="none"'));
+  assert.ok(!html.includes("<script"));
 });
 
 test("saving media shortcodes canonicalizes pasted video URLs to compact specs", () => {

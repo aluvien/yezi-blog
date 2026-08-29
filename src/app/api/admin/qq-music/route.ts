@@ -9,14 +9,26 @@ import {
   searchQQPlaylists,
   type QQPlaylistSummary,
 } from "@/lib/qq-music-api";
+import {
+  cancelNativeQQMusicQr,
+  createNativeQQMusicQr,
+  pollNativeQQMusicQr,
+} from "@/lib/qq-music-native-login";
 import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
+import {
+  QQ_LOGIN_SOURCE,
+  QQ_MUSIC_APP_SOURCE,
+  QQ_MUSIC_WEB_SOURCE,
+  type ServiceSource,
+  withSource,
+} from "@/lib/service-source";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "QQ 音乐服务暂不可用";
+function errorMessage(error: unknown, source: ServiceSource = QQ_MUSIC_WEB_SOURCE): string {
+  return withSource(error instanceof Error ? error.message : "QQ 音乐服务暂不可用", source);
 }
 
 function noCache(data: unknown, status = 200): NextResponse {
@@ -66,8 +78,14 @@ export async function GET(request: Request) {
       const image = qrImage(raw);
       const qrsig = findString(raw, ["qrsig"]);
       const ptqrtoken = findString(raw, ["ptqrtoken"]);
-      if (!image || !qrsig) return noCache({ error: "未能生成 QQ 登录二维码，请检查 QQ 音乐服务日志" }, 502);
-      return noCache({ image, qrsig, ptqrtoken });
+      if (!image || !qrsig) {
+        return noCache({ error: withSource("未能生成 QQ 登录二维码，请检查 QQ 音乐服务日志", QQ_LOGIN_SOURCE), source: QQ_LOGIN_SOURCE }, 502);
+      }
+      return noCache({ channel: "qq", image, qrsig, ptqrtoken, expiresAt: Date.now() + 2 * 60 * 1000, source: QQ_LOGIN_SOURCE });
+    }
+    if (op === "native-qr") {
+      const qr = await createNativeQQMusicQr();
+      return noCache({ channel: "qqmusic", ...qr });
     }
     if (op === "search") {
       const key = (url.searchParams.get("q") ?? "").trim().slice(0, 80);
@@ -100,8 +118,8 @@ export async function GET(request: Request) {
         ? normalizeQQPlaylists(collectedResult.value, "collected", 100)
         : [];
       const warnings = [
-        ...(createdResult.status === "rejected" ? [`自建歌单读取失败：${errorMessage(createdResult.reason)}`] : []),
-        ...(collectedResult.status === "rejected" ? [`收藏歌单读取失败：${errorMessage(collectedResult.reason)}`] : []),
+        ...(createdResult.status === "rejected" ? [`自建歌单读取失败：${errorMessage(createdResult.reason, QQ_MUSIC_WEB_SOURCE)}`] : []),
+        ...(collectedResult.status === "rejected" ? [`收藏歌单读取失败：${errorMessage(collectedResult.reason, QQ_MUSIC_WEB_SOURCE)}`] : []),
       ];
       return noCache({
         playlists: mergePlaylists(created, collected),
@@ -111,22 +129,43 @@ export async function GET(request: Request) {
     }
     return noCache({ error: "不支持的操作" }, 400);
   } catch (error) {
-    return noCache({ error: errorMessage(error), available: false }, 502);
+    const source = op === "qr" ? QQ_LOGIN_SOURCE : op === "native-qr" ? QQ_MUSIC_APP_SOURCE : QQ_MUSIC_WEB_SOURCE;
+    return noCache({ error: errorMessage(error, source), source, available: false }, 502);
   }
 }
 
 export async function POST(request: Request) {
   if (!await requireAdminApi(request)) return noCache({ error: "未登录或请求来源无效" }, 401);
-  let body: { op?: unknown; qrsig?: unknown; ptqrtoken?: unknown };
+  let body: { op?: unknown; qrsig?: unknown; ptqrtoken?: unknown; key?: unknown };
   try {
     body = await readLimitedJson(request, 8 * 1024);
   } catch (error) {
     return noCache({ error: error instanceof Error ? error.message : "请求格式错误" }, error instanceof RequestBodyError ? error.status : 400);
   }
+  if (body.op === "native-cancel") {
+    const key = String(body.key ?? "").trim();
+    cancelNativeQQMusicQr(key);
+    return noCache({ ok: true, source: QQ_MUSIC_APP_SOURCE });
+  }
+  if (body.op === "native-poll") {
+    const key = String(body.key ?? "").trim();
+    try {
+      const result = await pollNativeQQMusicQr(key);
+      if (result.state === "success" && result.cookie && result.uin) {
+        saveQQMusicSession({ cookie: result.cookie, uin: result.uin });
+        return noCache({ state: "success", uin: result.uin, message: result.message, source: result.source });
+      }
+      return noCache(result);
+    } catch (error) {
+      return noCache({ error: errorMessage(error, QQ_MUSIC_APP_SOURCE), source: QQ_MUSIC_APP_SOURCE }, 502);
+    }
+  }
   if (body.op !== "poll") return noCache({ error: "不支持的操作" }, 400);
   const qrsig = String(body.qrsig ?? "").trim();
   const ptqrtoken = String(body.ptqrtoken ?? "").trim();
-  if (!qrsig || qrsig.length > 512 || ptqrtoken.length > 512) return noCache({ error: "二维码信息无效，请重新获取" }, 400);
+  if (!qrsig || qrsig.length > 512 || ptqrtoken.length > 512) {
+    return noCache({ error: withSource("二维码信息无效，请重新获取", QQ_LOGIN_SOURCE), source: QQ_LOGIN_SOURCE }, 400);
+  }
 
   try {
     const raw = await qqMusicRequest("/checkQQLoginQr", { method: "POST", body: { qrsig, ptqrtoken }, useSession: false });
@@ -140,8 +179,8 @@ export async function POST(request: Request) {
       return noCache({ state: "success", uin });
     }
     const message = findString(raw, ["message", "msg", "error", "status"]);
-    return noCache({ state: "pending", message: message || "请使用手机 QQ 扫码并确认登录" });
+    return noCache({ state: "pending", message: message || "请使用手机 QQ 扫码并确认登录", source: QQ_LOGIN_SOURCE });
   } catch (error) {
-    return noCache({ error: errorMessage(error) }, 502);
+    return noCache({ error: errorMessage(error, QQ_LOGIN_SOURCE), source: QQ_LOGIN_SOURCE }, 502);
   }
 }

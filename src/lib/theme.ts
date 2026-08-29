@@ -66,13 +66,13 @@ export const THEME_PALETTE_IDS = THEME_PALETTES.map((palette) => palette.id);
 
 /**
  * 前台版式主题：与配色方案分开，避免切换布局时覆盖现有颜色设置。
- * classic 是当前线上版式，editorial 对应新的编辑感布局预览。
+ * classic 为书香双栏版式，editorial 对应新的编辑感布局。
  */
 export const LAYOUT_THEMES = [
   {
     id: "classic",
-    name: "经典版 · 当前",
-    description: "保留现在的前台布局与组件样式",
+    name: "经典版·书香",
+    description: "左侧书写侧栏与右侧长卷阅读，适合安静浏览",
   },
   {
     id: "editorial",

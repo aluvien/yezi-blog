@@ -3,6 +3,7 @@ import path from "node:path";
 import { getQQMusicSession } from "@/lib/qq-music-session";
 import { findString, normalizeQQAudio, qqMusicRequest, unwrapData } from "@/lib/qq-music-api";
 import { canManageFromNotificationChat, escapeTelegramHtml, isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
+import { QQ_MUSIC_WEB_SOURCE, withSource } from "@/lib/service-source";
 
 export type QQMusicHealthStatus = "healthy" | "missing_session" | "expired" | "unavailable" | "unverified";
 
@@ -100,7 +101,7 @@ function statusLabel(status: QQMusicHealthStatus): string {
 export async function inspectQQMusicHealth(): Promise<QQMusicHealthResult> {
   const checkedAt = new Date().toISOString();
   if (!getQQMusicSession()) {
-    return { status: "missing_session", checkedAt, detail: "服务器没有可用的 QQ 音乐登录会话" };
+    return { status: "missing_session", checkedAt, detail: withSource("服务器没有可用的 QQ 音乐登录会话", QQ_MUSIC_WEB_SOURCE) };
   }
 
   try {
@@ -114,12 +115,12 @@ export async function inspectQQMusicHealth(): Promise<QQMusicHealthResult> {
 
     const detail = findString(data, ["error", "message", "msg"]);
     if (detail && isCookieFailure(detail)) {
-      return { status: "expired", checkedAt, detail: "QQ 音乐 Cookie 已失效，请重新扫码登录" };
+      return { status: "expired", checkedAt, detail: withSource("QQ 音乐 Cookie 已失效，请重新扫码登录", QQ_MUSIC_WEB_SOURCE) };
     }
     return {
       status: "unverified",
       checkedAt,
-      detail: detail ? `探测歌曲暂时不可播放：${detail.slice(0, 120)}` : "探测歌曲未返回播放地址",
+      detail: withSource(detail ? `探测歌曲暂时不可播放：${detail.slice(0, 120)}` : "探测歌曲未返回播放地址", QQ_MUSIC_WEB_SOURCE),
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message.slice(0, 120) : "未知错误";
@@ -129,7 +130,7 @@ export async function inspectQQMusicHealth(): Promise<QQMusicHealthResult> {
       // false Telegram outage alert.
       status: isServiceUnavailable(error) ? "unavailable" : "unverified",
       checkedAt,
-      detail: isServiceUnavailable(error) ? `无法连接 QQ 音乐服务：${detail}` : `播放授权探测未完成：${detail}`,
+      detail: withSource(isServiceUnavailable(error) ? `无法连接 QQ 音乐服务：${detail}` : `播放授权探测未完成：${detail}`, QQ_MUSIC_WEB_SOURCE),
     };
   }
 }
@@ -168,7 +169,10 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
     ].join("\n"), {
       parseMode: "HTML",
       ...(canManageFromNotificationChat() ? { replyMarkup: {
-        inline_keyboard: [[{ text: "发送 QQ 登录二维码", callback_data: "qq:login" }]],
+        inline_keyboard: [
+          [{ text: "发送 QQ 登录二维码", callback_data: "qq:login" }],
+          [{ text: "发送 QQ 音乐 App 二维码", callback_data: "qqmusic:login" }],
+        ],
       } } : {}),
     });
     if (sent.ok) {

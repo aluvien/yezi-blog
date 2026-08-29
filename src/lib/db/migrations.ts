@@ -169,6 +169,16 @@ const MIGRATIONS: readonly Migration[] = [
       `).run(new Date().toISOString());
     },
   },
+  {
+    version: 9,
+    name: "moment-tags",
+    up(db) {
+      // Some upgrade-only fixtures contain just the table under test; do not
+      // make an unrelated missing table a migration failure.
+      const momentsTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'moments'").get();
+      if (momentsTable) ensureColumn(db, "moments", "tags", "TEXT NOT NULL DEFAULT '[]'");
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

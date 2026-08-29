@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin-api";
 import { createMomentAction } from "@/lib/actions/moments";
 import { countMoments, getContentMetricsBulk, getMoment, listMoments } from "@/lib/db";
+import { parsePostTags } from "@/lib/post-tags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
     const result = await createMomentAction({
       content: body.value.content as string,
       images: body.value.images as string[],
+      tags: parsePostTags(typeof body.value.tags === "string" ? body.value.tags : JSON.stringify(body.value.tags ?? [])),
     });
     if (!result.ok) return adminActionError(result);
     const created = result.data;

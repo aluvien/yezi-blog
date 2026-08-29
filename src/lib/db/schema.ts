@@ -87,6 +87,7 @@ export const BASE_SCHEMA_SQL = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL,
     images TEXT NOT NULL DEFAULT '[]',
+    tags TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT
   );

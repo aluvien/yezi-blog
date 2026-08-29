@@ -108,6 +108,7 @@ export function publicMoment(moment: Moment, commentsCount: number, comments?: C
     id: moment.id,
     content: moment.content,
     images: parseImages(moment.images),
+    tags: parsePostTags(moment.tags),
     created_at: moment.created_at,
     updated_at: moment.updated_at,
     comments_count: commentsCount,

@@ -145,8 +145,8 @@ Bilibili 支持完整视频 URL、BV/av ID 和分 P 参数，YouTube 支持完�
 
 接入后：
 
-1. 在“设置 → 音乐设置”点击“扫码登录 QQ 音乐”。
-2. 用手机 QQ 扫码并确认；登录 Cookie 只保留在服务器的受限会话文件中，并仅通过本机请求头转给 QQ Music API。网站数据库和访客浏览器均不会保存或收到 Cookie。
+1. 在“设置 → 音乐设置”选择“使用手机 QQ 扫码”或“使用 QQ 音乐 App 扫码”。QQ 音乐 App 通道由博客 Node 进程直接连接 `u.y.qq.com` 与 `mu.y.qq.com`，不会修改或重启现有 QQ Music API 服务。
+2. 扫码并确认；两种通道最终都把兼容 Cookie 保存在服务器的受限会话文件中，并仅通过本机请求头转给 QQ Music API。网站数据库、访客浏览器和 Telegram 均不会保存或收到 Cookie。
 3. 在文章或想法编辑器点击“+ 音乐 → QQ 音乐搜索”，选择歌曲即可插入。
 4. 插入的格式为 `qqvip:歌曲MID:song` 或 `qqvip:歌单ID:playlist`。前台播放时由本站 `/api/music/qq` 服务端接口临时解析播放地址，并带有限频保护。
 
@@ -390,6 +390,7 @@ QQ_MUSIC_API_URL=http://127.0.0.1:3201
 - 不要在宝塔防火墙开放 `3200`，也不要为这个 API 单独绑定公网域名。
 - 只让博客服务通过 `127.0.0.1` 调用 QQ Music API；扫码、Cookie 查询和搜索接口均由博客后台管理员权限保护。
 - `data/qq-music-session.json` 是登录会话文件，权限应为 `600`；它与 `blog.db` 一样需要保留在持久化目录，但绝不能提交到 Git 或暴露为静态文件。
+- `data/qq-music-native-device.json` 是 QQ 音乐 App 扫码使用的稳定设备信息，同样只保存在服务器并由完整数据备份加密归档；该功能不要求修改或升级 3200 端口的现有服务。
 - 更新此服务时只在它自己的目录执行 `git pull --ff-only`、`npm ci`、`npm run build`、`pm2 restart qq-music-api --update-env`；不要把 QQ Cookie 或其配置文件提交到博客仓库。
 
 ### 可选：Telegram 管理员提醒
@@ -405,7 +406,8 @@ Bot 还会在同一 Node 进程中每约 3 秒读取一次管理员指令，不�
 - `/dashboard`：文章、想法、作品、附件、引用与待审评论概览；
 - `/comments`：列出最近待审评论，并直接通过或回复并通过；
 - `/qqstatus`：真实检查 QQ 音乐播放授权；
-- `/qqlogin`：接收 QQ 音乐授权二维码，扫码成功后自动保存登录会话；
+- `/qqlogin`：接收手机 QQ 授权二维码，扫码成功后自动保存登录会话；
+- `/qqmusiclogin`：接收 QQ 音乐 App 原生二维码，扫码成功后自动保存兼容 Cookie；
 - `/cancel`：取消正在进行的 QQ 登录或评论回复。
 
 音乐异常通知内也有同样的二维码按钮。后台“设置 → Telegram 通知”可单独关闭新评论推送；内容编辑、删除和部署同步仍保留在网页后台，避免在消息里误操作。

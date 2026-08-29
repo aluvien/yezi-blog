@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function SiteSearch() {
@@ -47,10 +48,7 @@ export function SiteSearch() {
         onClick={() => setOpen((value) => !value)}
         className="site-search-trigger site-header-icon-button"
       >
-        <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="10.8" cy="10.8" r="6.8" />
-          <path d="m16 16 4.2 4.2" />
-        </svg>
+        <Search aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
       </button>
       {open && (
         <div className="site-search-popover" role="dialog" aria-label="站内搜索">

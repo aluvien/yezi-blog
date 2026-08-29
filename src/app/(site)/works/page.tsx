@@ -1,18 +1,24 @@
 import type { Metadata } from "next";
-import { listWorks } from "@/lib/db";
+import { getSiteSettings, listWorks } from "@/lib/db";
 import { PageHeader } from "@/components/site/PageHeader";
 import { SiteImage } from "@/components/site/SiteImage";
+import { ClassicMemoPage } from "@/components/site/ClassicHome";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "作品",
-  description: "做过的一些作品与项目。",
-};
+export function generateMetadata(): Metadata {
+  return getSiteSettings().layout_theme === "classic"
+    ? { title: "生活小记", description: "不曾虚度的光。" }
+    : { title: "作品", description: "做过的一些作品与项目。" };
+}
 
 export default function WorksPage() {
   const works = listWorks();
+
+  if (getSiteSettings().layout_theme === "classic") {
+    return <ClassicMemoPage works={works} />;
+  }
 
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">

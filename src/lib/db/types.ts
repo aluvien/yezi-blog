@@ -106,6 +106,8 @@ export interface Moment {
   content: string;
   /** JSON 数组字符串，如 '["/uploads/202607/a.jpg"]' */
   images: string;
+  /** JSON 数组字符串，如 '["摄影","随手记"]' */
+  tags: string;
   created_at: string;
   updated_at: string;
 }

@@ -3,6 +3,7 @@ import { getSiteAuthor, site } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
 import { getVisitorKeyFromRequest } from "@/lib/request";
 import { MobileFeed } from "@/components/site/MobileFeed";
+import { ClassicHome } from "@/components/site/ClassicHome";
 import { getSession } from "@/lib/auth";
 import { HOME_FEED_BATCH_SIZE, HOME_FEED_INITIAL_COUNT, getHomeFeedPage } from "@/lib/home-feed";
 import { getCachedSiteSettings } from "@/lib/server-data";
@@ -22,6 +23,21 @@ export default async function Home() {
   const isAuthorized = !!(await getSession());
   const visitorKey = await getVisitorKeyFromRequest();
   const initialPage = getHomeFeedPage({ offset: 0, limit: HOME_FEED_INITIAL_COUNT, visitorKey });
+
+  if (siteSettings.layout_theme === "classic") {
+    const heroSrc = siteSettings.classic_home_image?.trim() || "";
+    return <ClassicHome
+      items={initialPage.items}
+      siteName={siteSettings.site_name?.trim() || site.name}
+      heroSrc={heroSrc}
+      homeIntro={siteSettings.classic_home_intro}
+      homeMore={siteSettings.classic_home_more}
+      homeSectionTitle={siteSettings.classic_home_section_title}
+      includeBits={siteSettings.classic_home_include_bits !== "0"}
+      authorName={authorName}
+      authorAvatar={authorAvatar}
+    />;
+  }
 
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">

@@ -16,7 +16,9 @@ import {
 } from "@/lib/db";
 import { findString, qqMusicRequest, readUin } from "@/lib/qq-music-api";
 import { inspectQQMusicHealth, qqMusicHealthStatusLabel } from "@/lib/qq-music-health";
+import { cancelNativeQQMusicQr, createNativeQQMusicQr, pollNativeQQMusicQr } from "@/lib/qq-music-native-login";
 import { saveQQMusicSession } from "@/lib/qq-music-session";
+import { QQ_LOGIN_SOURCE, QQ_MUSIC_APP_SOURCE, TELEGRAM_SOURCE, withSource } from "@/lib/service-source";
 import { site } from "@/lib/site";
 import {
   answerTelegramCallback,
@@ -32,10 +34,12 @@ import {
 type JsonRecord = Record<string, unknown>;
 
 type PendingQQLogin = {
+  channel: "qq" | "qqmusic";
   chatId: string;
   userId: string;
-  qrsig: string;
-  ptqrtoken: string;
+  qrsig?: string;
+  ptqrtoken?: string;
+  key?: string;
   expiresAt: number;
 };
 
@@ -62,7 +66,10 @@ const BOT_MENU: TelegramInlineKeyboard = {
     ],
     [
       { text: "QQ 音乐状态", callback_data: "menu:qqstatus" },
-      { text: "QQ 登录二维码", callback_data: "qq:login" },
+      { text: "QQ 扫码", callback_data: "qq:login" },
+    ],
+    [
+      { text: "QQ 音乐 App 扫码", callback_data: "qqmusic:login" },
     ],
   ],
 };
@@ -90,14 +97,23 @@ function readState(): TelegramBotState {
   try {
     const raw = JSON.parse(fs.readFileSync(botStatePath(), "utf8")) as TelegramBotState;
     const pendingQQLogin = raw.pendingQQLogin;
+    const pendingChannel = pendingQQLogin?.channel === "qqmusic" ? "qqmusic" : "qq";
+    const validPendingCommon = Boolean(
+      pendingQQLogin
+      && /^\d{1,24}$/.test(pendingQQLogin.chatId)
+      && /^\d{1,24}$/.test(pendingQQLogin.userId)
+      && Number.isFinite(pendingQQLogin.expiresAt),
+    );
+    const validPending = validPendingCommon && (pendingChannel === "qqmusic"
+      ? /^[a-f0-9]{48}$/i.test(pendingQQLogin?.key ?? "")
+      : Boolean(pendingQQLogin?.qrsig && pendingQQLogin.ptqrtoken));
     const pendingCommentReplies = Object.fromEntries(Object.entries(raw.pendingCommentReplies ?? {}).flatMap(([userId, pending]) => {
       if (!pending || !/^\d{1,24}$/.test(userId) || !Number.isInteger(pending.commentId) || pending.commentId < 1 || !Number.isFinite(pending.expiresAt)) return [];
       return [[userId, { commentId: pending.commentId, expiresAt: pending.expiresAt }]];
     }));
     return {
       ...(Number.isInteger(raw.offset) && (raw.offset as number) > 0 ? { offset: raw.offset } : {}),
-      ...(pendingQQLogin && /^\d{1,24}$/.test(pendingQQLogin.chatId) && /^\d{1,24}$/.test(pendingQQLogin.userId) && pendingQQLogin.qrsig && pendingQQLogin.ptqrtoken && Number.isFinite(pendingQQLogin.expiresAt)
-        ? { pendingQQLogin: pendingQQLogin } : {}),
+      ...(validPending && pendingQQLogin ? { pendingQQLogin: { ...pendingQQLogin, channel: pendingChannel } } : {}),
       ...(Object.keys(pendingCommentReplies).length > 0 ? { pendingCommentReplies } : {}),
     };
   } catch {
@@ -221,28 +237,55 @@ async function sendQQMusicStatus(chatId: string): Promise<void> {
     `<b>结果</b>　${qqMusicHealthStatusLabel(result.status)}`,
     `<b>诊断</b>　${escapeTelegramHtml(result.detail)}`,
     "",
-    result.status === "healthy" ? "播放授权正常。" : "如需重新登录，可发送 <code>/qqlogin</code>。",
+    result.status === "healthy" ? "播放授权正常。" : "如需重新登录，可发送 <code>/qqlogin</code>（QQ）或 <code>/qqmusiclogin</code>（QQ 音乐 App）。",
   ].join("\n"), { chatId, parseMode: "HTML", replyMarkup: BOT_MENU });
 }
 
-async function beginQQLogin(state: TelegramBotState, chatId: string, userId: string): Promise<void> {
+function cancelPendingQQLogin(state: TelegramBotState): void {
+  const pending = state.pendingQQLogin;
+  if (pending?.channel === "qqmusic" && pending.key) {
+    try { cancelNativeQQMusicQr(pending.key); } catch { /* best-effort release */ }
+  }
+  delete state.pendingQQLogin;
+}
+
+async function beginQQLogin(state: TelegramBotState, chatId: string, userId: string, channel: "qq" | "qqmusic" = "qq"): Promise<void> {
+  cancelPendingQQLogin(state);
+  const source = channel === "qqmusic" ? QQ_MUSIC_APP_SOURCE : QQ_LOGIN_SOURCE;
   try {
+    if (channel === "qqmusic") {
+      const qr = await createNativeQQMusicQr();
+      const sent = await sendTelegramPhoto(
+        chatId,
+        qr.image,
+        `请用 QQ 音乐 App 扫码并确认登录。二维码约 3 分钟内有效。\n来源：${qr.source.label}（${qr.source.website}）`,
+      );
+      if (!sent.ok) {
+        cancelNativeQQMusicQr(qr.key);
+        await sendTelegramMessage(withSource(sent.error ?? "二维码发送失败，请稍后重试", TELEGRAM_SOURCE), { chatId });
+        return;
+      }
+      state.pendingQQLogin = { channel, chatId, userId, key: qr.key, expiresAt: qr.expiresAt };
+      return;
+    }
+
     const raw = await qqMusicRequest("/getQQLoginQr", { useSession: false });
     const image = qrImage(raw);
     const qrsig = findString(raw, ["qrsig"]);
     const ptqrtoken = findString(raw, ["ptqrtoken"]);
     if (!image || !qrsig) {
-      await sendTelegramMessage("未能生成 QQ 音乐二维码，请检查本机 QQ 音乐服务。", { chatId });
+      await sendTelegramMessage(withSource("未能生成 QQ 登录二维码，请检查本机 QQ 音乐服务", source), { chatId });
       return;
     }
-    const sent = await sendTelegramPhoto(chatId, image, "请用手机 QQ 扫码并确认登录。二维码约 2 分钟内有效，确认后我会自动回复登录结果。");
+    const sent = await sendTelegramPhoto(chatId, image, `请用手机 QQ 扫码并确认登录。二维码约 2 分钟内有效。\n来源：${source.label}（${source.website}）`);
     if (!sent.ok) {
-      await sendTelegramMessage(sent.error ?? "二维码发送失败，请稍后重试。", { chatId });
+      await sendTelegramMessage(withSource(sent.error ?? "二维码发送失败，请稍后重试", TELEGRAM_SOURCE), { chatId });
       return;
     }
-    state.pendingQQLogin = { chatId, userId, qrsig, ptqrtoken, expiresAt: Date.now() + QR_LOGIN_TTL_MS };
-  } catch {
-    await sendTelegramMessage("QQ 音乐服务暂不可用，暂时无法生成二维码。", { chatId });
+    state.pendingQQLogin = { channel, chatId, userId, qrsig, ptqrtoken, expiresAt: Date.now() + QR_LOGIN_TTL_MS };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "QQ 音乐服务暂不可用，暂时无法生成二维码";
+    await sendTelegramMessage(withSource(message, source), { chatId });
   }
 }
 
@@ -254,11 +297,27 @@ async function pollPendingQQLogin(state: TelegramBotState): Promise<void> {
     return;
   }
   if (pending.expiresAt <= Date.now()) {
-    delete state.pendingQQLogin;
-    await sendTelegramMessage("QQ 音乐二维码已过期，发送 /qqlogin 可重新获取。", { chatId: pending.chatId });
+    cancelPendingQQLogin(state);
+    const source = pending.channel === "qqmusic" ? QQ_MUSIC_APP_SOURCE : QQ_LOGIN_SOURCE;
+    const commandName = pending.channel === "qqmusic" ? "/qqmusiclogin" : "/qqlogin";
+    await sendTelegramMessage(withSource(`二维码已过期，发送 ${commandName} 可重新获取`, source), { chatId: pending.chatId });
     return;
   }
   try {
+    if (pending.channel === "qqmusic") {
+      const result = await pollNativeQQMusicQr(pending.key ?? "");
+      if (result.state === "expired") {
+        cancelPendingQQLogin(state);
+        await sendTelegramMessage(result.message, { chatId: pending.chatId });
+        return;
+      }
+      if (result.state !== "success" || !result.cookie || !result.uin) return;
+      saveQQMusicSession({ cookie: result.cookie, uin: result.uin });
+      delete state.pendingQQLogin;
+      await sendTelegramMessage("✅ QQ 音乐 App 扫码登录成功，Cookie 与播放授权已更新。", { chatId: pending.chatId });
+      return;
+    }
+
     const raw = await qqMusicRequest("/checkQQLoginQr", {
       method: "POST",
       body: { qrsig: pending.qrsig, ptqrtoken: pending.ptqrtoken },
@@ -270,7 +329,13 @@ async function pollPendingQQLogin(state: TelegramBotState): Promise<void> {
     saveQQMusicSession({ cookie, uin });
     delete state.pendingQQLogin;
     await sendTelegramMessage("✅ QQ 音乐登录成功，播放授权已更新。", { chatId: pending.chatId });
-  } catch {
+  } catch (error) {
+    if (pending.channel === "qqmusic") {
+      cancelPendingQQLogin(state);
+      const message = error instanceof Error ? error.message : "QQ 音乐 App 登录状态检查失败";
+      await sendTelegramMessage(withSource(message, QQ_MUSIC_APP_SOURCE), { chatId: pending.chatId });
+      return;
+    }
     // The next short polling tick retries; an upstream hiccup should not make
     // an in-progress QR login disappear.
   }
@@ -314,7 +379,12 @@ async function handleCallback(state: TelegramBotState, callback: JsonRecord): Pr
   }
   if (data === "qq:login") {
     await answerTelegramCallback(callbackId, "正在发送二维码…");
-    await beginQQLogin(state, chatId, userId);
+    await beginQQLogin(state, chatId, userId, "qq");
+    return;
+  }
+  if (data === "qqmusic:login") {
+    await answerTelegramCallback(callbackId, "正在生成 QQ 音乐二维码…");
+    await beginQQLogin(state, chatId, userId, "qqmusic");
     return;
   }
 
@@ -364,17 +434,21 @@ async function handleMessage(state: TelegramBotState, message: JsonRecord): Prom
     return;
   }
   if (action === "/qqlogin") {
-    await beginQQLogin(state, chatId, userId);
+    await beginQQLogin(state, chatId, userId, "qq");
+    return;
+  }
+  if (action === "/qqmusiclogin") {
+    await beginQQLogin(state, chatId, userId, "qqmusic");
     return;
   }
   if (action === "/cancel") {
-    if (state.pendingQQLogin?.userId === userId) delete state.pendingQQLogin;
+    if (state.pendingQQLogin?.userId === userId) cancelPendingQQLogin(state);
     if (state.pendingCommentReplies?.[userId]) delete state.pendingCommentReplies[userId];
     await sendTelegramMessage("<b>操作已取消</b>\n\n当前评论回复或 QQ 登录已取消。", { chatId, parseMode: "HTML" });
     return;
   }
   if (action.startsWith("/")) {
-    await sendTelegramMessage("可用命令：/dashboard、/comments、/qqstatus、/qqlogin、/cancel。", { chatId, replyMarkup: BOT_MENU });
+    await sendTelegramMessage("可用命令：/dashboard、/comments、/qqstatus、/qqlogin、/qqmusiclogin、/cancel。", { chatId, replyMarkup: BOT_MENU });
     return;
   }
 

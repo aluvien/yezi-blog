@@ -1,6 +1,6 @@
 import type { ContentMetrics, Moment, Post } from "@/lib/db";
 
-export type PostSummary = Pick<Post, "id" | "title" | "slug" | "cover" | "category" | "created_at"> & {
+export type PostSummary = Pick<Post, "id" | "title" | "slug" | "cover" | "category" | "tags" | "created_at"> & {
   excerpt: string;
 };
 
@@ -15,6 +15,7 @@ export function toPostSummary(post: Post, excerpt: string): PostSummary {
     slug: post.slug,
     cover: post.cover,
     category: post.category,
+    tags: post.tags,
     created_at: post.created_at,
     excerpt,
   };
