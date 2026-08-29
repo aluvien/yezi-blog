@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { requireAdmin } from "@/lib/auth";
 
 export type SyncGithubActionResult =
@@ -198,25 +198,37 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
     if (fs.existsSync(path.join(releasesRoot, ".deploy.lock"))) return { ok: false, error: "已有一次部署正在执行，请等待健康检查或回滚完成" };
 
     const statusFile = path.join(process.env.BLOG_ROOT?.trim() || projectDir, "data", "deploy-status.json");
+    const runner = path.join(projectDir, "scripts", "deploy-release.mjs");
+    const launcher = path.join(projectDir, "scripts", "launch-detached-deploy.mjs");
+    if (!fs.existsSync(runner)) return { ok: false, error: "缺少 release 部署脚本" };
+    if (!fs.existsSync(launcher)) return { ok: false, error: "缺少独立部署启动器" };
     fs.mkdirSync(path.dirname(statusFile), { recursive: true, mode: 0o700 });
     fs.writeFileSync(statusFile, `${JSON.stringify({ status: "queued", updatedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
-    const runner = path.join(projectDir, "scripts", "deploy-release.mjs");
-    if (!fs.existsSync(runner)) return { ok: false, error: "缺少 release 部署脚本" };
-    const child = spawn(process.execPath, [runner], {
-      cwd: projectDir,
-      detached: true,
-      stdio: "ignore",
-      env: {
-        ...deploymentEnv(),
-        DEPLOY_PROJECT_DIR: projectDir,
-        ...(supervisor.mode === "pm2"
-          ? { DEPLOY_PM2_NAME: supervisor.processName, DEPLOY_RESTART_MODE: "pm2" }
-          : { DEPLOY_RESTART_MODE: "direct" }),
-        DEPLOY_STATUS_FILE: statusFile,
-        BLOG_ENV_FILE: envFile,
-      },
-    });
-    child.unref();
+    const logFile = path.join(path.dirname(statusFile), "deploy-release.log");
+    const launchEnv = {
+      ...deploymentEnv(),
+      DEPLOY_PROJECT_DIR: projectDir,
+      ...(supervisor.mode === "pm2"
+        ? { DEPLOY_PM2_NAME: supervisor.processName, DEPLOY_RESTART_MODE: "pm2" }
+        : { DEPLOY_RESTART_MODE: "direct" }),
+      DEPLOY_STATUS_FILE: statusFile,
+      DEPLOY_LOG_FILE: logFile,
+      DEPLOY_REQUIRE_ORPHAN: "1",
+      BLOG_ENV_FILE: envFile,
+    };
+
+    // A merely `detached` child still has this Next process as its parent.
+    // PM2 recursively kills that child tree when switching the managed app,
+    // which used to terminate the deployer immediately after `pm2 delete`.
+    // The short-lived launcher exits first, so the real worker is reparented
+    // outside the web process tree before it may touch PM2.
+    try {
+      await runCommand(process.execPath, [launcher, runner], projectDir, 10_000, launchEnv);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      fs.writeFileSync(statusFile, `${JSON.stringify({ status: "failed", updatedAt: new Date().toISOString(), error: `无法启动独立部署任务：${detail}` })}\n`, { mode: 0o600 });
+      throw error;
+    }
     return {
       ok: true,
       message: supervisor.mode === "pm2"

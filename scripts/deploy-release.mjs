@@ -3,6 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 
 const sourceRoot = path.resolve(process.env.DEPLOY_PROJECT_DIR || process.cwd());
 const stateRoot = path.resolve(process.env.BLOG_ROOT || sourceRoot);
@@ -16,6 +17,38 @@ const statusFile = path.resolve(process.env.DEPLOY_STATUS_FILE || path.join(stat
 const lockFile = path.join(releasesRoot, ".deploy.lock");
 const finalHealthUrl = process.env.DEPLOY_HEALTH_URL?.trim() || "http://127.0.0.1:3030/api/health/deploy";
 const keepReleases = Math.max(2, Math.min(10, Number.parseInt(process.env.DEPLOY_KEEP_RELEASES || "3", 10) || 3));
+
+async function relaunchDetachedWorker() {
+  const self = fileURLToPath(import.meta.url);
+  const launcher = path.join(path.dirname(self), "launch-detached-deploy.mjs");
+  const logFile = path.resolve(process.env.DEPLOY_LOG_FILE || path.join(path.dirname(statusFile), "deploy-release.log"));
+  await new Promise((resolve, reject) => {
+    execFile(process.execPath, [launcher, self], {
+      cwd: sourceRoot,
+      env: {
+        ...process.env,
+        DEPLOY_PROJECT_DIR: sourceRoot,
+        DEPLOY_LOG_FILE: logFile,
+      },
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    }, (error) => error ? reject(error) : resolve());
+  });
+}
+
+async function waitUntilOrphaned() {
+  if (process.env.DEPLOY_REQUIRE_ORPHAN !== "1") return;
+  if (process.env.DEPLOY_ORPHAN_WORKER !== "1") {
+    throw new Error("部署任务未经过独立启动器，已取消 PM2 切换");
+  }
+  const launcherPid = Number.parseInt(process.env.DEPLOY_LAUNCHER_PID || "", 10);
+  if (!Number.isInteger(launcherPid) || launcherPid < 2) throw new Error("独立启动器 PID 无效");
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (process.ppid !== launcherPid) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("部署任务未能脱离网站进程树，已取消 PM2 切换");
+}
 
 function readStableEnvironment(filePath) {
   const values = {};
@@ -41,10 +74,25 @@ function readStableEnvironment(filePath) {
 
 function writeStatus(status, extra = {}) {
   fs.mkdirSync(path.dirname(statusFile), { recursive: true, mode: 0o700 });
+  const payload = { status, updatedAt: new Date().toISOString(), ...extra };
   const temporary = `${statusFile}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify({ status, updatedAt: new Date().toISOString(), ...extra })}\n`, { mode: 0o600 });
+  fs.writeFileSync(temporary, `${JSON.stringify(payload)}\n`, { mode: 0o600 });
   fs.renameSync(temporary, statusFile);
   fs.chmodSync(statusFile, 0o600);
+  process.stdout.write(`[deploy] ${JSON.stringify(payload)}\n`);
+}
+
+// Backward-compatible safety for the first rollout of the launcher: an older
+// running release still invokes this script directly. Bootstrap a real orphan
+// and let this temporary child exit before any build or PM2 operation begins.
+if (process.env.DEPLOY_ORPHAN_WORKER !== "1") {
+  try {
+    await relaunchDetachedWorker();
+  } catch (error) {
+    writeStatus("failed", { error: `无法脱离网站进程树：${error instanceof Error ? error.message : error}` });
+    process.exitCode = 1;
+  }
+  process.exit(process.exitCode || 0);
 }
 
 function run(command, args, cwd = sourceRoot, timeout = 300_000, env = process.env) {
@@ -288,12 +336,18 @@ let switched = false;
 let stableEnvironment = {};
 let previousCommitMarker = null;
 try {
+  await waitUntilOrphaned();
   if (!fs.existsSync(envFile)) throw new Error(`缺少稳定外部环境文件：${envFile}`);
   if ((fs.statSync(envFile).mode & 0o077) !== 0) throw new Error(`外部环境文件权限必须为 0600：${envFile}`);
   stableEnvironment = readStableEnvironment(envFile);
   if (!fs.existsSync(databasePath)) throw new Error(`数据库不存在：${databasePath}`);
   fs.mkdirSync(releasesRoot, { recursive: true, mode: 0o700 });
-  lockFd = fs.openSync(lockFile, "wx", 0o600);
+  try {
+    lockFd = fs.openSync(lockFile, "wx", 0o600);
+  } catch (error) {
+    if (error?.code === "EEXIST") throw new Error("已有一次部署正在执行");
+    throw error;
+  }
   if (restartMode === "pm2") await verifyPm2Ownership();
 
   writeStatus("building");
@@ -339,7 +393,8 @@ try {
   await cleanupReleases(new Set([path.resolve(release), path.resolve(previousTarget)]));
 } catch (error) {
   const detail = error instanceof Error ? error.message : String(error);
-  if (switched && databaseSnapshot) {
+  const lockContended = detail === "已有一次部署正在执行" && lockFd === undefined;
+  if (!lockContended && switched && databaseSnapshot) {
     writeStatus("rolling_back", { error: detail });
     try {
       switchCurrent(previousTarget);
@@ -359,9 +414,15 @@ try {
       throw rollbackError;
     }
   }
-  writeStatus("failed", { error: detail });
+  // A near-simultaneous second click must not overwrite the real worker's
+  // progress with a false failure state.
+  if (!lockContended) writeStatus("failed", { error: detail });
   process.exitCode = 1;
 } finally {
-  if (lockFd !== undefined) fs.closeSync(lockFd);
-  fs.rmSync(lockFile, { force: true });
+  // Never remove another worker's lock. A contender that lost the atomic
+  // `wx` race does not own the file and must leave the active deploy protected.
+  if (lockFd !== undefined) {
+    fs.closeSync(lockFd);
+    fs.rmSync(lockFile, { force: true });
+  }
 }
