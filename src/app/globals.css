@@ -3327,6 +3327,11 @@ textarea.comment-field {
   user-select: none;
   transition: border-color 160ms ease, background-color 160ms ease;
 }
+/* 首页的音乐卡片与絮语卡片统一使用正文书写字体；显式声明避免后续卡片
+ * 容器或动态渲染节点的字体规则改变时出现不一致。 */
+html[data-layout-theme="classic"] :is(.classic-home-feed, #bits-list) .music-trigger {
+  font-family: var(--font-readable);
+}
 .music-trigger:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 6%, var(--soft));
