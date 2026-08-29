@@ -1,13 +1,10 @@
-import { PostsPageView } from "@/components/site/PostsPageView";
+import { permanentRedirect } from "next/navigation";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "随笔",
-  description: "把一件事讲清楚的完整记录。",
-};
-
-export default function EssayPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  return <PostsPageView searchParams={searchParams} classic />;
+export default async function LegacyEssayRedirect({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const page = (await searchParams).page;
+  permanentRedirect(page ? `${PUBLIC_ROUTES.posts}?page=${encodeURIComponent(page)}` : PUBLIC_ROUTES.posts);
 }

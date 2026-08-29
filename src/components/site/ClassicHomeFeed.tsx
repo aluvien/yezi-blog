@@ -11,13 +11,14 @@ import { splitMomentContent } from "@/lib/music";
 import { MusicEmbed } from "@/components/site/MusicEmbed";
 import { LightboxOverlay } from "@/components/site/ImageLightbox";
 import { SiteImage } from "@/components/site/SiteImage";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 function PostCard({ item }: { item: Extract<FeedItem, { type: "post" }> }) {
   const post = item.value;
   const tags = parsePostTags(post.category || "").slice(0, 3);
 
   return (
-    <Link href={`/archive/${post.slug}`} className="list-item list-item--link classic-entry-card classic-home-feed__post">
+    <Link href={PUBLIC_ROUTES.post(post.slug)} className="list-item list-item--link classic-entry-card classic-home-feed__post">
       <div className="list-item__row">
         <div className="list-item__title-group">
           <h3 className="list-item__title">{post.title}</h3>
@@ -39,7 +40,7 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
   const imageGroups = useMemo(() => groupMomentImages(images), [images]);
   const segments = useMemo(() => splitMomentContent(moment.content), [moment.content]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const destination = `/bits#moment-${moment.id}`;
+  const destination = PUBLIC_ROUTES.moment(moment.id);
 
   function openMoment(event: React.MouseEvent<HTMLElement>) {
     const target = event.target;

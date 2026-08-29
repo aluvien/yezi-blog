@@ -3,14 +3,15 @@ import { getSiteSettings, listWorks } from "@/lib/db";
 import { PageHeader } from "@/components/site/PageHeader";
 import { SiteImage } from "@/components/site/SiteImage";
 import { ClassicMemoPage } from "@/components/site/ClassicHome";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export function generateMetadata(): Metadata {
   return getSiteSettings().layout_theme === "classic"
-    ? { title: "生活小记", description: "不曾虚度的光。" }
-    : { title: "作品", description: "做过的一些作品与项目。" };
+    ? { title: "生活小记", description: "不曾虚度的光。", alternates: { canonical: PUBLIC_ROUTES.works } }
+    : { title: "作品", description: "做过的一些作品与项目。", alternates: { canonical: PUBLIC_ROUTES.works } };
 }
 
 export default function WorksPage() {

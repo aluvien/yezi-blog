@@ -6,12 +6,13 @@ import { renderMarkdown } from "@/lib/markdown";
 import { getSiteAuthor } from "@/lib/site";
 import { PageHeader } from "@/components/site/PageHeader";
 import { SiteImage } from "@/components/site/SiteImage";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const dynamic = "force-dynamic";
 
 export function generateMetadata(): Metadata {
   const authorName = getSiteAuthor(getSiteSettings());
-  return { title: "关于", description: `关于 ${authorName}` };
+  return { title: "关于", description: `关于 ${authorName}`, alternates: { canonical: PUBLIC_ROUTES.about } };
 }
 
 export default function AboutPage() {
@@ -70,7 +71,7 @@ export default function AboutPage() {
             )}
             <div><p className="text-[11px] uppercase tracking-[0.18em] text-muted">正在关注</p><p className="mt-2 text-[14px] leading-6">产品设计、软件工程、个人创作与日常观察</p></div>
             <div><p className="text-[11px] uppercase tracking-[0.18em] text-muted">写作原则</p><p className="mt-2 text-[14px] leading-6">真诚、具体、有用，也允许保留一点未完成</p></div>
-            <Link href="/" className="inline-flex items-center gap-2 text-[14px] font-medium text-wechat-blue">从最新文章开始 <span>→</span></Link>
+            <Link href={PUBLIC_ROUTES.posts} className="inline-flex items-center gap-2 text-[14px] font-medium text-wechat-blue">从最新文章开始 <span>→</span></Link>
           </aside>
         </div>
       </section>

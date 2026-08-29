@@ -16,11 +16,12 @@ import { getCachedMoments, getCachedPublishedPosts, getCachedPublishedTags, getC
 import { ClassicArchiveList } from "@/components/site/ClassicHome";
 import { ClassicEntrySearch } from "@/components/site/ClassicEntrySearch";
 import { ClassicEntryTags } from "@/components/site/ClassicEntryTags";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "归档", description: "按时间浏览所有文章与想法。" };
+export const metadata: Metadata = { title: "归档", description: "按时间浏览所有文章与想法。", alternates: { canonical: PUBLIC_ROUTES.archives } };
 
 export default async function ArchivesPage() {
   const posts = getCachedPublishedPosts();
@@ -45,7 +46,7 @@ export default async function ArchivesPage() {
           <div className="page-header page-header--with-search">
             <div className="page-heading">
               <div className="page-title-row"><h1 className="page-title">归档</h1></div>
-              <span className="page-subtitle page-subtitle--entry-filters"><span className="page-subtitle__text">共 {posts.length} 篇内容</span><Link className="page-subtitle__link page-subtitle__item" href="/archive/rss.xml">RSS</Link><ClassicEntryTags tags={archiveTags} /></span>
+              <span className="page-subtitle page-subtitle--entry-filters"><span className="page-subtitle__text">共 {posts.length} 篇内容</span><Link className="page-subtitle__link page-subtitle__item" href={PUBLIC_ROUTES.rss}>RSS</Link><ClassicEntryTags tags={archiveTags} /></span>
             </div>
             <div className="page-actions"><ClassicEntrySearch label="归档" /></div>
           </div>

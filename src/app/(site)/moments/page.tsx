@@ -9,6 +9,7 @@ import { getVisitorKeyFromRequest } from "@/lib/request";
 import { MomentWriter } from "@/components/site/MomentWriter";
 import { ClassicBitsList } from "@/components/site/ClassicBitsList";
 import { ClassicBitsToolbar } from "@/components/site/ClassicBitsToolbar";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "想法",
   description: "随手记录的短想法。",
+  alternates: { canonical: PUBLIC_ROUTES.moments },
 };
 
 export default async function MomentsPage() {

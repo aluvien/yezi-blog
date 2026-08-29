@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export function SiteSearch() {
   const router = useRouter();
@@ -35,7 +36,7 @@ export function SiteSearch() {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = query.trim();
-    router.push(value ? `/search?q=${encodeURIComponent(value)}` : "/search");
+    router.push(value ? `${PUBLIC_ROUTES.search}?q=${encodeURIComponent(value)}` : PUBLIC_ROUTES.search);
     setOpen(false);
   }
 

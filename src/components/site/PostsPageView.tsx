@@ -7,14 +7,17 @@ import { formatDateOnly } from "@/lib/format";
 import { parsePostTags } from "@/lib/post-tags";
 import { stripMarkdown } from "@/lib/markdown";
 import { ClassicEntrySearch } from "@/components/site/ClassicEntrySearch";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
-export async function PostsPageView({ searchParams, classic = false }: { searchParams: Promise<{ page?: string }>; classic?: boolean }) {
+export async function PostsPageView({ searchParams, classic: classicOverride }: { searchParams: Promise<{ page?: string }>; classic?: boolean }) {
   const { page } = await searchParams;
   const current = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
   const total = countPublishedPosts();
   const shown = listPosts({ limit: current * 12 });
   const hasMore = total > shown.length;
-  const showMore = getCachedSiteSettings().show_more_posts !== "0";
+  const siteSettings = getCachedSiteSettings();
+  const classic = classicOverride ?? siteSettings.layout_theme === "classic";
+  const showMore = siteSettings.show_more_posts !== "0";
   const isAuthorized = !!(await getSession());
   const commentCounts = countApprovedCommentsBulk("post", shown.map((post) => post.id));
 
@@ -27,7 +30,7 @@ export async function PostsPageView({ searchParams, classic = false }: { searchP
               <div className="page-title-row"><h1 className="page-title">随笔</h1></div>
               <span className="page-subtitle page-subtitle--entry-filters">
                 <span className="page-subtitle__text">随笔与杂记 · 共 {total} 篇</span>
-                <Link className="page-subtitle__link page-subtitle__item" href="/essay/rss.xml">RSS</Link>
+                <Link className="page-subtitle__link page-subtitle__item" href={PUBLIC_ROUTES.rss}>RSS</Link>
               </span>
             </div>
             <div className="page-actions"><ClassicEntrySearch label="随笔" /></div>
@@ -41,7 +44,7 @@ export async function PostsPageView({ searchParams, classic = false }: { searchP
               const category = post.category?.trim() || "随笔";
               const wasUpdated = formatDateOnly(post.updated_at) !== formatDateOnly(post.created_at);
               return (
-                <Link className="list-item list-item--link classic-entry-card" href={`/archive/${post.slug}`} data-entry-item data-search={`${post.title} ${excerpt} ${tags.join(" ")}`} key={post.id}>
+                <Link className="list-item list-item--link classic-entry-card" href={PUBLIC_ROUTES.post(post.slug)} data-entry-item data-search={`${post.title} ${excerpt} ${tags.join(" ")}`} key={post.id}>
                   <div className="list-item__row">
                     <div className="list-item__title-group">
                       <span className="badge">{category}</span>
@@ -60,7 +63,7 @@ export async function PostsPageView({ searchParams, classic = false }: { searchP
             })}
           </div>
         )}
-        {hasMore && showMore ? <nav className="pagination" aria-label="随笔分页"><div className="pagination__inner"><Link className="pagination__link pagination__link--next" href={`/essay?page=${current + 1}`}>下一页</Link></div></nav> : null}
+        {hasMore && showMore ? <nav className="pagination" aria-label="随笔分页"><div className="pagination__inner"><Link className="pagination__link pagination__link--next" href={`${PUBLIC_ROUTES.posts}?page=${current + 1}`}>下一页</Link></div></nav> : null}
       </>
     );
   }
@@ -78,7 +81,7 @@ export async function PostsPageView({ searchParams, classic = false }: { searchP
         <div>
           {shown.map((post) => (
             <div key={post.id} className="site-list-entry py-6 md:py-7">
-              <PostEntry post={post} commentCount={commentCounts.get(post.id) ?? 0} canEdit={isAuthorized} hrefBase={classic ? "/archive" : "/posts"} />
+              <PostEntry post={post} commentCount={commentCounts.get(post.id) ?? 0} canEdit={isAuthorized} />
             </div>
           ))}
         </div>
@@ -86,7 +89,7 @@ export async function PostsPageView({ searchParams, classic = false }: { searchP
 
       {hasMore && showMore && (
         <div className="border-t border-divider py-5 text-center">
-          <Link href={`${classic ? "/essay" : "/posts"}?page=${current + 1}`} className="inline-flex rounded-full border border-divider px-6 py-2 text-[13px] text-foreground/65 transition-colors hover:border-accent hover:text-accent">
+          <Link href={`${PUBLIC_ROUTES.posts}?page=${current + 1}`} className="inline-flex rounded-full border border-divider px-6 py-2 text-[13px] text-foreground/65 transition-colors hover:border-accent hover:text-accent">
             查看更多文章
           </Link>
         </div>

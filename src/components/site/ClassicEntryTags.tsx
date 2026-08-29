@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 import { useEffect, useRef, useState } from "react";
 
 type EntryTag = { tag: string; count: number };
@@ -146,7 +147,7 @@ export function ClassicEntryTags({ tags }: { tags: EntryTag[] }) {
           {tags.length > 0 ? (
             <div className="entry-tags-dialog__list">
               {tags.map(({ tag, count }) => (
-                <Link key={tag} className="entry-tag-option" href={`/tags/${encodeURIComponent(tag)}`} onClick={closeDialog}>
+                <Link key={tag} className="entry-tag-option" href={PUBLIC_ROUTES.tag(tag)} onClick={closeDialog}>
                   <span className="entry-tag-option__label">#{tag}</span>
                   <span className="entry-tag-option__count">{count}</span>
                 </Link>

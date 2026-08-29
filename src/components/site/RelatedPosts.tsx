@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Post } from "@/lib/db";
 import { formatDateOnly } from "@/lib/format";
 import { SiteImage } from "@/components/site/SiteImage";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export function RelatedPosts({ posts }: { posts: Post[] }) {
   if (posts.length === 0) return null;
@@ -16,7 +17,7 @@ export function RelatedPosts({ posts }: { posts: Post[] }) {
         {posts.map((post) => (
           <Link
             key={post.id}
-            href={`/posts/${post.slug}`}
+            href={PUBLIC_ROUTES.post(post.slug)}
             className="group flex items-start gap-2.5 rounded-lg border border-divider p-2.5 transition-colors hover:border-accent/40"
           >
             {post.cover && (

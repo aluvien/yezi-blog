@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { countApprovedCommentsBulk, listPostsByTag } from "@/lib/db";
 import { PostEntry } from "@/components/site/PostEntry";
 import { getSession } from "@/lib/auth";
+import { getCachedSiteSettings } from "@/lib/server-data";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -19,19 +21,20 @@ function decodeTag(value: string): string {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const tag = decodeTag((await params).tag);
-  return { title: `标签：${tag}` };
+  return { title: `标签：${tag}`, alternates: { canonical: PUBLIC_ROUTES.tag(tag) } };
 }
 
 export default async function TagPage({ params }: Props) {
   const tag = decodeTag((await params).tag);
   if (!tag) notFound();
   const posts = listPostsByTag(tag);
+  const classic = getCachedSiteSettings().layout_theme === "classic";
   const isAuthorized = !!(await getSession());
   const commentCounts = countApprovedCommentsBulk("post", posts.map((post) => post.id));
 
   return (
     <div className="mx-auto max-w-[860px] py-8 md:py-12">
-      <Link href="/" className="text-[13px] text-wechat-blue transition-colors hover:text-accent">← 返回首页</Link>
+      <Link href={PUBLIC_ROUTES.posts} className="text-[13px] text-wechat-blue transition-colors hover:text-accent">← 返回{classic ? "随笔" : "文章"}</Link>
       <header className="mt-8 border-b border-divider pb-7">
         <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-accent">Tag archive</p>
         <h1 className="mt-3 text-[30px] font-semibold tracking-[-0.04em] md:text-[40px]">#{tag}</h1>

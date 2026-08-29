@@ -1,9 +1,9 @@
-export { default } from "../moments/page";
+import { permanentRedirect } from "next/navigation";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "絮语",
-  description: "记录正在发生的片刻与想法。",
-};
+export default function LegacyBitsRedirect() {
+  permanentRedirect(PUBLIC_ROUTES.moments);
+}

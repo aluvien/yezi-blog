@@ -1,7 +1,13 @@
-import PostPage, { generateMetadata } from "../../posts/[slug]/page";
+import { permanentRedirect } from "next/navigation";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
-export { generateMetadata };
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default PostPage;
+type Props = { params: Promise<{ slug: string }> };
+
+/** 旧的归档文章地址保留为兼容入口，文章规范地址统一归入“随笔”。 */
+export default async function ArchivePostRedirect({ params }: Props) {
+  const { slug } = await params;
+  permanentRedirect(PUBLIC_ROUTES.post(slug));
+}

@@ -5,19 +5,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Book, BookOpen, Moon, Rss, Sun } from "lucide-react";
 import { SiteSearch } from "@/components/site/SiteSearch";
+import { CLASSIC_NAV_ITEMS, PUBLIC_ROUTES, getPublicSection, isPublicNavActive, isPublicPostDetailPath } from "@/lib/site-navigation";
 
 type ClassicShellProps = {
   children: React.ReactNode;
   siteSettings: Record<string, string>;
 };
-
-const navItems = [
-  { href: "/essay", label: "随笔" },
-  { href: "/bits", label: "絮语" },
-  { href: "/memo", label: "小记" },
-  { href: "/archive", label: "归档" },
-  { href: "/about", label: "关于" },
-] as const;
 
 export function ClassicShell({ children, siteSettings }: ClassicShellProps) {
   const pathname = usePathname();
@@ -26,16 +19,17 @@ export function ClassicShell({ children, siteSettings }: ClassicShellProps) {
   const siteName = siteSettings.site_name?.trim() || "Whono";
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
   const year = new Date().getFullYear();
-  const articlePath = pathname.startsWith("/archive/") || pathname.startsWith("/essay/");
+  const articlePath = isPublicPostDetailPath(pathname);
   const readerLabel = reading ? "退出阅读模式" : "阅读模式";
   const routeClass = useMemo(() => {
-    if (pathname === "/") return "home";
-    if (pathname.startsWith("/about")) return "about-page";
-    if (pathname.startsWith("/memo")) return "memo-page";
-    if (pathname.startsWith("/bits")) return "bits-page";
     if (articlePath) return "article-page immersive-page";
-    if (pathname.startsWith("/archive")) return "archive-page";
-    if (pathname.startsWith("/essay")) return "essay-page";
+    const section = getPublicSection(pathname);
+    if (section === "home") return "home";
+    if (section === "about") return "about-page";
+    if (section === "works") return "memo-page";
+    if (section === "moments") return "bits-page";
+    if (section === "archives") return "archive-page";
+    if (section === "posts") return "essay-page";
     return "";
   }, [articlePath, pathname]);
 
@@ -93,8 +87,8 @@ export function ClassicShell({ children, siteSettings }: ClassicShellProps) {
         </div>
 
         <ul className="nav sidebar-public-nav">
-          {navItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          {CLASSIC_NAV_ITEMS.map((item) => {
+            const active = isPublicNavActive(pathname, item.section);
             return <li key={item.href}><Link href={item.href} aria-current={active ? "page" : undefined}><span>{item.label}</span><span className="dot" aria-hidden="true" /></Link></li>;
           })}
         </ul>
@@ -107,7 +101,7 @@ export function ClassicShell({ children, siteSettings }: ClassicShellProps) {
             </button>
           ) : null}
           <div className="classic-mobile-search"><SiteSearch /></div>
-          <Link className="icon-button rss-link sidebar-action--rail-hidden" href="/archive/rss.xml" aria-label="RSS 订阅" data-tooltip="RSS 订阅"><Rss className="icon" strokeWidth={2} aria-hidden="true" /></Link>
+          <Link className="icon-button rss-link sidebar-action--rail-hidden" href={PUBLIC_ROUTES.rss} aria-label="RSS 订阅" data-tooltip="RSS 订阅"><Rss className="icon" strokeWidth={2} aria-hidden="true" /></Link>
           <button id="theme-toggle" className="icon-button theme-toggle" type="button" aria-label="夜间模式" data-tooltip="夜间模式" onClick={toggleTheme}>
             <Moon className="icon icon-moon" strokeWidth={2} aria-hidden="true" />
             <Sun className="icon icon-sun" strokeWidth={2} aria-hidden="true" />

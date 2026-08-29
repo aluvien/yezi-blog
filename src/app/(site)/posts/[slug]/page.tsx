@@ -19,6 +19,7 @@ import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 import { getSession } from "@/lib/auth";
 import { getCachedPostBySlug, getCachedSiteSettings } from "@/lib/server-data";
 import { ClassicReaderExit } from "@/components/site/ClassicReaderExit";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: post.title,
     description,
+    alternates: { canonical: PUBLIC_ROUTES.post(post.slug) },
     openGraph: {
       type: "article",
       title: post.title,
@@ -92,7 +94,7 @@ export default async function PostPage({ params }: Props) {
             <ClassicReaderExit />
             <div className="meta-line meta-line--items">
               <span className="meta-line__item"><time dateTime={displayDate.value}>{`${displayDate.label}${formatDateOnly(displayDate.value)}`}</time></span>
-              {tags.length > 0 ? <span className="meta-line__item meta-line__item--tags">{tags.map((tag) => <Link className="tag" href={`/tags/${encodeURIComponent(tag)}`} key={tag}>#{tag}</Link>)}</span> : null}
+              {tags.length > 0 ? <span className="meta-line__item meta-line__item--tags">{tags.map((tag) => <Link className="tag" href={PUBLIC_ROUTES.tag(tag)} key={tag}>#{tag}</Link>)}</span> : null}
               <span className="meta-line__item meta-line__item--desktop-meta">共 {readingStats.characters} 字</span>
               <span className="meta-line__item meta-line__item--desktop-meta">约 {readingStats.minutes} 分钟</span>
             </div>
@@ -103,7 +105,7 @@ export default async function PostPage({ params }: Props) {
           <nav className="prev-next" aria-label="上一篇/下一篇">
             <div className="prev-next__item">
               {previousPost ? (
-                <Link className="prev-next__link prev-next__link--prev" href={`/archive/${previousPost.slug}`} rel="prev">
+                <Link className="prev-next__link prev-next__link--prev" href={PUBLIC_ROUTES.post(previousPost.slug)} rel="prev">
                   <span className="prev-next__label">上一篇</span>
                   <span className="prev-next__title">{previousPost.title}</span>
                 </Link>
@@ -111,7 +113,7 @@ export default async function PostPage({ params }: Props) {
             </div>
             <div className="prev-next__item">
               {nextPost ? (
-                <Link className="prev-next__link prev-next__link--next" href={`/archive/${nextPost.slug}`} rel="next">
+                <Link className="prev-next__link prev-next__link--next" href={PUBLIC_ROUTES.post(nextPost.slug)} rel="next">
                   <span className="prev-next__label">下一篇</span>
                   <span className="prev-next__title">{nextPost.title}</span>
                 </Link>
@@ -163,7 +165,7 @@ export default async function PostPage({ params }: Props) {
             {tags.map((tag) => (
               <Link
                 key={tag}
-                href={`/tags/${encodeURIComponent(tag)}`}
+                href={PUBLIC_ROUTES.tag(tag)}
                 className="rounded-full bg-accent/10 px-2.5 py-1 text-[12px] text-accent transition-colors hover:bg-accent/15"
               >
                 #{tag}

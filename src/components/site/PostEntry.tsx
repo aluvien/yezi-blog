@@ -6,9 +6,10 @@ import { parsePostTags } from "@/lib/post-tags";
 import { MetricIcon } from "@/components/site/MetricIcon";
 import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 import { SiteImage } from "@/components/site/SiteImage";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 /** 首页时间线中的文章条目 */
-export function PostEntry({ post, commentCount = 0, canEdit = false, hrefBase = "/posts" }: { post: Post; commentCount?: number; canEdit?: boolean; hrefBase?: "/posts" | "/essay" | "/archive" }) {
+export function PostEntry({ post, commentCount = 0, canEdit = false }: { post: Post; commentCount?: number; canEdit?: boolean }) {
   const excerpt = stripMarkdown(post.content, 110);
   const firstTag = parsePostTags(post.tags)[0];
   return (
@@ -18,7 +19,7 @@ export function PostEntry({ post, commentCount = 0, canEdit = false, hrefBase = 
       zoneClassName={`article-edit-zone post-entry-edit-zone ${firstTag ? "has-post-tag" : ""}`}
     >
     <article>
-      <Link href={`${hrefBase}/${post.slug}`} className="group block">
+      <Link href={PUBLIC_ROUTES.post(post.slug)} className="group block">
         <div className="flex gap-4 md:gap-5">
           <div className="min-w-0 flex-1">
             {firstTag && <div className="mb-2 text-[12px] font-medium text-accent">{firstTag}</div>}

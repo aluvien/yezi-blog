@@ -14,6 +14,7 @@ import { MusicEmbed } from "@/components/site/MusicEmbed";
 import { useMomentView } from "@/components/site/MomentViewTracker";
 import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 import { SiteImage } from "@/components/site/SiteImage";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export type { FeedItem } from "@/lib/mobile-feed";
 
@@ -63,7 +64,7 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
         <LikeButton targetType="moment" targetId={moment.id} initialLikes={metrics.likes} initialLiked={initialLiked} />
         <Metric type="view" value={views} />
         <span className="mobile-feed-meta-spacer" />
-        <Metric type="comment" value={commentCount} href={`/moments#moment-${moment.id}`} />
+        <Metric type="comment" value={commentCount} href={PUBLIC_ROUTES.moment(moment.id)} />
       </div>
     </article>
     </ArticleEditZone>
@@ -82,7 +83,7 @@ function MobilePost({ post, commentCount, metrics, initialLiked, canEdit }: { po
     <article className="mobile-feed-post">
       {post.cover ? (
         <>
-          <Link href={`/posts/${post.slug}`} className="mobile-feed-post-banner">
+          <Link href={PUBLIC_ROUTES.post(post.slug)} className="mobile-feed-post-banner">
             <SiteImage src={post.cover} alt="" fill sizes="(max-width: 640px) 100vw, 620px" className="object-cover" />
             <span>{post.title}</span>
           </Link>
@@ -91,9 +92,9 @@ function MobilePost({ post, commentCount, metrics, initialLiked, canEdit }: { po
       ) : (
         <>
           {post.category && <div className="mobile-feed-post-kicker">
-            <Link href={`/categories/${encodeURIComponent(post.category)}`}>{post.category}</Link>
+            <Link href={PUBLIC_ROUTES.category(post.category)}>{post.category}</Link>
           </div>}
-          <h2 className="mobile-feed-post-title"><Link href={`/posts/${post.slug}`}>{post.title}</Link></h2>
+          <h2 className="mobile-feed-post-title"><Link href={PUBLIC_ROUTES.post(post.slug)}>{post.title}</Link></h2>
           {excerpt && <p className="mobile-feed-post-excerpt">{excerpt}</p>}
         </>
       )}
@@ -102,7 +103,7 @@ function MobilePost({ post, commentCount, metrics, initialLiked, canEdit }: { po
         <span className="mobile-feed-meta-spacer" />
         <LikeButton targetType="post" targetId={post.id} initialLikes={metrics.likes} initialLiked={initialLiked} />
         <Metric type="view" value={metrics.views} />
-        <Metric type="comment" value={commentCount} href={`/posts/${post.slug}#comments`} />
+        <Metric type="comment" value={commentCount} href={PUBLIC_ROUTES.postComments(post.slug)} />
       </div>
     </article>
     </ArticleEditZone>

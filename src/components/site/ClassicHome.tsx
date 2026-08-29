@@ -4,6 +4,7 @@ import { formatDateOnly } from "@/lib/format";
 import { parsePostTags } from "@/lib/post-tags";
 import type { Work } from "@/lib/db/types";
 import { ClassicHomeFeed } from "@/components/site/ClassicHomeFeed";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 function tagsFor(item: FeedItem): string[] {
   // Archive metadata should mirror the article header and use the dedicated
@@ -26,11 +27,11 @@ export function ClassicArchiveList({ items }: { items: FeedItem[] }) {
               const date = formatDateOnly(item.value.created_at);
               return (
                 <div className="archive-row" key={item.value.id} data-entry-item data-search={`${item.value.title} ${tags.join(" ")}`} data-slug={item.value.slug}>
-                  <div className="archive-title"><Link href={`/archive/${item.value.slug}`}>{item.value.title}</Link></div>
+                  <div className="archive-title"><Link href={PUBLIC_ROUTES.post(item.value.slug)}>{item.value.title}</Link></div>
                   <div className="archive-meta">
                     <div className="archive-date"><span className="archive-date-md">{date.slice(5)}</span><span className="archive-date-full">{date}</span></div>
                     {tags.length > 0 ? <div className="archive-tag">
-                      {tags.map((tag) => <Link className="tag" href={`/tags/${encodeURIComponent(tag)}`} key={tag}>#{tag}</Link>)}
+                      {tags.map((tag) => <Link className="tag" href={PUBLIC_ROUTES.tag(tag)} key={tag}>#{tag}</Link>)}
                     </div> : null}
                   </div>
                 </div>

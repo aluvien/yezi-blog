@@ -8211,23 +8211,22 @@ html[data-layout-theme="classic"] .classic-home-feed__bit-copy {
   }
 }
 
-/* The classic dark palette intentionally does not inherit the editorial red
- * accent for this marker: it stays a muted brown-grey on the charcoal paper. */
+/* 暗色下的絮语标记跟随当前经典配色，避免切换书页颜色后仍残留默认棕灰。 */
 html[data-layout-theme="classic"][data-theme="dark"] .classic-home-feed__bit-copy {
-  border-left-color: color-mix(in srgb, #9a7569 22%, #333333);
+  border-left-color: color-mix(in srgb, var(--classic-accent) 26%, var(--classic-border));
 }
 
 @media (hover: hover) and (pointer: fine) {
   html[data-layout-theme="classic"][data-theme="dark"] .classic-home-feed__bit:hover .classic-home-feed__bit-copy,
   html[data-layout-theme="classic"][data-theme="dark"] .classic-home-feed__bit:focus-visible .classic-home-feed__bit-copy,
   html[data-layout-theme="classic"][data-theme="dark"] .classic-home-feed__bit:focus-within .classic-home-feed__bit-copy {
-    border-left-color: color-mix(in srgb, #a67d70 40%, #333333);
+    border-left-color: color-mix(in srgb, var(--classic-accent) 44%, var(--classic-border));
   }
 }
 
 @media (hover: none) {
   html[data-layout-theme="classic"][data-theme="dark"] .classic-home-feed__bit:active .classic-home-feed__bit-copy {
-    border-left-color: color-mix(in srgb, #a67d70 34%, #333333);
+    border-left-color: color-mix(in srgb, var(--classic-accent) 38%, var(--classic-border));
   }
 }
 
@@ -8512,7 +8511,7 @@ html[data-layout-theme="classic"][data-theme="dark"] .music-trigger:hover {
   background: color-mix(in srgb, var(--classic-accent) 8%, var(--classic-panel));
 }
 
-html[data-layout-theme="classic"][data-theme="dark"] :is(.music-trigger-play, .global-player-panel .aplayer .aplayer-pic .aplayer-button) {
+html[data-layout-theme="classic"][data-theme="dark"] :is(.music-trigger-play, .global-player-panel .aplayer .aplayer-pic .aplayer-button, .global-player-panel .aplayer .aplayer-icon-play) {
   background: var(--classic-accent);
 }
 

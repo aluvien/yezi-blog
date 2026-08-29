@@ -6,6 +6,7 @@ import { PostEntry } from "@/components/site/PostEntry";
 import { MomentEntry } from "@/components/site/MomentEntry";
 import { PageHeader } from "@/components/site/PageHeader";
 import { getSession } from "@/lib/auth";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "搜索",
   description: "搜索文章与想法。",
+  alternates: { canonical: PUBLIC_ROUTES.search },
 };
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {

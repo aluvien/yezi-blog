@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { listReferenceLibrary, listReferenceLibraryCategories } from "@/lib/db";
 import { PageHeader } from "@/components/site/PageHeader";
 import { ReferenceLibraryCard } from "@/components/site/ReferenceLibraryCard";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "引用",
   description: "收藏一些值得回看的文章、网页和灵感。",
+  alternates: { canonical: PUBLIC_ROUTES.references },
 };
 
 type SearchParams = { q?: string | string[]; category?: string | string[] };
@@ -55,7 +58,7 @@ export default async function ReferencesPage({ searchParams }: { searchParams: P
           {categories.map((item) => <option key={item.category} value={item.category}>{item.category}（{item.count}）</option>)}
         </select>
         <button type="submit" className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-paper transition-colors hover:bg-accent">搜索</button>
-        {(keyword || category) && <a href="/references" className="px-1 text-center text-sm text-muted no-underline transition-colors hover:text-accent">清除</a>}
+        {(keyword || category) && <Link href={PUBLIC_ROUTES.references} className="px-1 text-center text-sm text-muted no-underline transition-colors hover:text-accent">清除</Link>}
       </form>
 
       {references.length > 0 ? (
@@ -65,7 +68,7 @@ export default async function ReferencesPage({ searchParams }: { searchParams: P
       ) : (
         <div className="py-20 text-center text-[14px] text-muted">
           <p>{keyword || category ? "没有找到符合条件的收藏。" : "还没有收藏文章。"}</p>
-          {(keyword || category) && <a href="/references" className="mt-3 inline-flex text-accent no-underline hover:underline">查看全部收藏</a>}
+          {(keyword || category) && <Link href={PUBLIC_ROUTES.references} className="mt-3 inline-flex text-accent no-underline hover:underline">查看全部收藏</Link>}
         </div>
       )}
     </div>

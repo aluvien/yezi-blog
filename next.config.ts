@@ -133,6 +133,20 @@ const nextConfig: NextConfig = {
   // 允许通过开发机 IP 或绑定域名访问 HMR 与 Server Actions；
   // 否则页面能打开，但登录、评论等客户端交互会像“没有反应”。
   allowedDevOrigins: ["localhost", "127.0.0.1", "192.168.31.31", "yezi.biaozhu.me", "yezi.me", "www.yezi.me"],
+  // 历史经典版路径只保留兼容性；公开链接与站点地图统一使用内容语义稳定的
+  // 规范地址。配置层重定向会在渲染前直接返回 HTTP 308。
+  async redirects() {
+    return [
+      { source: "/essay/rss.xml", destination: "/rss.xml", permanent: true },
+      { source: "/archive/rss.xml", destination: "/rss.xml", permanent: true },
+      { source: "/essay/:slug", destination: "/posts/:slug", permanent: true },
+      { source: "/archive/:slug", destination: "/posts/:slug", permanent: true },
+      { source: "/essay", destination: "/posts", permanent: true },
+      { source: "/bits", destination: "/moments", permanent: true },
+      { source: "/memo", destination: "/works", permanent: true },
+      { source: "/archive", destination: "/archives", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

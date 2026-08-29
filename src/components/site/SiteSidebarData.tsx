@@ -3,6 +3,7 @@ import { countMoments, countPublishedPosts, countWorks, listLatestApprovedCommen
 import { getCachedCategories, getCachedPublishedTags } from "@/lib/server-data";
 import { formatDateOnly } from "@/lib/format";
 import { parseSocialLinks } from "@/lib/site";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 type CardIconName = "content" | "link" | "category" | "tag" | "interaction";
 
@@ -42,18 +43,14 @@ export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string,
   const latestInteractions = listLatestApprovedComments(8);
   const tags = getCachedPublishedTags(12);
   const socialLinks = parseSocialLinks(siteSettings.social_links, 8);
-  const routes = siteSettings.layout_theme === "classic"
-    ? { essay: "/essay", bits: "/bits", memo: "/memo" }
-    : { essay: "/posts", bits: "/moments", memo: "/works" };
-
   return (
     <>
       <div className="site-sidebar-card">
         <Label icon="content">内容</Label>
         <div className="site-sidebar-stat-grid mt-3">
-          <Link href={routes.essay} className="site-sidebar-stat"><strong>{postCount}</strong><span>随笔</span></Link>
-          <Link href={routes.bits} className="site-sidebar-stat"><strong>{momentCount}</strong><span>絮语</span></Link>
-          <Link href={routes.memo} className="site-sidebar-stat"><strong>{workCount}</strong><span>小记</span></Link>
+          <Link href={PUBLIC_ROUTES.posts} className="site-sidebar-stat"><strong>{postCount}</strong><span>随笔</span></Link>
+          <Link href={PUBLIC_ROUTES.moments} className="site-sidebar-stat"><strong>{momentCount}</strong><span>絮语</span></Link>
+          <Link href={PUBLIC_ROUTES.works} className="site-sidebar-stat"><strong>{workCount}</strong><span>小记</span></Link>
         </div>
       </div>
 
@@ -72,7 +69,7 @@ export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string,
         <div className="site-sidebar-card">
           <Label icon="category">分类</Label>
           <div className="site-sidebar-tags mt-3">
-            {categories.slice(0, 12).map((category) => <Link key={category.id} href={`/categories/${encodeURIComponent(category.name)}`} className="site-sidebar-tag">{category.name}</Link>)}
+            {categories.slice(0, 12).map((category) => <Link key={category.id} href={PUBLIC_ROUTES.category(category.name)} className="site-sidebar-tag">{category.name}</Link>)}
           </div>
         </div>
       )}
@@ -82,7 +79,7 @@ export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string,
           <Label icon="tag">标签</Label>
           <div className="site-sidebar-tags mt-3">
             {tags.map(({ tag, count }) => (
-              <Link key={tag} href={`/tags/${encodeURIComponent(tag)}`} className="site-sidebar-tag">#{tag}<sup>{count}</sup></Link>
+              <Link key={tag} href={PUBLIC_ROUTES.tag(tag)} className="site-sidebar-tag">#{tag}<sup>{count}</sup></Link>
             ))}
           </div>
         </div>
@@ -94,8 +91,8 @@ export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string,
           <div className="site-sidebar-interactions mt-3">
             {latestInteractions.map((comment) => {
               const href = comment.target_type === "post" && comment.target_slug
-                ? `${routes.essay}/${comment.target_slug}#comments`
-                : `${routes.bits}#moment-${comment.target_id}`;
+                ? PUBLIC_ROUTES.postComments(comment.target_slug)
+                : PUBLIC_ROUTES.moment(comment.target_id);
               return (
                 <Link key={comment.id} href={href} className="site-sidebar-interaction">
                   <span>{comment.nickname} · {formatDateOnly(comment.created_at)}</span>
