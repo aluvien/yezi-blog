@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { FeedItem } from "@/lib/mobile-feed";
 import { formatDateOnly } from "@/lib/format";
-import { parseMomentImages } from "@/lib/moments";
+import { groupMomentImages, parseMomentImages } from "@/lib/moments";
 import { parsePostTags } from "@/lib/post-tags";
 import { splitMomentContent } from "@/lib/music";
 import { MusicEmbed } from "@/components/site/MusicEmbed";
@@ -36,6 +36,7 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
   const moment = item.value;
   const router = useRouter();
   const images = useMemo(() => parseMomentImages(moment).slice(0, 9), [moment]);
+  const imageGroups = useMemo(() => groupMomentImages(images), [images]);
   const segments = useMemo(() => splitMomentContent(moment.content), [moment.content]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const destination = `/bits#moment-${moment.id}`;
@@ -74,7 +75,13 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
             {images.length === 1 ? (
               <button type="button" className="bit-media-item bit-media-item--single" onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" width={800} height={600} /></button>
             ) : (
-              <div className="bit-media-grid">{images.map((src, index) => <button key={`${src}-${index}`} type="button" className="bit-media-item" onClick={() => setLightboxIndex(index)} aria-label={`图片 ${index + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 45vw, 320px" /></button>)}</div>
+              <div className="bit-media-grid bit-media-grid--balanced">{imageGroups.flatMap((row, rowIndex) => {
+                const startIndex = imageGroups.slice(0, rowIndex).reduce((sum, group) => sum + group.length, 0);
+                return row.map((src, columnIndex) => {
+                  const imageIndex = startIndex + columnIndex;
+                  return <button key={`${src}-${imageIndex}`} type="button" className={`bit-media-item ${row.length === 3 ? "bit-media-item--third" : "bit-media-item--half"}`} onClick={() => setLightboxIndex(imageIndex)} aria-label={`图片 ${imageIndex + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 33vw, 320px" /></button>;
+                });
+              })}</div>
             )}
           </div>
         ) : null}

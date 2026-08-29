@@ -896,6 +896,23 @@
     grid-column: auto;
     aspect-ratio: 4 / 3;
   }
+
+  .bit-media-grid.bit-media-grid--balanced {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    overflow: visible;
+    scroll-snap-type: none;
+    scroll-padding-right: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .bit-media-grid--balanced .bit-media-item {
+    width: 100%;
+    scroll-snap-align: none;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1031,6 +1048,10 @@
   .bit-media-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .bit-media-grid.bit-media-grid--balanced {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .bit-media-item {

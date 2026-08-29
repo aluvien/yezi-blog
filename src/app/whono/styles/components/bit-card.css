@@ -125,6 +125,18 @@
   width: 100%;
 }
 
+.bit-media-grid--balanced {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.bit-media-grid--balanced .bit-media-item--half {
+  grid-column: span 3;
+}
+
+.bit-media-grid--balanced .bit-media-item--third {
+  grid-column: span 2;
+}
+
 .bit-media-item {
   position: relative;
   border-radius: 8px;

@@ -3,18 +3,7 @@
 import { useState } from "react";
 import { LightboxOverlay } from "@/components/site/ImageLightbox";
 import { SiteImage } from "@/components/site/SiteImage";
-
-/** 社交九宫格布局：根据图片数量把图片分成若干行（每行 1/2/3 张）。 */
-function groupImages(images: string[]): string[][] {
-  const n = images.length;
-  if (n <= 3) return [images.slice(0, n)];
-  if (n === 4) return [images.slice(0, 2), images.slice(2, 4)];
-  if (n === 5) return [images.slice(0, 2), images.slice(2, 5)];
-  if (n === 6) return [images.slice(0, 3), images.slice(3, 6)];
-  if (n === 7) return [images.slice(0, 3), images.slice(3, 6), images.slice(6, 7)];
-  if (n === 8) return [images.slice(0, 3), images.slice(3, 6), images.slice(6, 8)];
-  return [images.slice(0, 3), images.slice(3, 6), images.slice(6, 9)]; // 9
-}
+import { groupMomentImages } from "@/lib/moments";
 
 /** 想法配图：社交九宫格排列 + 点击灯箱预览。 */
 export function MomentImages({ images }: { images: string[] }) {
@@ -22,7 +11,7 @@ export function MomentImages({ images }: { images: string[] }) {
   if (images.length === 0) return null;
 
   const flat = images.slice(0, 9);
-  const groups = groupImages(flat);
+  const groups = groupMomentImages(flat);
 
   return (
     <>

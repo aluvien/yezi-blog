@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Moment } from "@/lib/db";
-import { parseMomentImages, parseMomentTags } from "@/lib/moments";
+import { groupMomentImages, parseMomentImages, parseMomentTags } from "@/lib/moments";
 import { splitMomentContent } from "@/lib/music";
 import { formatDate } from "@/lib/format";
 import { parsePostTags } from "@/lib/post-tags";
@@ -20,6 +20,7 @@ export function ClassicBitsList({ moments, authorName, authorAvatar, commentCoun
 
 function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentCount, commentSection, showInteractions, showComments }: { moment: Moment; authorName: string; authorAvatar?: string; prioritize: boolean; commentCount: number; commentSection?: React.ReactNode; showInteractions: boolean; showComments: boolean }) {
   const images = useMemo(() => parseMomentImages(moment).slice(0, 9), [moment]);
+  const imageGroups = useMemo(() => groupMomentImages(images), [images]);
   const tags = useMemo(() => {
     const stored = parsePostTags(moment.tags);
     return stored.length > 0 ? stored : parseMomentTags(moment.content);
@@ -44,7 +45,13 @@ function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentC
           {images.length === 1 ? (
             <button type="button" className="bit-media-item bit-media-item--single" onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" width={800} height={600} priority={prioritize} /></button>
           ) : (
-            <div className="bit-media-grid">{images.map((src, index) => <button key={`${src}-${index}`} type="button" className="bit-media-item" onClick={() => setLightboxIndex(index)} aria-label={`图片 ${index + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 45vw, 360px" priority={prioritize && index === 0} /></button>)}</div>
+            <div className="bit-media-grid bit-media-grid--balanced">{imageGroups.flatMap((row, rowIndex) => {
+              const startIndex = imageGroups.slice(0, rowIndex).reduce((sum, group) => sum + group.length, 0);
+              return row.map((src, columnIndex) => {
+                const imageIndex = startIndex + columnIndex;
+                return <button key={`${src}-${imageIndex}`} type="button" className={`bit-media-item ${row.length === 3 ? "bit-media-item--third" : "bit-media-item--half"}`} onClick={() => setLightboxIndex(imageIndex)} aria-label={`图片 ${imageIndex + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 33vw, 360px" priority={prioritize && imageIndex === 0} /></button>;
+              });
+            })}</div>
           )}
         </div>
       ) : null}
