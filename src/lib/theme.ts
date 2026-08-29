@@ -116,6 +116,12 @@ export const CLASSIC_THEME_PALETTES: ThemePalette[] = [
 
 export const THEME_PALETTE_IDS = THEME_PALETTES.map((palette) => palette.id);
 
+/** 经典版桌面侧栏的默认介绍；后台可用 classic_sidebar_intro 覆盖。 */
+export const DEFAULT_CLASSIC_SIDEBAR_INTRO = `A minimal Astro theme
+for essays, notes, and docs.
+Designed for reading,
+open-source.`;
+
 /**
  * 前台版式主题：与配色方案分开，避免切换布局时覆盖现有颜色设置。
  * classic 为书香双栏版式，editorial 对应新的编辑感布局。

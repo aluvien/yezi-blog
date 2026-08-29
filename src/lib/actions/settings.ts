@@ -29,6 +29,7 @@ const SETTING_KEYS = [
   "classic_home_intro",
   "classic_home_more",
   "classic_home_section_title",
+  "classic_sidebar_intro",
   "classic_home_include_bits",
   "classic_show_interactions",
   "classic_show_comments",

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateSiteSettingsAction } from "@/lib/actions/settings";
-import { CLASSIC_THEME_PALETTES, DARK_MODE_OPTIONS, LAYOUT_THEMES, THEME_PALETTES } from "@/lib/theme";
+import { CLASSIC_THEME_PALETTES, DARK_MODE_OPTIONS, DEFAULT_CLASSIC_SIDEBAR_INTRO, LAYOUT_THEMES, THEME_PALETTES } from "@/lib/theme";
 import ImageUpload from "./ImageUpload";
 import QQMusicPanel from "./QQMusicPanel";
 import TelegramNotifyPanel from "./TelegramNotifyPanel";
@@ -20,7 +20,7 @@ const SECTION_KEYS: Record<SettingsSection, string[]> = {
     "qq_music_health_check_interval_hours", "telegram_comment_notifications_enabled",
   ],
   music: ["default_music", "default_music_shuffle", "music_float_enabled", "music_float_info_enabled", "music_position"],
-  appearance: ["theme", "layout_theme", "dark_mode", "classic_home_image", "classic_home_intro", "classic_home_more", "classic_home_section_title", "classic_home_include_bits", "classic_show_interactions", "classic_show_comments", "show_related_posts", "show_more_posts", "show_table_of_contents", "show_home_page", "show_moments_page", "show_posts_page", "show_references_page", "show_works_page", "show_about_page"],
+  appearance: ["theme", "layout_theme", "dark_mode", "classic_home_image", "classic_home_intro", "classic_home_more", "classic_home_section_title", "classic_sidebar_intro", "classic_home_include_bits", "classic_show_interactions", "classic_show_comments", "show_related_posts", "show_more_posts", "show_table_of_contents", "show_home_page", "show_moments_page", "show_posts_page", "show_references_page", "show_works_page", "show_about_page"],
 };
 
 export default function SiteSettingsForm({ initialValues, section = "site" }: Props) {
@@ -34,6 +34,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
     classic_home_intro: initialValues.classic_home_intro ?? "",
     classic_home_more: initialValues.classic_home_more ?? "",
     classic_home_section_title: initialValues.classic_home_section_title ?? "",
+    classic_sidebar_intro: initialValues.classic_sidebar_intro ?? DEFAULT_CLASSIC_SIDEBAR_INTRO,
     classic_home_include_bits: initialValues.classic_home_include_bits ?? "1",
     classic_show_interactions: initialValues.classic_show_interactions ?? "1",
     classic_show_comments: initialValues.classic_show_comments ?? "1",
@@ -345,6 +346,17 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
             <div>
               <label className="mb-1 block text-xs text-neutral-600">信息流标题</label>
               <input value={values.classic_home_section_title} onChange={(event) => update("classic_home_section_title", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="索引" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-neutral-600">桌面侧栏介绍</label>
+              <textarea
+                value={values.classic_sidebar_intro}
+                onChange={(event) => update("classic_sidebar_intro", event.target.value)}
+                rows={4}
+                className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+                placeholder={DEFAULT_CLASSIC_SIDEBAR_INTRO}
+              />
+              <p className="mt-1.5 text-xs leading-5 text-neutral-500">显示在经典版桌面左侧、站点名称与菜单之间；支持换行，清空后不显示。</p>
             </div>
             <fieldset className="space-y-3 rounded-lg border border-amber-200/80 bg-white/70 p-3">
               <legend className="px-1 text-sm font-medium text-neutral-700">本站扩展</legend>

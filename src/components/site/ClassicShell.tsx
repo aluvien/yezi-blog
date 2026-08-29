@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Book, BookOpen, Moon, Rss, Sun } from "lucide-react";
 import { SiteSearch } from "@/components/site/SiteSearch";
 import { CLASSIC_NAV_ITEMS, PUBLIC_ROUTES, getPublicSection, isPublicNavActive, isPublicPostDetailPath } from "@/lib/site-navigation";
+import { DEFAULT_CLASSIC_SIDEBAR_INTRO } from "@/lib/theme";
 
 type ClassicShellProps = {
   children: React.ReactNode;
@@ -17,6 +18,9 @@ export function ClassicShell({ children, siteSettings }: ClassicShellProps) {
   const [readingState, setReadingState] = useState({ path: "", active: false });
   const reading = readingState.path === pathname && readingState.active;
   const siteName = siteSettings.site_name?.trim() || "Whono";
+  const sidebarIntro = Object.hasOwn(siteSettings, "classic_sidebar_intro")
+    ? siteSettings.classic_sidebar_intro.trim()
+    : DEFAULT_CLASSIC_SIDEBAR_INTRO;
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
   const year = new Date().getFullYear();
   const articlePath = isPublicPostDetailPath(pathname);
@@ -79,12 +83,7 @@ export function ClassicShell({ children, siteSettings }: ClassicShellProps) {
           <span className="sidebar__title-text">{siteName}</span>
         </Link>
 
-        <div className="sidebar__quote">
-          A minimal Astro theme<br />
-          for essays, notes, and docs.<br />
-          Designed for reading,<br />
-          open-source.
-        </div>
+        {sidebarIntro ? <div className="sidebar__quote">{sidebarIntro}</div> : null}
 
         <ul className="nav sidebar-public-nav">
           {CLASSIC_NAV_ITEMS.map((item) => {
