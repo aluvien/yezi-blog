@@ -220,10 +220,6 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
-html[data-theme="dark"] .admin-shell {
-  color-scheme: light;
-}
-
 :root {
   --font-site: "Chiron GoRound TC WS", "Chiron GoRound TC", system-ui, sans-serif;
   --font-site-mono: "IBM Plex Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK SC", monospace;
@@ -284,6 +280,206 @@ html[data-theme="dark"] .admin-shell {
   --admin-line: color-mix(in srgb, var(--foreground) 10%, transparent);
   --admin-muted: color-mix(in srgb, var(--foreground) 58%, var(--paper));
   color: var(--foreground);
+}
+
+.admin-theme-toggle {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--admin-line);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--admin-muted);
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.admin-theme-toggle:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--admin-line));
+  background: color-mix(in srgb, var(--accent) 6%, var(--paper));
+  color: var(--accent-strong);
+}
+
+.admin-theme-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.admin-theme-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.admin-theme-icon--sun {
+  display: none;
+}
+
+html[data-theme="dark"] .admin-theme-icon--moon {
+  display: none;
+}
+
+html[data-theme="dark"] .admin-theme-icon--sun {
+  display: block;
+}
+
+/* 后台暗色适配层。后台页面仍保留现有 Tailwind 结构，通过统一语义覆盖
+ * 消除硬编码的白色卡片和 neutral 文本，弹窗与表单也继承同一套表面层级。 */
+html[data-theme="dark"] :is(.admin-shell, .admin-login-page) {
+  color-scheme: dark;
+  background: var(--background) !important;
+  color: var(--foreground);
+}
+
+html[data-theme="dark"] .admin-login-page {
+  --admin-line: color-mix(in srgb, var(--foreground) 13%, transparent);
+  --admin-muted: color-mix(in srgb, var(--foreground) 62%, var(--paper));
+}
+
+html[data-theme="dark"] .admin-header {
+  border-color: var(--admin-line) !important;
+  background: color-mix(in srgb, var(--paper) 94%, transparent) !important;
+  backdrop-filter: blur(12px);
+}
+
+html[data-theme="dark"] .admin-header-divider {
+  background: var(--admin-line) !important;
+}
+
+html[data-theme="dark"] :is(.admin-shell, .admin-login-card) .bg-white,
+html[data-theme="dark"] :is(.admin-shell, .admin-login-card) [class~="bg-white/70"] {
+  background-color: var(--paper) !important;
+}
+
+html[data-theme="dark"] :is(.admin-shell, .admin-login-card) :is(.bg-neutral-50, .bg-neutral-100) {
+  background-color: var(--soft) !important;
+}
+
+html[data-theme="dark"] .admin-shell .bg-neutral-200 {
+  background-color: var(--divider) !important;
+}
+
+html[data-theme="dark"] :is(.admin-shell, .admin-login-card) :is(.text-neutral-950, .text-neutral-900, .text-neutral-800, .text-neutral-700) {
+  color: var(--foreground) !important;
+}
+
+html[data-theme="dark"] :is(.admin-shell, .admin-login-card) :is(.text-neutral-600, .text-neutral-500) {
+  color: color-mix(in srgb, var(--foreground) 68%, var(--paper)) !important;
+}
+
+html[data-theme="dark"] :is(.admin-shell, .admin-login-card) :is(.text-neutral-400, .text-neutral-300) {
+  color: color-mix(in srgb, var(--foreground) 48%, var(--paper)) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is(.border-neutral-100, .border-neutral-200, .border-neutral-300, .divide-neutral-100) {
+  border-color: var(--admin-line) !important;
+}
+
+html[data-theme="dark"] .admin-shell .divide-neutral-100 > :not(:last-child) {
+  border-color: var(--admin-line) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is(.border-neutral-400, .border-neutral-500) {
+  border-color: color-mix(in srgb, var(--foreground) 30%, var(--paper)) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is(.bg-neutral-900, .bg-neutral-900.text-white) {
+  background-color: var(--foreground) !important;
+}
+
+html[data-theme="dark"] .admin-shell .bg-neutral-900.text-white {
+  color: var(--paper) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is([class~="hover:bg-neutral-50"], [class~="hover:bg-neutral-100"], [class~="hover:bg-neutral-200"]):hover {
+  background-color: color-mix(in srgb, var(--foreground) 8%, var(--paper)) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is([class~="hover:text-neutral-700"], [class~="hover:text-neutral-800"], [class~="hover:text-neutral-900"], [class~="hover:text-neutral-950"]):hover {
+  color: var(--foreground) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is([class~="border-amber-200"], [class~="border-amber-200/80"], .border-sky-200) {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--admin-line)) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is([class~="bg-amber-50/60"], [class~="bg-sky-50/50"]) {
+  background-color: color-mix(in srgb, var(--accent) 5%, var(--paper)) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is(.bg-green-50, .bg-green-100) {
+  background-color: color-mix(in srgb, #22c55e 13%, var(--paper)) !important;
+}
+
+html[data-theme="dark"] .admin-shell .bg-amber-100 {
+  background-color: color-mix(in srgb, #f59e0b 14%, var(--paper)) !important;
+}
+
+html[data-theme="dark"] :is(.admin-shell, .admin-login-card) .bg-red-50 {
+  background-color: color-mix(in srgb, #ef4444 12%, var(--paper)) !important;
+}
+
+html[data-theme="dark"] .admin-shell :is(.text-green-600, .text-green-700, .text-green-800, .text-green-900) {
+  color: #86efac !important;
+}
+
+html[data-theme="dark"] :is(.admin-shell, .admin-login-card) :is(.text-red-600, .text-red-700) {
+  color: #fca5a5 !important;
+}
+
+html[data-theme="dark"] .admin-shell :is(.text-amber-600, .text-amber-700, .text-amber-800) {
+  color: #fcd34d !important;
+}
+
+html[data-theme="dark"] .admin-shell :is(.text-blue-700, .text-blue-900) {
+  color: #93c5fd !important;
+}
+
+html[data-theme="dark"] .admin-shell :is(input, textarea, select) {
+  color: var(--foreground);
+  caret-color: var(--foreground);
+}
+
+html[data-theme="dark"] .admin-shell :is(input, textarea)::placeholder {
+  color: color-mix(in srgb, var(--foreground) 42%, var(--paper));
+}
+
+html[data-theme="dark"] .admin-login-card {
+  border-color: var(--admin-line);
+  background: var(--paper) !important;
+  color: var(--foreground);
+  box-shadow: 0 18px 46px rgb(0 0 0 / 28%);
+}
+
+html[data-theme="dark"] .admin-login-card input {
+  border-color: var(--admin-line);
+  background: var(--paper);
+  color: var(--foreground);
+}
+
+html[data-theme="dark"] .admin-login-card .admin-button-primary {
+  background: var(--foreground) !important;
+  color: var(--paper) !important;
+}
+
+html[data-theme="dark"] .admin-login-card .admin-button-primary:hover {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--accent)) !important;
+}
+
+@media (max-width: 699px) {
+  .admin-theme-toggle {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+    border-radius: 8px;
+  }
+
+  .admin-theme-icon {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 .admin-shell .admin-page-eyebrow {
@@ -880,6 +1076,29 @@ html[data-theme="dark"] .admin-shell {
 .admin-shell .admin-nav-submenu[hidden],
 .admin-shell .admin-nav-submenu:not(.is-visible) {
   display: none;
+}
+
+html[data-theme="dark"] .admin-shell .admin-action-link-danger:hover {
+  background: color-mix(in srgb, #ef4444 13%, var(--paper));
+  color: #fca5a5;
+}
+
+html[data-theme="dark"] .admin-shell .admin-action-link-success:hover {
+  background: color-mix(in srgb, #22c55e 13%, var(--paper));
+  color: #86efac;
+}
+
+html[data-theme="dark"] .admin-shell .admin-action-link-warning:hover {
+  background: color-mix(in srgb, #f59e0b 14%, var(--paper));
+  color: #fcd34d;
+}
+
+html[data-theme="dark"] .admin-shell :is(.admin-reference-cache-report.is-good, .admin-reference-action-success) {
+  color: #86efac;
+}
+
+html[data-theme="dark"] .admin-shell :is(.admin-reference-cache-report.is-poor, .admin-reference-action-error) {
+  color: #fca5a5;
 }
 
 @media (min-width: 700px) {

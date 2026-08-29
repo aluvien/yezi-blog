@@ -14,7 +14,7 @@ type Props = { initialValues: Record<string, string>; section?: SettingsSection 
 
 const SECTION_KEYS: Record<SettingsSection, string[]> = {
   site: [
-    "site_name", "site_subtitle", "site_logo", "site_logo_no_border", "classic_hero", "footer_text", "social_links",
+    "site_name", "site_subtitle", "site_logo", "site_logo_no_border", "footer_text", "social_links",
     "author_name", "author_email",
     "gravatar_enabled", "gravatar_mirror", "author_avatar", "author_avatar_no_border", "qq_music_health_check_enabled",
     "qq_music_health_check_interval_hours", "telegram_comment_notifications_enabled",
@@ -30,7 +30,6 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
     site_subtitle: initialValues.site_subtitle ?? "",
     site_logo: initialValues.site_logo ?? "",
     site_logo_no_border: initialValues.site_logo_no_border ?? "0",
-    classic_hero: initialValues.classic_hero ?? "",
     classic_home_image: initialValues.classic_home_image ?? "",
     classic_home_intro: initialValues.classic_home_intro ?? "",
     classic_home_more: initialValues.classic_home_more ?? "",
@@ -114,10 +113,6 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
           <label className="mb-1 block text-sm font-medium text-neutral-700">页脚文案</label>
           <input value={values.footer_text} onChange={(event) => update("footer_text", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="认真写字，也认真生活。" />
         </div>
-        </div>
-        <div className="mt-4 border-t border-neutral-200 pt-4">
-          <ImageUpload value={values.classic_hero || null} onChange={(path) => update("classic_hero", path ?? "")} label="经典版首页 Hero（可选）" />
-          <p className="mt-1 text-xs text-neutral-500">留空时自动使用最新文章封面；没有封面则按目标主题的无 Hero 首页显示。</p>
         </div>
       </section>
 

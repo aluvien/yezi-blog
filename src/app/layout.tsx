@@ -61,8 +61,8 @@ export default async function RootLayout({
   const darkMode = normalizeDarkMode(siteSettings.dark_mode);
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   // 主题初始化：读 cookie（用户手动切换）> 后台设置的默认值 > 系统偏好。
-  // 同时在首帧识别安装态 PWA，避免底栏/菜单在水合后才切换；后台管理页固定浅色。
-  const themeInitScript = `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;document.documentElement.setAttribute("data-display-mode",standalone?"standalone":"browser");var m=${JSON.stringify(darkMode)};var c=document.cookie.match(/(?:^|; )theme_mode=([^;]+)/);var mode=c?decodeURIComponent(c[1]):m;if(location.pathname.indexOf("/admin")===0)mode="light";var dark=mode==="dark"||(mode==="auto"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",dark?"dark":"light");}catch(e){}})();`;
+  // 同时在首帧识别安装态 PWA，避免前台与后台在水合后才切换颜色。
+  const themeInitScript = `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;document.documentElement.setAttribute("data-display-mode",standalone?"standalone":"browser");var m=${JSON.stringify(darkMode)};var c=document.cookie.match(/(?:^|; )theme_mode=([^;]+)/);var mode=c?decodeURIComponent(c[1]):m;var dark=mode==="dark"||(mode==="auto"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",dark?"dark":"light");}catch(e){}})();`;
   return (
     <html
       lang="zh-CN"

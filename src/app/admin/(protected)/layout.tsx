@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { countPendingComments } from "@/lib/db";
 import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminThemeToggle } from "@/components/admin/AdminThemeToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="admin-header-inner mx-auto flex min-h-14 max-w-[1280px] items-center gap-2 px-3 sm:px-6 lg:px-8">
           <AdminNav pendingCount={pendingCount} />
           <div className="admin-header-actions self-center flex shrink-0 items-center gap-3">
+            <AdminThemeToggle />
             <span aria-hidden="true" className="admin-header-divider h-6 w-px shrink-0 bg-neutral-200" />
             <Link
               href="/"
