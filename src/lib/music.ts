@@ -175,6 +175,15 @@ export function compactMusicCoverUrl(value: string): string {
   return normalizeCoverUrl(value);
 }
 
+/**
+ * 音乐封面统一兜底：优先保留歌曲封面，缺失时使用站点传入的默认图；
+ * 站点也未配置图片时回退内置占位图，保证播放器始终有可旋转的圆形封面。
+ */
+export function resolveMusicCover(cover: string | null | undefined, fallback = "/placeholder.svg"): string {
+  const resolvedFallback = compactMusicCoverUrl(fallback.trim()) || "/placeholder.svg";
+  return compactMusicCoverUrl(cover?.trim() ?? "") || resolvedFallback;
+}
+
 /** 获取 QQ VIP 单曲或歌单，所有入口统一走本站 QQ 音乐适配器。 */
 export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
   if (spec.type !== "song" && spec.type !== "playlist") throw new Error("QQ 音乐登录播放暂支持单曲或歌单");

@@ -98,6 +98,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
             musicFloatEnabled={siteSettings.music_float_enabled !== "0"}
             musicFloatInfoEnabled={siteSettings.music_float_info_enabled !== "0"}
             musicPosition={siteSettings.music_position}
+            fallbackCover={siteSettings.site_logo?.trim()}
           />
         </ErrorBoundary>
       </>
@@ -289,6 +290,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
           musicFloatEnabled={siteSettings.music_float_enabled !== "0"}
           musicFloatInfoEnabled={siteSettings.music_float_info_enabled !== "0"}
           musicPosition={siteSettings.music_position}
+          fallbackCover={siteSettings.site_logo?.trim()}
         />
       </ErrorBoundary>
     </div>

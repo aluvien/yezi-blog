@@ -11,6 +11,7 @@ import {
 import {
   fetchMusicTracks,
   parseMusicSpec,
+  resolveMusicCover,
   type MusicTrack,
 } from "@/lib/music";
 import { getMusicLyrics } from "@/lib/music-lyrics";
@@ -67,12 +68,15 @@ export function GlobalMusicPlayer({
   musicFloatEnabled = true,
   musicFloatInfoEnabled = true,
   musicPosition = "left",
+  fallbackCover = "/placeholder.svg",
 }: {
   defaultMusic?: string;
   defaultMusicShuffle?: boolean;
   musicFloatEnabled?: boolean;
   musicFloatInfoEnabled?: boolean;
   musicPosition?: string;
+  /** 站点 Logo；歌曲没有封面时作为播放器和列表的默认唱片封面。 */
+  fallbackCover?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [hasTracks, setHasTracks] = useState(false);
@@ -98,6 +102,7 @@ export function GlobalMusicPlayer({
   const ownerMapRef = useRef(new Map<number, string | null>());
   const trackIndexRef = useRef(new Map<string, number>());
   const hasDefaultPlaylist = Boolean(parseMusicSpec(defaultMusic));
+  const defaultCover = resolveMusicCover("", fallbackCover);
   // 旧版本可能保存过 right；新设置不再提供右下角入口，旧值统一回退到左下角。
   const playerPosition = musicPosition === "bottom" ? "bottom" : "left";
   const shouldShowPlayer = hasTracks || hasDefaultPlaylist;
@@ -148,6 +153,11 @@ export function GlobalMusicPlayer({
 
     function trackKey(track: { key?: string; url: string; name: string; artist?: string }): string {
       return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist ?? ""}`;
+    }
+
+    function withDefaultCover(track: MusicTrack): MusicTrack {
+      const cover = resolveMusicCover(track.cover, defaultCover);
+      return cover === track.cover ? track : { ...track, cover };
     }
 
     /**
@@ -330,7 +340,8 @@ export function GlobalMusicPlayer({
       const player = playerRef.current;
       if (!player || tracks.length === 0) return;
       const uniqueTracks: MusicTrack[] = [];
-      for (const track of tracks) {
+      for (const incomingTrack of tracks) {
+        const track = withDefaultCover(incomingTrack);
         const key = trackKey(track);
         const existingIndex = trackIndex.get(key);
         if (existingIndex !== undefined) {
@@ -357,7 +368,8 @@ export function GlobalMusicPlayer({
       currentCardIdRef.current = cardId;
       let targetIndex: number | null = null;
       const uniqueTracks: MusicTrack[] = [];
-      for (const track of tracks) {
+      for (const incomingTrack of tracks) {
+        const track = withDefaultCover(incomingTrack);
         const key = trackKey(track);
         const existingIndex = trackIndex.get(key);
         if (existingIndex !== undefined) {
@@ -671,16 +683,7 @@ export function GlobalMusicPlayer({
           aria-expanded={panelOpen}
           onClick={() => setOpen((value) => !value)}
         >
-          {currentTrack?.cover ? (
-            <SiteImage src={currentTrack.cover} alt="" width={46} height={46} className="global-player-float-cover object-cover" />
-          ) : (
-            <span className="global-player-float-fallback" aria-hidden="true">
-              <svg className="global-player-float-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M9 18.5a2.5 2.5 0 1 1-2.5-2.5A2.5 2.5 0 0 1 9 18.5z" />
-                <path d="M12.5 3.5v13.1a3.9 3.9 0 1 1-1.5-3.1V7.2l8-1.8v6.1a3.9 3.9 0 1 1-1.5-3.1V5.5l-5 1.1z" />
-              </svg>
-            </span>
-          )}
+          <SiteImage src={currentTrack?.cover || defaultCover} alt="" width={46} height={46} className="global-player-float-cover object-cover" />
           {showFloatInfo && (
             <span className="global-player-float-info" aria-hidden="true">
               <span className="global-player-float-title">{currentTrack?.name}</span>
