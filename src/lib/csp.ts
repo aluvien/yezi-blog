@@ -18,6 +18,9 @@ export function productionContentSecurityPolicy(nonce: string): string {
     "media-src 'self' https:",
     "font-src 'self' data:",
     "connect-src 'self'",
-    "frame-src https://player.bilibili.com https://www.youtube-nocookie.com",
+    // Bilibili 的外链播放器在 AppleWebKit 移动端会从 player.bilibili.com
+    // 跳转到 www.bilibili.com/blackboard/webplayer/mbplayer.html；两个来源都
+    // 必须允许，否则桌面端正常而手机端会被 CSP 拦截。
+    "frame-src https://player.bilibili.com https://www.bilibili.com https://www.youtube-nocookie.com",
   ].join("; ");
 }
