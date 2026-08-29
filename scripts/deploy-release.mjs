@@ -166,10 +166,52 @@ function restoreCommitMarker(previous) {
 }
 
 async function verifyPm2Ownership() {
-  const result = await run("pm2", ["jlist"], sourceRoot, 15_000);
-  const processes = JSON.parse(result.stdout);
-  const processEntry = processes.find((item) => item?.name === processName);
+  const processEntry = await readPm2Process(processName);
   if (!processEntry) throw new Error(`PM2 中不存在进程 ${processName}`);
+}
+
+/**
+ * Some PM2 versions print upgrade notices before/after `jlist` JSON. Treat
+ * those notices as transport noise instead of deciding that PM2 is absent.
+ */
+function parsePm2ProcessList(output) {
+  const start = output.indexOf("[");
+  const end = output.lastIndexOf("]");
+  if (start < 0 || end < start) throw new Error("PM2 jlist 没有返回进程 JSON");
+  try {
+    const processes = JSON.parse(output.slice(start, end + 1));
+    if (!Array.isArray(processes)) throw new Error("not an array");
+    return processes;
+  } catch {
+    throw new Error("PM2 jlist 返回格式无效，已取消部署以避免误杀 PM2 进程");
+  }
+}
+
+async function readPm2Process(name) {
+  const result = await run("pm2", ["jlist"], sourceRoot, 15_000);
+  return parsePm2ProcessList(result.stdout).find((item) => item?.name === name) || null;
+}
+
+async function verifyPm2Release(target) {
+  const processEntry = await readPm2Process(processName);
+  if (!processEntry) throw new Error(`PM2 启动后未找到进程 ${processName}`);
+  const expectedRoot = fs.realpathSync(target);
+  const expectedScript = path.join(expectedRoot, "scripts", "start-standalone.mjs");
+  const actualRoot = typeof processEntry.pm2_env?.pm_cwd === "string" ? path.resolve(processEntry.pm2_env.pm_cwd) : "";
+  const actualScript = typeof processEntry.pm2_env?.pm_exec_path === "string" ? path.resolve(processEntry.pm2_env.pm_exec_path) : "";
+  if (actualRoot !== expectedRoot || actualScript !== expectedScript) {
+    throw new Error(`PM2 没有切换到目标 release（cwd: ${actualRoot || "未知"}；script: ${actualScript || "未知"}）`);
+  }
+}
+
+async function removePm2Process() {
+  try {
+    await run("pm2", ["delete", processName], sourceRoot, 30_000);
+  } catch (error) {
+    // A failed first start can leave no PM2 record. Let rollback recreate the
+    // previous release, but never ignore an error while the process remains.
+    if (await readPm2Process(processName)) throw error;
+  }
 }
 
 async function portIsListening(port) {
@@ -213,13 +255,20 @@ async function startDirectServer(target, env) {
 }
 
 async function restartRelease(target, env) {
+  const releaseRoot = fs.realpathSync(target);
   if (restartMode === "pm2") {
-    await run("pm2", ["stop", processName], sourceRoot, 30_000).catch(() => undefined);
-    await run("pm2", ["startOrReload", path.join(target, "ecosystem.config.js"), "--only", processName, "--update-env"], target, 30_000, env);
+    // `startOrReload` retains the old pm_exec_path for an existing app on
+    // some PM2 releases. Recreate this one managed process so it always runs
+    // the exact immutable release we just built. A failure stays in PM2 mode;
+    // never fall back to direct port killing.
+    await removePm2Process();
+    await run("pm2", ["start", path.join(releaseRoot, "ecosystem.config.js"), "--only", processName, "--update-env"], releaseRoot, 30_000, env);
+    await verifyPm2Release(releaseRoot);
+    await run("pm2", ["save"], releaseRoot, 30_000, env);
     return;
   }
   await stopDirectServer();
-  await startDirectServer(target, env);
+  await startDirectServer(releaseRoot, env);
 }
 
 async function cleanupReleases(activeTargets) {

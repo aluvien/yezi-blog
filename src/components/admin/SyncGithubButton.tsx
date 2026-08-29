@@ -60,14 +60,22 @@ export default function SyncGithubButton({ trailingAction }: Props) {
           return;
         }
         setStatus({ kind: "pending", text: result.message });
+        let statusReadFailures = 0;
         for (let attempt = 0; attempt < 180; attempt += 1) {
           await new Promise((resolve) => window.setTimeout(resolve, 2000));
           let deploy: Awaited<ReturnType<typeof getGithubDeployStatusAction>>;
           try {
             deploy = await getGithubDeployStatusAction();
           } catch {
+            statusReadFailures += 1;
+            if (statusReadFailures >= 5) {
+              setStatus({ kind: "error", text: "连续无法读取部署状态，服务可能未正常启动；请刷新页面查看失败详情。" });
+            } else {
+              setStatus({ kind: "pending", text: "服务正在重启，暂时无法读取部署状态…" });
+            }
             continue;
           }
+          statusReadFailures = 0;
           if (deploy.status === "success") {
             setStatus({ kind: "success", text: "同步、构建和 PM2 重启均已成功。" });
             await checkVersion();

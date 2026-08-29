@@ -42,7 +42,11 @@ function runCommand(command: string, args: string[], cwd: string, timeout: numbe
       if (error) {
         const rawDetail = String(stderr || stdout || error.message).trim();
         const detail = rawDetail.length > 1_400 ? `${rawDetail.slice(0, 700)}\n…\n${rawDetail.slice(-700)}` : rawDetail;
-        reject(new Error(detail));
+        const wrapped = new Error(detail);
+        if (typeof (error as NodeJS.ErrnoException).code === "string") {
+          (wrapped as NodeJS.ErrnoException).code = (error as NodeJS.ErrnoException).code;
+        }
+        reject(wrapped);
         return;
       }
       resolve({ stdout: String(stdout), stderr: String(stderr) });
@@ -51,6 +55,11 @@ function runCommand(command: string, args: string[], cwd: string, timeout: numbe
 }
 
 type Pm2Process = { name?: string; pm2_env?: { pm_cwd?: string } };
+
+type DeploymentSupervisor =
+  | { mode: "pm2"; processName: string }
+  | { mode: "direct" }
+  | { mode: "unavailable"; error: string };
 
 function deploymentEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
@@ -115,18 +124,61 @@ function invalidateGithubVersionCache(): void {
   githubVersionCache = null;
 }
 
-async function findPm2Name(projectDir: string): Promise<string | null> {
+/** PM2 may prefix `jlist` with an update notice; extract the JSON payload safely. */
+function parsePm2ProcessList(output: string): Pm2Process[] {
+  const start = output.indexOf("[");
+  const end = output.lastIndexOf("]");
+  if (start < 0 || end < start) throw new Error("PM2 jlist 没有返回进程 JSON");
+  try {
+    const processes = JSON.parse(output.slice(start, end + 1));
+    if (!Array.isArray(processes)) throw new Error("not an array");
+    return processes as Pm2Process[];
+  } catch {
+    throw new Error("PM2 jlist 返回格式无效");
+  }
+}
+
+function isPm2CommandMissing(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+}
+
+function managedProjectDirectories(projectDir: string): Set<string> {
+  const directories = new Set([path.resolve(projectDir)]);
+  const currentLink = path.resolve(process.env.DEPLOY_CURRENT_LINK?.trim() || path.join(path.dirname(projectDir), "yezi-blog-current"));
+  try {
+    directories.add(fs.realpathSync(currentLink));
+  } catch {
+    // The initial deployment may not have created the release symlink yet.
+  }
+  return directories;
+}
+
+/**
+ * Resolve the process supervisor conservatively. A PM2 query that is broken or
+ * ambiguous must never make us kill the HTTP port as though it were unmanaged.
+ */
+async function resolveDeploymentSupervisor(projectDir: string): Promise<DeploymentSupervisor> {
   const configuredName = process.env.DEPLOY_PM2_NAME?.trim();
+  const explicitlyDirect = process.env.DEPLOY_RESTART_MODE === "direct";
+  if (explicitlyDirect && !configuredName) return { mode: "direct" };
   try {
     const result = await runCommand("pm2", ["jlist"], projectDir, 15_000, deploymentEnv());
-    const processes = JSON.parse(result.stdout) as Pm2Process[];
-    if (configuredName) return processes.some((item) => item.name === configuredName) ? configuredName : null;
-    const expectedDir = path.resolve(projectDir);
-    const match = processes.find((item) => item.name && item.pm2_env?.pm_cwd && path.resolve(item.pm2_env.pm_cwd) === expectedDir);
-    return match?.name ?? null;
-  } catch {
-    // 某些既有部署由 systemd/nohup 直接运行 Next，未安装 PM2 不是同步失败。
-    return null;
+    const processes = parsePm2ProcessList(result.stdout);
+    if (configuredName) {
+      if (processes.some((item) => item.name === configuredName)) return { mode: "pm2", processName: configuredName };
+      return { mode: "unavailable", error: `PM2 中未找到配置的进程 ${configuredName}，已取消部署以避免误停 3030 端口` };
+    }
+    const expectedDirectories = managedProjectDirectories(projectDir);
+    const match = processes.find((item) => item.name && item.pm2_env?.pm_cwd && expectedDirectories.has(path.resolve(item.pm2_env.pm_cwd)));
+    if (match?.name) return { mode: "pm2", processName: match.name };
+    if (explicitlyDirect) return { mode: "direct" };
+    return { mode: "unavailable", error: "未识别到当前项目的 PM2 进程；如确为非 PM2 直启部署，请显式设置 DEPLOY_RESTART_MODE=direct" };
+  } catch (error) {
+    // A machine without PM2 is the only implicit direct-deployment case. Any
+    // other failure could mean the PM2 daemon is still supervising 3030.
+    if (!configuredName && isPm2CommandMissing(error)) return { mode: "direct" };
+    const detail = error instanceof Error ? error.message : "未知错误";
+    return { mode: "unavailable", error: `无法确认 PM2 进程状态（${detail}）；已取消部署以避免误停 3030 端口` };
   }
 }
 
@@ -137,7 +189,8 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
   try {
     const projectDir = deploymentProjectDir();
     if (!fs.existsSync(path.join(projectDir, "package.json"))) return { ok: false, error: `部署目录无效：${projectDir}` };
-    const processName = await findPm2Name(projectDir);
+    const supervisor = await resolveDeploymentSupervisor(projectDir);
+    if (supervisor.mode === "unavailable") return { ok: false, error: supervisor.error };
     const envFile = path.resolve(process.env.BLOG_ENV_FILE?.trim() || path.join(projectDir, ".env.local"));
     if (!fs.existsSync(envFile)) return { ok: false, error: `缺少稳定外部环境文件：${envFile}` };
     if ((fs.statSync(envFile).mode & 0o077) !== 0) return { ok: false, error: "外部环境文件权限必须为 0600" };
@@ -156,7 +209,9 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
       env: {
         ...deploymentEnv(),
         DEPLOY_PROJECT_DIR: projectDir,
-        ...(processName ? { DEPLOY_PM2_NAME: processName, DEPLOY_RESTART_MODE: "pm2" } : { DEPLOY_RESTART_MODE: "direct" }),
+        ...(supervisor.mode === "pm2"
+          ? { DEPLOY_PM2_NAME: supervisor.processName, DEPLOY_RESTART_MODE: "pm2" }
+          : { DEPLOY_RESTART_MODE: "direct" }),
         DEPLOY_STATUS_FILE: statusFile,
         BLOG_ENV_FILE: envFile,
       },
@@ -164,7 +219,7 @@ export async function syncLatestGithubAction(): Promise<SyncGithubActionResult> 
     child.unref();
     return {
       ok: true,
-      message: processName
+      message: supervisor.mode === "pm2"
         ? "已启动独立 release 部署任务；构建、切换、健康检查与失败回滚将在服务器端完成。"
         : "已启动独立 release 部署任务；将替换 3030 端口上的旧 Next 进程并完成健康检查。",
     };
