@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateSiteSettingsAction } from "@/lib/actions/settings";
-import { DARK_MODE_OPTIONS, LAYOUT_THEMES, THEME_PALETTES } from "@/lib/theme";
+import { CLASSIC_THEME_PALETTES, DARK_MODE_OPTIONS, LAYOUT_THEMES, THEME_PALETTES } from "@/lib/theme";
 import ImageUpload from "./ImageUpload";
 import QQMusicPanel from "./QQMusicPanel";
 import TelegramNotifyPanel from "./TelegramNotifyPanel";
@@ -70,6 +70,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const paletteOptions = values.layout_theme === "classic" ? CLASSIC_THEME_PALETTES : THEME_PALETTES;
 
   function update(key: keyof typeof values, value: string) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -295,9 +296,11 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
           </div>
         </div>
         <div>
-          <p className="text-sm text-neutral-600">配色方案（保存后前台立即生效）</p>
+          <p className="text-sm text-neutral-600">
+            {values.layout_theme === "classic" ? "经典版配色" : "编辑版配色"}（保存后前台立即生效）
+          </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {THEME_PALETTES.map((palette) => {
+            {paletteOptions.map((palette) => {
               const selected = values.theme === palette.id;
               return (
                 <button

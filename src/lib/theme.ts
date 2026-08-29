@@ -62,6 +62,58 @@ export const THEME_PALETTES: ThemePalette[] = [
   },
 ];
 
+/**
+ * 经典版沿用相同的存储 id，但拥有更克制的书页配色。
+ * 这样切换版式不会丢失用户的颜色偏好，也无需迁移数据库字段。
+ */
+export const CLASSIC_THEME_PALETTES: ThemePalette[] = [
+  {
+    id: "default",
+    name: "朱砂书页",
+    description: "暖白纸张 + 朱砂点缀，经典版默认配色",
+    lightAccent: "#b91c1c",
+    darkAccent: "#f87171",
+    lightBackground: "#fffefc",
+    darkBackground: "#1a1a1a",
+  },
+  {
+    id: "ocean",
+    name: "松石青笺",
+    description: "淡青纸色 + 松石墨色，清雅通透",
+    lightAccent: "#0f766e",
+    darkAccent: "#5eead4",
+    lightBackground: "#fbfefc",
+    darkBackground: "#101817",
+  },
+  {
+    id: "indigo",
+    name: "黛蓝旧札",
+    description: "冷白纸色 + 黛蓝墨色，沉静克制",
+    lightAccent: "#4f46e5",
+    darkAccent: "#a5b4fc",
+    lightBackground: "#fcfcff",
+    darkBackground: "#151522",
+  },
+  {
+    id: "forest",
+    name: "松柏墨绿",
+    description: "米白纸色 + 松柏绿，温润自然",
+    lightAccent: "#15803d",
+    darkAccent: "#86efac",
+    lightBackground: "#fdfef9",
+    darkBackground: "#141811",
+  },
+  {
+    id: "amber",
+    name: "琥珀宣纸",
+    description: "浅宣纸色 + 琥珀棕，温暖复古",
+    lightAccent: "#b45309",
+    darkAccent: "#fbbf24",
+    lightBackground: "#fffdf8",
+    darkBackground: "#1a1611",
+  },
+];
+
 export const THEME_PALETTE_IDS = THEME_PALETTES.map((palette) => palette.id);
 
 /**
