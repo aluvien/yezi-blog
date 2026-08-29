@@ -275,10 +275,10 @@ export async function getGithubDeployStatusAction(): Promise<GithubDeployStatus>
  * 检查服务器当前已部署 release 是否与 GitHub origin/main 一致。
  * 只执行只读 Git 命令，不会拉取代码、构建项目或修改数据库。
  */
-export async function getGithubVersionStatusAction(): Promise<GithubVersionStatus> {
+export async function getGithubVersionStatusAction(options?: { bypassCache?: boolean }): Promise<GithubVersionStatus> {
   await requireAdmin();
 
-  if (githubVersionCache && githubVersionCache.expiresAt > Date.now()) {
+  if (!options?.bypassCache && githubVersionCache && githubVersionCache.expiresAt > Date.now()) {
     return githubVersionCache.result;
   }
 

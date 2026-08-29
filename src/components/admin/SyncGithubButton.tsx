@@ -3,9 +3,8 @@
 import type { ReactNode } from "react";
 import { useEffect, useState, useTransition } from "react";
 import {
-  getGithubDeployStatusAction,
-  getGithubVersionStatusAction,
   syncLatestGithubAction,
+  type GithubDeployStatus,
   type GithubVersionStatus,
 } from "@/lib/actions/sync";
 
@@ -13,26 +12,63 @@ type Props = {
   trailingAction?: ReactNode;
 };
 
+type AdminApiResponse<T> = {
+  data?: T;
+  error?: { message?: string };
+};
+
+async function fetchAdminStatus<T>(path: string): Promise<T> {
+  const separator = path.includes("?") ? "&" : "?";
+  const response = await fetch(`${path}${separator}_=${Date.now()}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => null) as AdminApiResponse<T> | null;
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error?.message || `请求失败（HTTP ${response.status}）`);
+  }
+  return payload.data;
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function readVersionStatus(): Promise<GithubVersionStatus> {
+  try {
+    return await fetchAdminStatus<GithubVersionStatus>("/api/admin/v1/deploy/version");
+  } catch {
+    return { status: "unavailable", error: "暂时无法检查 GitHub 最新版本，请稍后重试" };
+  }
+}
+
 export default function SyncGithubButton({ trailingAction }: Props) {
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<{ kind: "pending" | "success" | "error"; text: string } | null>(null);
   const [version, setVersion] = useState<GithubVersionStatus | null>(null);
   const [checkingVersion, setCheckingVersion] = useState(true);
 
-  async function checkVersion() {
+  async function confirmLatestVersion() {
+    // PM2 切换成功时，当前页面仍可能运行旧 release 的客户端代码。使用
+    // 稳定 JSON API（而不是旧 Server Action 标识）轮询新进程，直到活动
+    // release 与 GitHub 一致，避免用户再手动刷新页面。
     setCheckingVersion(true);
-    try {
-      setVersion(await getGithubVersionStatusAction());
-    } catch {
-      setVersion({ status: "unavailable", error: "暂时无法检查 GitHub 最新版本，请稍后重试" });
-    } finally {
-      setCheckingVersion(false);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const result = await readVersionStatus();
+      setVersion(result);
+      if (result.status === "up-to-date") {
+        setCheckingVersion(false);
+        return;
+      }
+      await wait(1_500);
     }
+    setCheckingVersion(false);
   }
 
   useEffect(() => {
     let active = true;
-    void getGithubVersionStatusAction()
+    void readVersionStatus()
       .then((result) => {
         if (active) setVersion(result);
       })
@@ -62,10 +98,10 @@ export default function SyncGithubButton({ trailingAction }: Props) {
         setStatus({ kind: "pending", text: result.message });
         let statusReadFailures = 0;
         for (let attempt = 0; attempt < 180; attempt += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, 2000));
-          let deploy: Awaited<ReturnType<typeof getGithubDeployStatusAction>>;
+          await wait(2_000);
+          let deploy: GithubDeployStatus;
           try {
-            deploy = await getGithubDeployStatusAction();
+            deploy = await fetchAdminStatus<GithubDeployStatus>("/api/admin/v1/deploy/status");
           } catch {
             statusReadFailures += 1;
             if (statusReadFailures >= 5) {
@@ -78,7 +114,7 @@ export default function SyncGithubButton({ trailingAction }: Props) {
           statusReadFailures = 0;
           if (deploy.status === "success") {
             setStatus({ kind: "success", text: "同步、构建和 PM2 重启均已成功。" });
-            await checkVersion();
+            await confirmLatestVersion();
             return;
           }
           if (deploy.status === "failed") {
@@ -94,7 +130,7 @@ export default function SyncGithubButton({ trailingAction }: Props) {
           setStatus({ kind: "pending", text: stage });
         }
         setStatus({ kind: "pending", text: "部署仍在服务器后台运行，可稍后刷新此页查看最终状态。" });
-        await checkVersion();
+        await confirmLatestVersion();
       } catch (error) {
         setStatus({
           kind: "error",
