@@ -140,6 +140,13 @@ export const BASE_SCHEMA_SQL = `
     value TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS qq_music_metadata (
+    mid TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    artist TEXT NOT NULL DEFAULT '',
+    cover TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,

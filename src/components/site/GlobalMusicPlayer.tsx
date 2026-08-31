@@ -94,6 +94,7 @@ export function GlobalMusicPlayer({
   const suppressPanelClickUntilRef = useRef(0);
   const collapseHintTimerRef = useRef<number | null>(null);
   const activeVideoFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const startDefaultPlayerRef = useRef<() => void>(() => {});
   // 默认歌单未就绪前的页面点选先入队，默认列表加载完成后再追加，保证其始终位于队列前部。
   const readyRef = useRef(false);
   const pendingRef = useRef<Array<{ tracks: MusicTrack[]; cardId?: string | null; trackKey?: string | null }>>([]);
@@ -145,6 +146,12 @@ export function GlobalMusicPlayer({
     const lyricSourceByIndex = new Map<number, string>();
     const lyricLinesByIndex = new Map<number, LyricLine[]>();
     const lyricReadyByIndex = new Map<number, boolean>();
+    const parsedDefaultSpec = parseMusicSpec(defaultMusic);
+    const defaultSpec = parsedDefaultSpec
+      ? { ...parsedDefaultSpec, shuffle: parsedDefaultSpec.shuffle || defaultMusicShuffle }
+      : null;
+    let defaultMusicLoaded = false;
+    let defaultMusicLoading: Promise<void> | null = null;
 
     function updateCurrentTrack(track: MusicTrack | null): void {
       currentTrackRef.current = track;
@@ -362,6 +369,25 @@ export function GlobalMusicPlayer({
       }
     }
 
+    async function loadDefaultMusic(): Promise<void> {
+      if (!defaultSpec || defaultMusicLoaded) return;
+      if (defaultMusicLoading) return defaultMusicLoading;
+      defaultMusicLoading = (async () => {
+        try {
+          const tracks = await fetchMusicTracks(defaultSpec);
+          if (disposed) return;
+          addUniqueTracks(tracks, null);
+          defaultMusicLoaded = true;
+          setDefaultMusicError("");
+        } catch (error) {
+          if (!disposed) setDefaultMusicError(error instanceof Error ? error.message : "默认歌单加载失败");
+        } finally {
+          defaultMusicLoading = null;
+        }
+      })();
+      return defaultMusicLoading;
+    }
+
     function appendAndPlay(tracks: MusicTrack[], cardId: string | null, preferredTrackKey: string | null = null) {
       const player = playerRef.current;
       if (!player || tracks.length === 0) return;
@@ -429,10 +455,6 @@ export function GlobalMusicPlayer({
         const mod = await import("aplayer");
         if (disposed || !hostRef.current) return;
         const APlayer = mod.default;
-        const parsedDefaultSpec = parseMusicSpec(defaultMusic);
-        const defaultSpec = parsedDefaultSpec
-          ? { ...parsedDefaultSpec, shuffle: parsedDefaultSpec.shuffle || defaultMusicShuffle }
-          : null;
         const defaultRandom = Boolean(defaultSpec && defaultSpec.type !== "song" && defaultSpec.shuffle);
         const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#c25f3d";
         const player = new APlayer({
@@ -492,17 +514,6 @@ export function GlobalMusicPlayer({
           });
         });
 
-        // 默认歌单：后台设置 default_music，加载失败静默（不影响页面点选音乐）。
-        if (defaultSpec) {
-          try {
-            const tracks = await fetchMusicTracks(defaultSpec);
-            if (disposed) return;
-            addUniqueTracks(tracks, null);
-            setDefaultMusicError("");
-          } catch (error) {
-            if (!disposed) setDefaultMusicError(error instanceof Error ? error.message : "默认歌单加载失败");
-          }
-        }
       } catch {
         // APlayer 初始化异常时降级为"仅静默"：播放器不可用但页面不受影响。
         if (disposed) return;
@@ -517,6 +528,10 @@ export function GlobalMusicPlayer({
       if (bootPromise) return;
       bootPromise = boot();
     };
+    startDefaultPlayerRef.current = () => {
+      ensureBoot();
+      void bootPromise?.then(loadDefaultMusic);
+    };
 
     unlisten = setGlobalPlayListener(({ tracks, cardId, trackKey: preferredTrackKey }) => {
       ensureBoot();
@@ -526,9 +541,6 @@ export function GlobalMusicPlayer({
       }
       toggleOrAppendAndPlay(tracks, cardId ?? null, preferredTrackKey ?? null);
     });
-    // 没有默认歌单时延迟加载 APlayer，访客没有点击音乐就不需要下载播放器。
-    if (parseMusicSpec(defaultMusic)) ensureBoot();
-
     return () => {
       disposed = true;
       unlisten?.();
@@ -547,6 +559,7 @@ export function GlobalMusicPlayer({
       lyricLinesByIndex.clear();
       lyricReadyByIndex.clear();
       currentTrackRef.current = null;
+      startDefaultPlayerRef.current = () => {};
       setCurrentLyric(null);
       emitGlobalPlaybackState({
         playing: false,
@@ -681,7 +694,10 @@ export function GlobalMusicPlayer({
           aria-label={open ? "收起播放器" : currentTrack ? `${playing ? "正在播放" : "播放"}：${currentTrack.name}` : "展开播放器"}
           title={open ? "收起播放器" : currentTrack?.name || "展开播放器"}
           aria-expanded={panelOpen}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            if (hasDefaultPlaylist && !hasTracks) startDefaultPlayerRef.current();
+            setOpen((value) => !value);
+          }}
         >
           <SiteImage src={currentTrack?.cover || defaultCover} alt="" width={46} height={46} className="global-player-float-cover object-cover" />
           {showFloatInfo && (
@@ -712,6 +728,11 @@ export function GlobalMusicPlayer({
         )}
         <div className="global-player-host">
           <div ref={hostRef} className={`aplayer-host ${defaultMusicError && !hasTracks ? "hidden" : ""}`} />
+          {hasDefaultPlaylist && !hasTracks && !defaultMusicError && (
+            <button type="button" className="px-4 py-4 text-sm text-muted hover:text-foreground" onClick={() => startDefaultPlayerRef.current()}>
+              加载默认歌单
+            </button>
+          )}
           {defaultMusicError && !hasTracks && (
             <div className="px-4 py-4 text-sm text-muted" role="alert">
               <p className="font-medium text-foreground">默认歌单暂时无法播放</p>

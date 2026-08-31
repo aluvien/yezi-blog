@@ -24,6 +24,7 @@ test("empty database creates the latest schema and a working FTS index", () => {
     assert.equal(runMigrations(temporary.db), LATEST_DB_SCHEMA_VERSION);
     assert.equal(temporary.db.pragma("user_version", { simple: true }), LATEST_DB_SCHEMA_VERSION);
     assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'posts'").get());
+    assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'qq_music_metadata'").get());
     assert.ok(temporary.db.prepare("SELECT 1 FROM pragma_table_info('posts') WHERE name = 'status'").get());
     assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_posts_status_time'").get());
 

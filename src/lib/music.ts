@@ -229,6 +229,31 @@ export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
   }];
 }
 
+/**
+ * 首屏展示只读取本站持久化的歌曲元数据；该接口不返回播放 URL，
+ * 因而不会在访客尚未点击时触发 QQ 音乐的播放地址解析。
+ */
+export async function fetchMusicMetadata(spec: MusicSpec): Promise<MusicTrack[]> {
+  if (spec.type !== "song") return [];
+  const res = await fetch(`/api/music/qq?id=${encodeURIComponent(spec.id)}&type=metadata`, {
+    signal: AbortSignal.timeout(20_000),
+    cache: "default",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null) as { error?: unknown } | null;
+    throw new Error(typeof payload?.error === "string" ? payload.error : `QQ 音乐信息 ${res.status}`);
+  }
+  const payload = await res.json() as Partial<MusicTrack>;
+  return [{
+    name: normalizeMusicDisplayText(firstScalar(payload.name) || spec.title, "QQ 音乐"),
+    artist: normalizeMusicDisplayText(firstScalar(payload.artist) || spec.artist),
+    url: "",
+    cover: compactMusicCoverUrl(firstScalar(payload.cover) || spec.cover || ""),
+    lrc: "",
+    key: `qqvip:${spec.id}`,
+  }];
+}
+
 function shuffleTracks<T>(tracks: T[]): T[] {
   const shuffled = [...tracks];
   for (let index = shuffled.length - 1; index > 0; index -= 1) {

@@ -15,6 +15,7 @@ import {
   pollNativeQQMusicQr,
 } from "@/lib/qq-music-native-login";
 import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
+import { upsertQQMusicMetadata } from "@/lib/db";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
 import {
   QQ_LOGIN_SOURCE,
@@ -95,7 +96,9 @@ export async function GET(request: Request) {
         return noCache({ playlists: await searchQQPlaylists(key, 30) });
       }
       const raw = await qqMusicRequest("/getSearchByKey", { query: { key, limit: "30" } });
-      return noCache({ tracks: normalizeQQSearchTracks(raw) });
+      const tracks = normalizeQQSearchTracks(raw);
+      upsertQQMusicMetadata(tracks);
+      return noCache({ tracks });
     }
     if (op === "playlists") {
       const session = getQQMusicSession();

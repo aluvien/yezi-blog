@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { compactMusicCoverUrl, fetchMusicTracks, parseMusicSpec, type MusicSpec, type MusicTrack } from "@/lib/music";
+import { compactMusicCoverUrl, fetchMusicMetadata, fetchMusicTracks, parseMusicSpec, type MusicSpec, type MusicTrack } from "@/lib/music";
 import { getGlobalPlaybackState, requestGlobalPlay, setGlobalStateListener } from "@/lib/player-store";
 import { getMusicLyrics } from "@/lib/music-lyrics";
 import { lyricAt, type LyricLine } from "@/lib/lyrics";
@@ -61,6 +61,7 @@ export function MusicInitializer() {
       suppressClick: boolean;
       playAfterResolve: boolean;
       spec: MusicSpec;
+      metadataPromise: Promise<MusicTrack[]> | null;
       resolvePromise: Promise<MusicTrack[]> | null;
     };
     const cardMusicState = new WeakMap<HTMLElement, CardMusicState>();
@@ -295,6 +296,40 @@ export function MusicInitializer() {
           data.resolvePromise = null;
         });
       return data.resolvePromise;
+    }
+
+    /** 可视范围内只读取本站已缓存的名称、歌手和封面，绝不提前请求播放地址。 */
+    function resolveMetadata(card: HTMLElement, data: CardMusicState): Promise<MusicTrack[]> {
+      if (data.tracks[0]?.name) return Promise.resolve(data.tracks);
+      if (data.metadataPromise) return data.metadataPromise;
+      card.classList.remove("is-error", "is-slow");
+      card.classList.add("is-pending");
+      card.setAttribute("aria-busy", "true");
+      data.metadataPromise = fetchMusicMetadata(data.spec)
+        .then((tracks) => {
+          // 用户在元数据请求完成前点击播放时，完整曲目信息优先，不能被空 URL 覆盖。
+          if (data.tracks[0]?.url) return data.tracks;
+          if (tracks.length > 0) {
+            data.tracks = tracks;
+            renderCardTrack(card, data, data.activeIndex);
+            syncCard(card, getGlobalPlaybackState());
+          }
+          card.classList.remove("is-pending");
+          card.setAttribute("aria-busy", "false");
+          return data.tracks;
+        })
+        .catch(() => {
+          // 缓存尚未建立或网络短暂异常时仍允许点击播放；届时才请求 QQ 播放地址。
+          card.classList.remove("is-pending");
+          card.setAttribute("aria-busy", "false");
+          const title = card.querySelector<HTMLElement>(".music-trigger-name");
+          if (title && !data.tracks[0]?.name) title.textContent = "点击加载音乐";
+          return data.tracks;
+        })
+        .finally(() => {
+          data.metadataPromise = null;
+        });
+      return data.metadataPromise;
     }
 
     function setSlideTransition(elements: { current: HTMLElement; preview: HTMLElement }, animated: boolean): void {
@@ -570,7 +605,7 @@ export function MusicInitializer() {
         tracks = [{ name: spec.title, artist: spec.artist || "", cover: spec.cover || "", url: "", lrc: "", key: `qqvip:${spec.id}` }];
       }
 
-      const data: CardMusicState = { tracks, lyrics: new Map(), loading: new Set(), activeIndex: 0, gesture: null, swipeFrame: null, suppressClick: false, playAfterResolve: false, spec, resolvePromise: null };
+      const data: CardMusicState = { tracks, lyrics: new Map(), loading: new Set(), activeIndex: 0, gesture: null, swipeFrame: null, suppressClick: false, playAfterResolve: false, spec, metadataPromise: null, resolvePromise: null };
       if (!el.isConnected) return;
       cardMusicState.set(card, data);
       if (tracks.length > 0) {
@@ -629,8 +664,8 @@ export function MusicInitializer() {
             const card = entry.target as HTMLElement;
             metadataObserver?.unobserve(card);
             const data = cardMusicState.get(card);
-            if (!data || data.resolvePromise || data.tracks[0]?.url) return;
-            void resolveTracks(card, data).catch(() => undefined);
+            if (!data || data.metadataPromise || data.tracks[0]?.name || data.spec.type !== "song") return;
+            void resolveMetadata(card, data);
           });
         }, { rootMargin: "320px 0px", threshold: 0.01 });
 

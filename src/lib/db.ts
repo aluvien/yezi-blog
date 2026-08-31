@@ -15,6 +15,7 @@ export * from "./db/session-auth";
 export * from "./db/maintenance";
 export * from "./db/search";
 export * from "./db/feed";
+export * from "./db/qq-music";
 export { normalizeTagKey, replacePostTagRelations } from "./db/post-tags";
 export { FTS_SCHEMA_VERSION, ensureFtsIndexes, rebuildFtsIndexes } from "./db/fts";
 export { LATEST_DB_SCHEMA_VERSION } from "./db/migrations";

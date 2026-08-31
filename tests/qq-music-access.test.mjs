@@ -9,7 +9,7 @@ process.env.BLOG_ROOT = root;
 process.env.BLOG_DB_PATH = path.join(root, "data", "blog.db");
 process.env.QQ_MUSIC_SIGNING_KEY = "test-signing-key-that-is-at-least-thirty-two-bytes";
 
-const { createMoment, createPost, db, setSiteSettings, updatePost } = await import("../src/lib/db.ts");
+const { createMoment, createPost, db, getQQMusicMetadata, setSiteSettings, updatePost, upsertQQMusicMetadata } = await import("../src/lib/db.ts");
 const {
   createLyricAuthorization,
   extractMusicSpecs,
@@ -55,4 +55,21 @@ test("music spec extraction accepts shortcodes and fenced values without arbitra
     extractMusicSpecs("文字 qqvip:SongValue01:song\n```music\nqqvip:ListValue01:playlist:shuffle\n```").map(({ id, type }) => ({ id, type })),
     [{ id: "SongValue01", type: "song" }, { id: "ListValue01", type: "playlist" }],
   );
+});
+
+test("QQ music display metadata persists independently from temporary playback URLs", () => {
+  upsertQQMusicMetadata([{
+    mid: "PublicSong01",
+    name: "缓存歌曲",
+    artist: "缓存歌手",
+    cover: "https://example.com/cover.jpg",
+  }]);
+  const metadata = getQQMusicMetadata("PublicSong01");
+  assert.ok(metadata);
+  assert.deepEqual(
+    { mid: metadata.mid, name: metadata.name, artist: metadata.artist, cover: metadata.cover },
+    { mid: "PublicSong01", name: "缓存歌曲", artist: "缓存歌手", cover: "https://example.com/cover.jpg" },
+  );
+  assert.match(metadata.updated_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(getQQMusicMetadata("invalid id"), null);
 });

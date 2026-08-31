@@ -179,6 +179,23 @@ const MIGRATIONS: readonly Migration[] = [
       if (momentsTable) ensureColumn(db, "moments", "tags", "TEXT NOT NULL DEFAULT '[]'");
     },
   },
+  {
+    // QQ 歌曲名、歌手和封面是稳定展示数据；持久化它们可让页面首屏不必反复
+    // 请求 QQ 音乐。播放 URL 与登录态仍不落库，始终在用户主动播放时获取。
+    version: 10,
+    name: "qq-music-metadata-cache",
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS qq_music_metadata (
+          mid TEXT PRIMARY KEY,
+          name TEXT NOT NULL DEFAULT '',
+          artist TEXT NOT NULL DEFAULT '',
+          cover TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

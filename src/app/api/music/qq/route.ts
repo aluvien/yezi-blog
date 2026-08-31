@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
+import { getQQMusicMetadata, upsertQQMusicMetadata } from "@/lib/db";
 import { getClientIp, hashIp } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 import { isPublicQQMusicSpec, lyricUrl, verifyLyricAuthorization } from "@/lib/qq-music-access";
@@ -108,6 +109,26 @@ function trackInfo(raw: unknown, mid: string) {
   };
 }
 
+function cachedTrackMetadata(mid: string): ReturnType<typeof trackInfo> | null {
+  const cached = getQQMusicMetadata(mid);
+  if (!cached) return null;
+  return {
+    name: normalizeMusicDisplayText(cached.name, "QQ 音乐"),
+    artist: normalizeMusicDisplayText(cached.artist),
+    cover: safeHttpsUrl(cached.cover),
+    key: `qqvip:${mid}`,
+  };
+}
+
+function cacheTrackMetadata(mid: string, metadata: ReturnType<typeof trackInfo>): void {
+  upsertQQMusicMetadata([{
+    mid,
+    name: metadata.name,
+    artist: metadata.artist,
+    cover: metadata.cover,
+  }]);
+}
+
 /**
  * qq-music-api 的 batchGetSongInfo 在部分部署中会成功返回但不携带详情。
  * QQ 的公开单曲详情接口不需要登录 Cookie，作为“仅补展示信息”的后备；
@@ -131,6 +152,31 @@ async function publicTrackInfo(mid: string, signal?: AbortSignal): Promise<Retur
   } catch {
     return null;
   }
+}
+
+/**
+ * 稳定的展示信息只在缓存未命中时请求 QQ；该结果可安全持久化。
+ * 音频 URL、歌词授权和登录 Cookie 均不在此层保存。
+ */
+async function resolveTrackMetadata(mid: string, signal?: AbortSignal): Promise<ReturnType<typeof trackInfo>> {
+  const cached = cachedTrackMetadata(mid);
+  if (cached) return cached;
+  const infoRaw = await qqMusicRequest("/batchGetSongInfo", { method: "POST", body: { songs: [[mid]] }, signal });
+  const primaryInfo = trackInfo(infoRaw, mid);
+  const fallbackInfo = (!primaryInfo.artist || !primaryInfo.cover || primaryInfo.name === "QQ 音乐")
+    ? await publicTrackInfo(mid, signal)
+    : null;
+  const info = fallbackInfo
+    ? {
+        name: fallbackInfo.name === "QQ 音乐" ? primaryInfo.name : fallbackInfo.name,
+        artist: fallbackInfo.artist || primaryInfo.artist,
+        cover: fallbackInfo.cover || primaryInfo.cover,
+        key: primaryInfo.key,
+      }
+    : primaryInfo;
+  const metadata = { ...info, cover: safeHttpsUrl(info.cover || await publicSearchCover(mid, info.name)) };
+  cacheTrackMetadata(mid, metadata);
+  return metadata;
 }
 
 function playbackUrl(raw: unknown): string {
@@ -196,8 +242,11 @@ async function resolvePlaylistTrack(song: JsonRecord, signal: AbortSignal): Prom
     const raw = await qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" }, signal });
     const url = playbackUrl(raw);
     if (!url) return null;
+    const cached = cachedTrackMetadata(mid);
+    const metadata = cached ?? trackInfo({ data: song }, mid);
+    if (!cached) cacheTrackMetadata(mid, metadata);
     return {
-      ...trackInfo({ data: song }, mid),
+      ...metadata,
       url,
       lrc: lyricUrl(mid),
     };
@@ -285,11 +334,10 @@ async function resolvePlaylist(disstid: string, signal: AbortSignal) {
 }
 
 export async function GET(request: Request) {
-  if (!allowQQMusicRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);
   const url = new URL(request.url);
   const kind = url.searchParams.get("type") ?? "track";
   const identifier = (url.searchParams.get("id") ?? url.searchParams.get("mid") ?? "").trim();
-  if (!["track", "playlist", "lyric", "song"].includes(kind)) return jsonError("请求类型无效", 400);
+  if (!["track", "playlist", "lyric", "song", "metadata"].includes(kind)) return jsonError("请求类型无效", 400);
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(identifier)) return jsonError(kind === "playlist" ? "歌单标识无效" : "歌曲标识无效", 400);
   const admin = await requireAdminApi();
   const publicType = kind === "playlist" ? "playlist" : "song";
@@ -299,6 +347,21 @@ export async function GET(request: Request) {
   } else if (!admin && !isPublicQQMusicSpec(publicType, identifier)) {
     return jsonError("音乐未在公开内容中授权", 403);
   }
+  if (kind === "metadata") {
+    const cached = cachedTrackMetadata(identifier);
+    if (cached) {
+      return NextResponse.json(cached, { headers: { "cache-control": "private, max-age=86400" } });
+    }
+    if (!allowQQMusicRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);
+    try {
+      const metadata = await expensiveResolution.run(`metadata:${identifier}`, (signal) => resolveTrackMetadata(identifier, signal));
+      return NextResponse.json(metadata, { headers: { "cache-control": "private, max-age=86400" } });
+    } catch (error) {
+      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      return jsonError(timedOut ? "QQ 音乐信息解析超时，请稍后再试" : "QQ 音乐信息暂不可用，请稍后再试", timedOut ? 504 : 502);
+    }
+  }
+  if (!allowQQMusicRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);
   try {
     if (kind === "playlist") {
       const data = await expensiveResolution.run(`playlist:${identifier}`, (signal) => resolvePlaylist(identifier, signal));
@@ -314,26 +377,14 @@ export async function GET(request: Request) {
       return new Response(lyric, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "private, max-age=300" } });
     }
     const track = await expensiveResolution.run(`track:${mid}`, async (signal) => {
-      const [infoRaw, playRaw] = await Promise.all([
-        qqMusicRequest("/batchGetSongInfo", { method: "POST", body: { songs: [[mid]] }, signal }),
+      const cached = cachedTrackMetadata(mid);
+      const [info, playRaw] = await Promise.all([
+        cached ? Promise.resolve(cached) : resolveTrackMetadata(mid, signal),
         qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" }, signal }),
       ]);
       const audio = playbackUrl(playRaw);
       if (!audio) throw new Error("播放地址不可用");
-      const primaryInfo = trackInfo(infoRaw, mid);
-      const fallbackInfo = (!primaryInfo.artist || !primaryInfo.cover || primaryInfo.name === "QQ 音乐")
-        ? await publicTrackInfo(mid, signal)
-        : null;
-      const info = fallbackInfo
-        ? {
-            name: fallbackInfo.name === "QQ 音乐" ? primaryInfo.name : fallbackInfo.name,
-            artist: fallbackInfo.artist || primaryInfo.artist,
-            cover: fallbackInfo.cover || primaryInfo.cover,
-            key: primaryInfo.key,
-        }
-        : primaryInfo;
-      const cover = safeHttpsUrl(info.cover || await publicSearchCover(mid, info.name));
-      return { ...info, cover, url: audio, lrc: lyricUrl(mid) };
+      return { ...info, url: audio, lrc: lyricUrl(mid) };
     });
     return NextResponse.json(track, {
       headers: { "cache-control": "private, max-age=120" },
