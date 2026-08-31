@@ -13,7 +13,10 @@ if (!fs.existsSync(source)) {
   process.exit(1);
 }
 
-const backupDir = path.join(root, "data", "backups");
+// The deploy worker runs from a release checkout while durable state lives in
+// BLOG_ROOT. An explicit directory keeps manual, daily, and deployment
+// snapshots on the same durable path without changing the cwd fallback.
+const backupDir = path.resolve(process.env.BLOG_BACKUP_DIR?.trim() || path.join(root, "data", "backups"));
 fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
 fs.chmodSync(backupDir, 0o700);
 const lockPath = path.join(backupDir, ".backup.lock");

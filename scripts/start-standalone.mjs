@@ -55,7 +55,9 @@ fs.chmodSync(dataDir, 0o700);
 fs.chmodSync(uploadDir, 0o700);
 
 // 维护只在真正启动服务时执行，避免 next build 加载数据库模块时修改生产数据。
-if (process.env.BLOG_BUILD_READONLY !== "true") await import("./maintain-db.mjs");
+if (process.env.BLOG_BUILD_READONLY !== "true" && process.env.BLOG_DEPLOY_WRITE_HOLD !== "true") {
+  await import("./maintain-db.mjs");
+}
 
 // Next standalone 不会自动把静态资源复制到 standalone 目录；本地启动前补齐，
 // 否则 HTML 能打开但 CSS、图片和 favicon 会返回 404。

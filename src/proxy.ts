@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { productionContentSecurityPolicy } from "@/lib/csp";
+import { isDeploymentWriteHoldActive } from "@/lib/deploy-write-guard";
 
 type ProxySecurityContext = {
   nonce?: string;
@@ -48,6 +49,24 @@ export function proxy(request: NextRequest) {
       warningState.__yeziProxyHeaderWarning = true;
       console.warn("[security] 收到代理 IP 头但 TRUST_PROXY 未开启；所有访客会共用 unknown 限流桶");
     }
+  }
+
+  // A candidate release has already migrated the live SQLite file, but has
+  // not yet passed its read-only deploy health checks.  Do not let a public
+  // request make rollback unsafe during that short interval.  Admin GETs are
+  // held too: an expired session check is allowed to delete its DB record.
+  // QQ metadata GETs can populate the persistent metadata cache on a miss.
+  const methodCanWrite = !["GET", "HEAD", "OPTIONS"].includes(request.method);
+  const routeMayWriteOnGet = pathname === "/api/music/qq"
+    || pathname === "/admin"
+    || pathname.startsWith("/admin/")
+    || pathname === "/api/admin"
+    || pathname.startsWith("/api/admin/");
+  if (isDeploymentWriteHoldActive() && (methodCanWrite || routeMayWriteOnGet)) {
+    const response = pathname.startsWith("/api/")
+      ? NextResponse.json({ error: "正在完成安全部署，请稍后重试" }, { status: 503, headers: { "cache-control": "no-store" } })
+      : new NextResponse("正在完成安全部署，请稍后重试", { status: 503, headers: { "cache-control": "no-store" } });
+    return applySecurityHeaders(response, security);
   }
 
   // 对外隐藏 Next 图片优化器的内部路径；参数和响应仍由 /_next/image 处理。

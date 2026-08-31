@@ -74,6 +74,26 @@ test("manual backup and verification commands work against a recoverable databas
   assert.match(verification.stdout, /"status": "ok"/);
 });
 
+test("manual backup honors an explicit durable backup directory", () => {
+  const manualRoot = path.join(tempRoot, "manual-command-explicit");
+  const backupDir = path.join(tempRoot, "durable-backups");
+  fs.mkdirSync(manualRoot, { recursive: true });
+  const commandEnvironment = {
+    ...process.env,
+    BLOG_DB_PATH: process.env.BLOG_DB_PATH,
+    BLOG_BACKUP_DIR: backupDir,
+    BACKUP_KEEP: "2",
+  };
+  const backup = spawnSync(process.execPath, ["--experimental-strip-types", path.join(projectRoot, "scripts", "backup.mts")], {
+    cwd: manualRoot,
+    env: commandEnvironment,
+    encoding: "utf8",
+  });
+  assert.equal(backup.status, 0, backup.stderr || backup.stdout);
+  assert.equal(fs.readdirSync(backupDir).filter((name) => name.endsWith(".db")).length, 1);
+  assert.equal(fs.existsSync(path.join(manualRoot, "data", "backups")), false);
+});
+
 test("concurrent database backups are serialized and never leave orphan sidecars", async () => {
   const results = await Promise.allSettled([runDbBackup({ keep: 20 }), runDbBackup({ keep: 20 })]);
   assert.equal(results.filter((item) => item.status === "fulfilled").length, 1);

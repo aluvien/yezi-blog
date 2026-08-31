@@ -30,7 +30,12 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string } = 
   );
   if (!fs.existsSync(source)) throw new Error(`数据库不存在：${source}`);
 
-  const backupDir = path.join(root, "data", "backups");
+  // Keep the backup location explicit when the running release and durable
+  // BLOG_ROOT are different; otherwise retain the historical project-root
+  // fallback used by daily backups and local commands.
+  const backupDir = path.resolve(
+    process.env.BLOG_BACKUP_DIR?.trim() || path.join(root, "data", "backups"),
+  );
   fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(backupDir, 0o700);
   const lockPath = path.join(backupDir, ".backup.lock");
@@ -92,7 +97,9 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string } = 
 
 /** 最近一次备份文件的修改时间戳（毫秒），从未备份过则返回 null。 */
 export function lastBackupTimestamp(): number | null {
-  const backupDir = path.join(getProjectRoot(), "data", "backups");
+  const backupDir = path.resolve(
+    process.env.BLOG_BACKUP_DIR?.trim() || path.join(getProjectRoot(), "data", "backups"),
+  );
   if (!fs.existsSync(backupDir)) return null;
   const timestamps = fs
     .readdirSync(backupDir)

@@ -4,11 +4,11 @@ import net from "node:net";
 import path from "node:path";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
-import { databaseSnapshotsMatch } from "./deploy-rollback-guard.mjs";
 
 const sourceRoot = path.resolve(process.env.DEPLOY_PROJECT_DIR || process.cwd());
 const stateRoot = path.resolve(process.env.BLOG_ROOT || sourceRoot);
 const databasePath = path.resolve(process.env.BLOG_DB_PATH || path.join(stateRoot, "data", "blog.db"));
+const backupDirectory = path.resolve(process.env.BLOG_BACKUP_DIR?.trim() || path.join(stateRoot, "data", "backups"));
 const releasesRoot = path.resolve(process.env.DEPLOY_RELEASES_DIR || path.join(path.dirname(sourceRoot), "yezi-blog-releases"));
 const currentLink = path.resolve(process.env.DEPLOY_CURRENT_LINK || path.join(path.dirname(sourceRoot), "yezi-blog-current"));
 const processName = process.env.DEPLOY_PM2_NAME?.trim() || "yezi-blog";
@@ -174,10 +174,9 @@ function switchCurrent(target) {
 }
 
 function latestBackup(beforeNames) {
-  const directory = path.join(stateRoot, "data", "backups");
-  const candidates = fs.readdirSync(directory)
+  const candidates = fs.readdirSync(backupDirectory)
     .filter((name) => /^blog-.*\.db$/.test(name) && !beforeNames.has(name))
-    .map((name) => ({ path: path.join(directory, name), mtime: fs.statSync(path.join(directory, name)).mtimeMs }))
+    .map((name) => ({ path: path.join(backupDirectory, name), mtime: fs.statSync(path.join(backupDirectory, name)).mtimeMs }))
     .sort((a, b) => b.mtime - a.mtime);
   if (!candidates[0]) throw new Error("部署前数据库备份没有生成新文件");
   return candidates[0].path;
@@ -203,11 +202,27 @@ function retainRollbackSnapshot(snapshot) {
   return target;
 }
 
+/** Keep a migrated candidate read-only to the outside world until health passes. */
+function createDeploymentWriteGuard() {
+  const target = path.join(path.dirname(databasePath), `.deploy-${process.pid}-write-hold`);
+  fs.writeFileSync(target, `${process.pid}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  fs.chmodSync(target, 0o600);
+  return target;
+}
+
+function releaseDeploymentWriteGuard(guardPath) {
+  fs.rmSync(guardPath, { force: true });
+  if (fs.existsSync(guardPath)) throw new Error("无法解除候选版本的数据库写入闸门");
+}
+
 async function createDatabaseSnapshot(env) {
-  const backupDirectory = path.join(stateRoot, "data", "backups");
   fs.mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
   const beforeBackups = new Set(fs.readdirSync(backupDirectory));
-  await run("npm", ["run", "backup"], sourceRoot, 120_000, { ...env, BLOG_BUILD_READONLY: "false" });
+  await run("npm", ["run", "backup"], sourceRoot, 120_000, {
+    ...env,
+    BLOG_BACKUP_DIR: backupDirectory,
+    BLOG_BUILD_READONLY: "false",
+  });
   return latestBackup(beforeBackups);
 }
 
@@ -375,6 +390,9 @@ let lockFd;
 let previousTarget = sourceRoot;
 let databaseSnapshot = "";
 let switched = false;
+let previousStopped = false;
+let writeGuardPath = "";
+let writesReleased = false;
 let stableEnvironment = {};
 let previousCommitMarker = null;
 try {
@@ -404,6 +422,7 @@ try {
     ...stableEnvironment,
     BLOG_ROOT: stateRoot,
     BLOG_DB_PATH: databasePath,
+    BLOG_BACKUP_DIR: backupDirectory,
     BLOG_ENV_FILE: envFile,
     BLOG_BUILD_READONLY: "true",
     DEPLOY_BUILD_COMMIT: revision,
@@ -415,7 +434,12 @@ try {
 
   previousTarget = fs.existsSync(currentLink) ? fs.realpathSync(currentLink) : sourceRoot;
   writeStatus("switching", { commit: revision.slice(0, 7) });
+  // Snapshot only after the old service is completely stopped. Otherwise one
+  // final old-version write can make a future-schema rollback unrecoverable.
+  await stopRunningRelease();
+  previousStopped = true;
   databaseSnapshot = retainRollbackSnapshot(await createDatabaseSnapshot(releaseEnv));
+  writeGuardPath = createDeploymentWriteGuard();
 
   switchCurrent(release);
   switched = true;
@@ -424,56 +448,52 @@ try {
   await restartRelease(currentLink, {
     ...releaseEnv,
     BLOG_BUILD_READONLY: "false",
+    BLOG_DEPLOY_WRITE_HOLD: "true",
+    BLOG_DEPLOY_WRITE_GUARD_FILE: writeGuardPath,
   });
   writeStatus("checking", { commit: revision.slice(0, 7) });
   await verifyHttp(finalHealthUrl, revision, 120);
-  writeStatus("success", { commit: revision.slice(0, 7) });
   await cleanupReleases(new Set([path.resolve(release), path.resolve(previousTarget)]));
+  writeStatus("activating", { commit: revision.slice(0, 7) });
+  // After this point user writes may arrive, so rollback is no longer safe.
+  // Keep this tail deliberately non-fallible except for best-effort status.
+  releaseDeploymentWriteGuard(writeGuardPath);
+  writesReleased = true;
+  try {
+    writeStatus("success", { commit: revision.slice(0, 7) });
+  } catch (statusError) {
+    console.error("[deploy] deployment is active but could not record success", statusError);
+  }
 } catch (error) {
   const detail = error instanceof Error ? error.message : String(error);
   const lockContended = detail === "已有一次部署正在执行" && lockFd === undefined;
   let rollbackSummary = "";
-  if (!lockContended && switched && databaseSnapshot) {
+  if (!lockContended && previousStopped && !writesReleased) {
     writeStatus("rolling_back", { error: detail });
     try {
-      // A candidate release can receive public writes before the final health
-      // probe rejects it. Stop it before taking the comparison snapshot, then
-      // never overwrite data unless the two consistent SQLite backups match.
-      await stopRunningRelease();
-      let mayRestoreDatabase = false;
-      try {
-        const currentSnapshot = await createDatabaseSnapshot({
-          ...process.env,
-          ...stableEnvironment,
-          BLOG_ROOT: stateRoot,
-          BLOG_DB_PATH: databasePath,
-          BLOG_ENV_FILE: envFile,
-          BLOG_BUILD_READONLY: "false",
-        });
-        try {
-          mayRestoreDatabase = await databaseSnapshotsMatch(databaseSnapshot, currentSnapshot);
-        } finally {
-          fs.rmSync(currentSnapshot, { force: true });
-        }
-      } catch (guardError) {
-        rollbackSummary = `；无法安全确认候选版本是否写入数据库，已拒绝恢复部署前快照：${guardError instanceof Error ? guardError.message : guardError}`;
+      if (switched) {
+        await stopRunningRelease();
+        switchCurrent(previousTarget);
+        restoreCommitMarker(previousCommitMarker);
       }
-
-      switchCurrent(previousTarget);
-      restoreCommitMarker(previousCommitMarker);
-      if (mayRestoreDatabase) {
+      // The candidate was held behind Proxy, with all background work delayed,
+      // so this snapshot contains every completed old-version write and no
+      // user-visible candidate write. Restore it unconditionally before old
+      // code sees the database again; never ask old code to open a future schema.
+      if (databaseSnapshot) {
         restoreDatabase(databaseSnapshot);
-        rollbackSummary = "；已确认候选版本未写入数据库，已恢复部署前快照并回滚代码";
-      } else if (!rollbackSummary) {
-        rollbackSummary = "；检测到候选版本启动后数据库已有写入，已拒绝恢复部署前快照，仅回滚代码以保留新数据";
+        rollbackSummary = "；候选版本受写入闸门保护，已恢复停站后的数据库快照并回滚代码";
       }
       await restartRelease(previousTarget, {
         ...process.env,
         ...stableEnvironment,
         BLOG_ROOT: stateRoot,
         BLOG_DB_PATH: databasePath,
+        BLOG_BACKUP_DIR: backupDirectory,
         BLOG_ENV_FILE: envFile,
         BLOG_BUILD_READONLY: "false",
+        BLOG_DEPLOY_WRITE_HOLD: "false",
+        BLOG_DEPLOY_WRITE_GUARD_FILE: "",
       });
       await verifyHttp(finalHealthUrl, "", 120, false);
     } catch (rollbackError) {
@@ -493,5 +513,6 @@ try {
     fs.closeSync(lockFd);
     fs.rmSync(lockFile, { force: true });
   }
+  if (writeGuardPath) fs.rmSync(writeGuardPath, { force: true });
   if (databaseSnapshot) fs.rmSync(databaseSnapshot, { force: true });
 }

@@ -8,17 +8,35 @@ export async function register(): Promise<void> {
     if (process.env.NODE_ENV === "production" && !["true", "false"].includes(process.env.TRUST_PROXY ?? "")) {
       console.warn("[security] 生产环境请显式设置 TRUST_PROXY=true（仅可信反代）或 false（直连）；未设置会让访客共用 unknown 限频键。");
     }
-    const [{ startQQMusicHealthScheduler }, { startTelegramBotScheduler }, { resumeArticleReferenceArchiveJobs }, { startBackupScheduler }, { startMaintenanceScheduler }] = await Promise.all([
-      import("./lib/qq-music-scheduler"),
-      import("./lib/telegram-bot-scheduler"),
-      import("./lib/article-reference-archive-jobs"),
-      import("./lib/backup-scheduler"),
-      import("./lib/maintenance-scheduler"),
-    ]);
-    startMaintenanceScheduler();
-    startQQMusicHealthScheduler();
-    startTelegramBotScheduler();
-    resumeArticleReferenceArchiveJobs();
-    startBackupScheduler();
+    const startBackgroundWork = async (): Promise<void> => {
+      const [{ startQQMusicHealthScheduler }, { startTelegramBotScheduler }, { resumeArticleReferenceArchiveJobs }, { startBackupScheduler }, { startMaintenanceScheduler }] = await Promise.all([
+        import("./lib/qq-music-scheduler"),
+        import("./lib/telegram-bot-scheduler"),
+        import("./lib/article-reference-archive-jobs"),
+        import("./lib/backup-scheduler"),
+        import("./lib/maintenance-scheduler"),
+      ]);
+      startMaintenanceScheduler();
+      startQQMusicHealthScheduler();
+      startTelegramBotScheduler();
+      resumeArticleReferenceArchiveJobs();
+      startBackupScheduler();
+    };
+
+    const { isDeploymentWriteHoldActive } = await import("./lib/deploy-write-guard");
+    if (!isDeploymentWriteHoldActive()) {
+      await startBackgroundWork();
+      return;
+    }
+
+    // The deploy worker removes this guard only after health checks have
+    // passed.  Polling a file is intentional: Proxy and this runtime do not
+    // share a reliable global state, and a restart would reopen a write race.
+    const timer = setInterval(() => {
+      if (isDeploymentWriteHoldActive()) return;
+      clearInterval(timer);
+      void startBackgroundWork().catch((error) => console.error("[deployment] 启动后台任务失败", error));
+    }, 200);
+    timer.unref?.();
   }
 }
