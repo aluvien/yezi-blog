@@ -50,3 +50,19 @@ export function upsertQQMusicMetadata(items: readonly QQMusicMetadataInput[]): v
   });
   write(records);
 }
+
+/** 删除没有任何公开内容引用的展示缓存；返回实际删除的歌曲数量。 */
+export function cleanupUnusedQQMusicMetadata(referencedMids: Iterable<string>): number {
+  const referenced = new Set(
+    [...referencedMids].map((mid) => mid.trim()).filter((mid) => MID_PATTERN.test(mid)),
+  );
+  const cached = db.prepare("SELECT mid FROM qq_music_metadata").all() as Array<{ mid: string }>;
+  const stale = cached.map((row) => row.mid).filter((mid) => !referenced.has(mid));
+  if (stale.length === 0) return 0;
+  const remove = db.prepare("DELETE FROM qq_music_metadata WHERE mid = ?");
+  const transaction = db.transaction((mids: string[]) => {
+    for (const mid of mids) remove.run(mid);
+  });
+  transaction(stale);
+  return stale.length;
+}

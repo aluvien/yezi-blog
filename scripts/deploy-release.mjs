@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
+import { databaseSnapshotsMatch } from "./deploy-rollback-guard.mjs";
 
 const sourceRoot = path.resolve(process.env.DEPLOY_PROJECT_DIR || process.cwd());
 const stateRoot = path.resolve(process.env.BLOG_ROOT || sourceRoot);
@@ -191,6 +192,25 @@ function restoreDatabase(snapshot) {
   fs.renameSync(temporary, databasePath);
 }
 
+// The backup retention policy is allowed to prune normal backup files. Keep
+// the one snapshot that a deployment may need to restore in a private
+// short-lived location, so a low BACKUP_KEEP value cannot remove it midway.
+function retainRollbackSnapshot(snapshot) {
+  const target = path.join(path.dirname(databasePath), `.deploy-${process.pid}-before-switch.db`);
+  fs.rmSync(target, { force: true });
+  fs.copyFileSync(snapshot, target);
+  fs.chmodSync(target, 0o600);
+  return target;
+}
+
+async function createDatabaseSnapshot(env) {
+  const backupDirectory = path.join(stateRoot, "data", "backups");
+  fs.mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
+  const beforeBackups = new Set(fs.readdirSync(backupDirectory));
+  await run("npm", ["run", "backup"], sourceRoot, 120_000, { ...env, BLOG_BUILD_READONLY: "false" });
+  return latestBackup(beforeBackups);
+}
+
 const commitMarkerPath = path.join(stateRoot, "data", "deploy-commit");
 
 function readCommitMarker() {
@@ -270,6 +290,24 @@ async function portIsListening(port) {
   });
 }
 
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ESRCH") return false;
+    return true;
+  }
+}
+
+async function waitForProcessesToExit(pids, attempts) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (pids.every((pid) => !processIsAlive(pid))) return true;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return pids.every((pid) => !processIsAlive(pid));
+}
+
 /** Direct/nohup deployments have no supervisor. Only target the configured HTTP port. */
 async function stopDirectServer() {
   const port = Number.parseInt(new URL(finalHealthUrl).port || "80", 10);
@@ -278,18 +316,14 @@ async function stopDirectServer() {
   for (const pid of pids) {
     try { process.kill(pid, "SIGTERM"); } catch { /* Process may already be gone. */ }
   }
-  for (let attempt = 0; attempt < 30 && await portIsListening(port); attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  if (await portIsListening(port)) {
+  if (!await waitForProcessesToExit(pids, 30)) {
     for (const pid of pids) {
       try { process.kill(pid, "SIGKILL"); } catch { /* Process may already be gone. */ }
     }
   }
-  for (let attempt = 0; attempt < 20 && await portIsListening(port); attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
+  if (!await waitForProcessesToExit(pids, 20) || await portIsListening(port)) {
+    throw new Error(`无法停止 ${port} 端口上的旧 Next 进程，已取消切换`);
   }
-  if (await portIsListening(port)) throw new Error(`无法停止 ${port} 端口上的旧 Next 进程，已取消切换`);
 }
 
 async function startDirectServer(target, env) {
@@ -317,6 +351,14 @@ async function restartRelease(target, env) {
   }
   await stopDirectServer();
   await startDirectServer(releaseRoot, env);
+}
+
+async function stopRunningRelease() {
+  if (restartMode === "pm2") {
+    await removePm2Process();
+    return;
+  }
+  await stopDirectServer();
 }
 
 async function cleanupReleases(activeTargets) {
@@ -373,11 +415,7 @@ try {
 
   previousTarget = fs.existsSync(currentLink) ? fs.realpathSync(currentLink) : sourceRoot;
   writeStatus("switching", { commit: revision.slice(0, 7) });
-  const backupDirectory = path.join(stateRoot, "data", "backups");
-  fs.mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
-  const beforeBackups = new Set(fs.readdirSync(backupDirectory));
-  await run("npm", ["run", "backup"], sourceRoot, 120_000, { ...releaseEnv, BLOG_BUILD_READONLY: "false" });
-  databaseSnapshot = latestBackup(beforeBackups);
+  databaseSnapshot = retainRollbackSnapshot(await createDatabaseSnapshot(releaseEnv));
 
   switchCurrent(release);
   switched = true;
@@ -394,12 +432,41 @@ try {
 } catch (error) {
   const detail = error instanceof Error ? error.message : String(error);
   const lockContended = detail === "已有一次部署正在执行" && lockFd === undefined;
+  let rollbackSummary = "";
   if (!lockContended && switched && databaseSnapshot) {
     writeStatus("rolling_back", { error: detail });
     try {
+      // A candidate release can receive public writes before the final health
+      // probe rejects it. Stop it before taking the comparison snapshot, then
+      // never overwrite data unless the two consistent SQLite backups match.
+      await stopRunningRelease();
+      let mayRestoreDatabase = false;
+      try {
+        const currentSnapshot = await createDatabaseSnapshot({
+          ...process.env,
+          ...stableEnvironment,
+          BLOG_ROOT: stateRoot,
+          BLOG_DB_PATH: databasePath,
+          BLOG_ENV_FILE: envFile,
+          BLOG_BUILD_READONLY: "false",
+        });
+        try {
+          mayRestoreDatabase = await databaseSnapshotsMatch(databaseSnapshot, currentSnapshot);
+        } finally {
+          fs.rmSync(currentSnapshot, { force: true });
+        }
+      } catch (guardError) {
+        rollbackSummary = `；无法安全确认候选版本是否写入数据库，已拒绝恢复部署前快照：${guardError instanceof Error ? guardError.message : guardError}`;
+      }
+
       switchCurrent(previousTarget);
-      restoreDatabase(databaseSnapshot);
       restoreCommitMarker(previousCommitMarker);
+      if (mayRestoreDatabase) {
+        restoreDatabase(databaseSnapshot);
+        rollbackSummary = "；已确认候选版本未写入数据库，已恢复部署前快照并回滚代码";
+      } else if (!rollbackSummary) {
+        rollbackSummary = "；检测到候选版本启动后数据库已有写入，已拒绝恢复部署前快照，仅回滚代码以保留新数据";
+      }
       await restartRelease(previousTarget, {
         ...process.env,
         ...stableEnvironment,
@@ -408,15 +475,16 @@ try {
         BLOG_ENV_FILE: envFile,
         BLOG_BUILD_READONLY: "false",
       });
+      await verifyHttp(finalHealthUrl, "", 120, false);
     } catch (rollbackError) {
-      writeStatus("failed", { error: `${detail}；自动回滚也失败：${rollbackError instanceof Error ? rollbackError.message : rollbackError}` });
+      writeStatus("failed", { error: `${detail}${rollbackSummary}；自动回滚也失败：${rollbackError instanceof Error ? rollbackError.message : rollbackError}` });
       process.exitCode = 1;
       throw rollbackError;
     }
   }
   // A near-simultaneous second click must not overwrite the real worker's
   // progress with a false failure state.
-  if (!lockContended) writeStatus("failed", { error: detail });
+  if (!lockContended) writeStatus("failed", { error: `${detail}${rollbackSummary}` });
   process.exitCode = 1;
 } finally {
   // Never remove another worker's lock. A contender that lost the atomic
@@ -425,4 +493,5 @@ try {
     fs.closeSync(lockFd);
     fs.rmSync(lockFile, { force: true });
   }
+  if (databaseSnapshot) fs.rmSync(databaseSnapshot, { force: true });
 }

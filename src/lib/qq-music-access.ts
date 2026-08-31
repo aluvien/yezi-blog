@@ -18,19 +18,28 @@ export function extractMusicSpecs(text: string): MusicSpec[] {
   return [...unique.values()];
 }
 
-function accessKeys(): Set<string> {
-  const state = globalThis as AccessGlobal;
-  const cached = state.__yeziQQAccess;
-  if (cached && cached.expiresAt > Date.now()) return cached.keys;
+function publicMusicSpecs(): MusicSpec[] {
   const rows = db.prepare(`
     SELECT content AS value FROM posts WHERE status = 'published'
     UNION ALL SELECT content AS value FROM moments
     UNION ALL SELECT value FROM site_settings WHERE key IN ('about_content', 'default_music')
   `).all() as Array<{ value: string }>;
-  const keys = new Set<string>();
+  return collectMusicSpecs(rows);
+}
+
+function collectMusicSpecs(rows: Array<{ value: string }>): MusicSpec[] {
+  const unique = new Map<string, MusicSpec>();
   for (const row of rows) {
-    for (const spec of extractMusicSpecs(row.value ?? "")) keys.add(`${spec.type}:${spec.id}`);
+    for (const spec of extractMusicSpecs(row.value ?? "")) unique.set(`${spec.type}:${spec.id}`, spec);
   }
+  return [...unique.values()];
+}
+
+function accessKeys(): Set<string> {
+  const state = globalThis as AccessGlobal;
+  const cached = state.__yeziQQAccess;
+  if (cached && cached.expiresAt > Date.now()) return cached.keys;
+  const keys = new Set(publicMusicSpecs().map((spec) => `${spec.type}:${spec.id}`));
   state.__yeziQQAccess = { expiresAt: Date.now() + ACCESS_CACHE_MS, keys };
   return keys;
 }
@@ -41,6 +50,16 @@ export function invalidateQQMusicAccessCache(): void {
 
 export function isPublicQQMusicSpec(type: "song" | "playlist", id: string): boolean {
   return accessKeys().has(`${type}:${id}`);
+}
+
+/** 所有已保存内容中的歌曲来源；草稿也保留，避免未来发布时重复请求 QQ 音乐。 */
+export function listReferencedQQMusicSongIds(): Set<string> {
+  const rows = db.prepare(`
+    SELECT content AS value FROM posts
+    UNION ALL SELECT content AS value FROM moments
+    UNION ALL SELECT value FROM site_settings WHERE key IN ('about_content', 'default_music')
+  `).all() as Array<{ value: string }>;
+  return new Set(collectMusicSpecs(rows).flatMap((spec) => spec.type === "song" ? [spec.id] : []));
 }
 
 function lyricSecret(): Buffer {

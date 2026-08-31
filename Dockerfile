@@ -6,6 +6,8 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json ./
+# postinstall runs during npm ci, so make its security patch available before dependencies install.
+COPY scripts/patch-aplayer.mjs ./scripts/patch-aplayer.mjs
 # 可选：国内服务器构建时通过 NPM_REGISTRY 换 npm 镜像源，加速依赖下载
 ARG NPM_REGISTRY
 RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi

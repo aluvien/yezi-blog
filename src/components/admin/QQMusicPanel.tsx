@@ -56,6 +56,8 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
   const [playlistSearchMessage, setPlaylistSearchMessage] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cacheBusy, setCacheBusy] = useState(false);
+  const [cacheMessage, setCacheMessage] = useState("");
   const pollingRef = useRef(false);
 
   const refreshStatus = useCallback(async () => {
@@ -193,6 +195,25 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
     }
   }
 
+  async function cleanupMetadataCache() {
+    setCacheBusy(true);
+    setCacheMessage("");
+    try {
+      const result = await api<{ deleted: number; referenced: number }>("/api/admin/qq-music", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ op: "cleanup-metadata-cache" }),
+      });
+      setCacheMessage(result.deleted > 0
+        ? `已清理 ${result.deleted} 条未引用歌曲缓存；保留 ${result.referenced} 首正在使用的歌曲。`
+        : `没有发现未引用缓存；当前保留 ${result.referenced} 首正在使用的歌曲。`);
+    } catch (error) {
+      setCacheMessage(error instanceof Error ? error.message : "清理歌曲缓存失败");
+    } finally {
+      setCacheBusy(false);
+    }
+  }
+
   return (
     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -304,6 +325,18 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
           )}
           {playlistSearchMessage && <p className="mt-1.5 text-xs text-neutral-400">{playlistSearchMessage}</p>}
         </div>
+      </div>
+      <div className="mt-4 border-t border-neutral-200 pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-neutral-800">歌曲信息缓存</p>
+            <p className="mt-1 text-xs leading-5 text-neutral-500">仅删除未被文章（含草稿）、想法、关于页或默认音乐引用的本地歌曲名、歌手和封面缓存；不影响 QQ 登录或正文内容。</p>
+          </div>
+          <button type="button" disabled={cacheBusy} onClick={() => void cleanupMetadataCache()} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50">
+            {cacheBusy ? "清理中…" : "清理未引用缓存"}
+          </button>
+        </div>
+        {cacheMessage && <p className="mt-2 text-xs leading-5 text-neutral-500">{cacheMessage}</p>}
       </div>
       {message && <p className={`mt-3 text-xs leading-5 ${status?.available === false ? "text-red-600" : "text-neutral-500"}`}>{message}</p>}
     </div>

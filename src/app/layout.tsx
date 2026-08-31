@@ -4,7 +4,6 @@ import { site } from "@/lib/site";
 import { deployedBuildCommit } from "@/lib/deploy-build";
 import { getCachedSiteSettings } from "@/lib/server-data";
 import { normalizeDarkMode, normalizeLayoutTheme, normalizePalette } from "@/lib/theme";
-import { ViewportZoomLock } from "@/components/site/ViewportZoomLock";
 import "./globals.css";
 import "aplayer/dist/APlayer.min.css";
 
@@ -38,8 +37,6 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   minimumScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   // iPhone 安装态需要此项才会暴露 safe-area-inset-*，供底部 PWA 导航避开 Home Indicator。
   viewportFit: "cover",
   themeColor: [
@@ -84,7 +81,6 @@ export default async function RootLayout({
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-full flex flex-col">
-        <ViewportZoomLock />
         {children}
       </body>
     </html>

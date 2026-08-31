@@ -9,12 +9,13 @@ process.env.BLOG_ROOT = root;
 process.env.BLOG_DB_PATH = path.join(root, "data", "blog.db");
 process.env.QQ_MUSIC_SIGNING_KEY = "test-signing-key-that-is-at-least-thirty-two-bytes";
 
-const { createMoment, createPost, db, getQQMusicMetadata, setSiteSettings, updatePost, upsertQQMusicMetadata } = await import("../src/lib/db.ts");
+const { cleanupUnusedQQMusicMetadata, createMoment, createPost, db, getQQMusicMetadata, setSiteSettings, updatePost, upsertQQMusicMetadata } = await import("../src/lib/db.ts");
 const {
   createLyricAuthorization,
   extractMusicSpecs,
   invalidateQQMusicAccessCache,
   isPublicQQMusicSpec,
+  listReferencedQQMusicSongIds,
   verifyLyricAuthorization,
 } = await import("../src/lib/qq-music-access.ts");
 
@@ -57,19 +58,28 @@ test("music spec extraction accepts shortcodes and fenced values without arbitra
   );
 });
 
-test("QQ music display metadata persists independently from temporary playback URLs", () => {
+test("QQ music display metadata persists independently from temporary playback URLs and cleans unused rows", () => {
   upsertQQMusicMetadata([{
-    mid: "PublicSong01",
+    mid: "AboutSong01",
     name: "缓存歌曲",
     artist: "缓存歌手",
     cover: "https://example.com/cover.jpg",
+  }, {
+    mid: "UnusedSong01",
+    name: "未引用歌曲",
+    artist: "缓存歌手",
+    cover: "https://example.com/unused.jpg",
   }]);
-  const metadata = getQQMusicMetadata("PublicSong01");
+  const metadata = getQQMusicMetadata("AboutSong01");
   assert.ok(metadata);
   assert.deepEqual(
     { mid: metadata.mid, name: metadata.name, artist: metadata.artist, cover: metadata.cover },
-    { mid: "PublicSong01", name: "缓存歌曲", artist: "缓存歌手", cover: "https://example.com/cover.jpg" },
+    { mid: "AboutSong01", name: "缓存歌曲", artist: "缓存歌手", cover: "https://example.com/cover.jpg" },
   );
   assert.match(metadata.updated_at, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(getQQMusicMetadata("invalid id"), null);
+  assert.equal(listReferencedQQMusicSongIds().has("AboutSong01"), true);
+  assert.equal(listReferencedQQMusicSongIds().has("DraftSong01"), true);
+  assert.equal(cleanupUnusedQQMusicMetadata(listReferencedQQMusicSongIds()), 1);
+  assert.equal(getQQMusicMetadata("UnusedSong01"), null);
 });
