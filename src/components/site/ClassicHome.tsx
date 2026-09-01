@@ -5,6 +5,13 @@ import { parsePostTags } from "@/lib/post-tags";
 import type { Work } from "@/lib/db/types";
 import { ClassicHomeFeed } from "@/components/site/ClassicHomeFeed";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
+import { renderMarkdown, renderMarkdownInline } from "@/lib/markdown";
+
+/*
+ * Classic layout adapted from cxro (Copyright cxro), licensed under MIT.
+ * The required source notice is retained in LICENSES/cxro-classic-theme-MIT.txt
+ * and is deliberately not rendered in the public site UI.
+ */
 
 function tagsFor(item: FeedItem): string[] {
   // Archive metadata should mirror the article header and use the dedicated
@@ -48,6 +55,9 @@ export function ClassicHome({ items, siteName, heroSrc, homeIntro, homeMore, hom
   const hero = heroSrc?.trim();
   const intro = homeIntro?.trim();
   const more = homeMore?.trim();
+  const introHtml = intro ? renderMarkdown(intro) : "";
+  const moreHtml = more ? renderMarkdown(more) : "";
+  const sectionTitleHtml = homeSectionTitle?.trim() ? renderMarkdownInline(homeSectionTitle.trim()) : "";
   return (
     <>
       <h1 className="sr-only">{siteName}</h1>
@@ -56,11 +66,11 @@ export function ClassicHome({ items, siteName, heroSrc, homeIntro, homeMore, hom
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={hero} alt={`${siteName} theme preview`} loading="eager" />
       </div> : null}
-      {intro || more ? <div className="intro intro--serif">
-        {intro ? <span className="intro__lead">{intro}</span> : null}
-        {more ? <span className="intro__more">{more}</span> : null}
+      {introHtml || moreHtml ? <div className="intro intro--serif classic-home-markdown">
+        {introHtml ? <div className="intro__lead" dangerouslySetInnerHTML={{ __html: introHtml }} /> : null}
+        {moreHtml ? <div className="intro__more" dangerouslySetInnerHTML={{ __html: moreHtml }} /> : null}
       </div> : null}
-      {homeSectionTitle?.trim() ? <h2 className="section-title section-title--index">{homeSectionTitle.trim()}</h2> : null}
+      {sectionTitleHtml ? <h2 className="section-title section-title--index" dangerouslySetInnerHTML={{ __html: sectionTitleHtml }} /> : null}
       <ClassicHomeFeed items={includeBits ? items : items.filter((item) => item.type === "post")} authorName={authorName} authorAvatar={authorAvatar} />
     </>
   );

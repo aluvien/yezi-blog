@@ -18,7 +18,7 @@ import { SiteScrollManager } from "@/components/site/SiteScrollManager";
 import { ClassicReaderToggle } from "@/components/site/ClassicReaderToggle";
 import { ClassicShell } from "@/components/site/ClassicShell";
 
-export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [] }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }> }) {
+export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [], classicSidebarIntroHtml = "" }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }>; classicSidebarIntroHtml?: string }) {
   const pathname = usePathname();
   const isPost = isPublicPostDetailPath(pathname);
   const [menuState, setMenuState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
@@ -86,7 +86,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
   if (siteSettings.layout_theme === "classic") {
     return (
       <>
-        <ClassicShell siteSettings={siteSettings}>{children}</ClassicShell>
+        <ClassicShell siteSettings={siteSettings} sidebarIntroHtml={classicSidebarIntroHtml}>{children}</ClassicShell>
         <ErrorBoundary label="MusicInitializer">
           <MusicInitializer />
         </ErrorBoundary>

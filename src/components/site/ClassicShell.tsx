@@ -6,21 +6,19 @@ import { useEffect, useMemo, useState } from "react";
 import { Book, BookOpen, Moon, Rss, Sun } from "lucide-react";
 import { SiteSearch } from "@/components/site/SiteSearch";
 import { CLASSIC_NAV_ITEMS, PUBLIC_ROUTES, getPublicSection, isPublicNavActive, isPublicPostDetailPath } from "@/lib/site-navigation";
-import { DEFAULT_CLASSIC_SIDEBAR_INTRO } from "@/lib/theme";
 
 type ClassicShellProps = {
   children: React.ReactNode;
   siteSettings: Record<string, string>;
+  sidebarIntroHtml?: string;
 };
 
-export function ClassicShell({ children, siteSettings }: ClassicShellProps) {
+/* Classic layout attribution is source-only; see LICENSES/cxro-classic-theme-MIT.txt. */
+export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: ClassicShellProps) {
   const pathname = usePathname();
   const [readingState, setReadingState] = useState({ path: "", active: false });
   const reading = readingState.path === pathname && readingState.active;
   const siteName = siteSettings.site_name?.trim() || "Whono";
-  const sidebarIntro = Object.hasOwn(siteSettings, "classic_sidebar_intro")
-    ? siteSettings.classic_sidebar_intro.trim()
-    : DEFAULT_CLASSIC_SIDEBAR_INTRO;
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
   const year = new Date().getFullYear();
   const articlePath = isPublicPostDetailPath(pathname);
@@ -83,7 +81,7 @@ export function ClassicShell({ children, siteSettings }: ClassicShellProps) {
           <span className="sidebar__title-text">{siteName}</span>
         </Link>
 
-        {sidebarIntro ? <div className="sidebar__quote">{sidebarIntro}</div> : null}
+        {sidebarIntroHtml ? <div className="sidebar__quote classic-sidebar-markdown" dangerouslySetInnerHTML={{ __html: sidebarIntroHtml }} /> : null}
 
         <ul className="nav sidebar-public-nav">
           {CLASSIC_NAV_ITEMS.map((item) => {

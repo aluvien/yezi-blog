@@ -470,6 +470,23 @@ html[data-theme="dark"] .admin-shell select option:checked {
   color: #fff;
 }
 
+/* 后台顶部子菜单的激活项不能依赖全局 a 色：该规则曾把黑底选项的
+ * text-white 覆盖成深色字。显式固定前景色，保证浅色与深色后台都可读。 */
+.admin-shell .admin-nav-submenu-link.is-active {
+  background-color: var(--foreground) !important;
+  color: #fff !important;
+}
+
+.admin-shell .admin-nav-submenu-link.is-active :is(span, svg, path) {
+  color: inherit !important;
+  fill: currentColor;
+}
+
+.admin-shell .admin-nav-submenu-link.is-active:hover {
+  background-color: color-mix(in srgb, var(--foreground) 86%, var(--accent)) !important;
+  color: #fff !important;
+}
+
 html[data-theme="dark"] .admin-shell :is(input, textarea)::placeholder {
   color: color-mix(in srgb, var(--foreground) 42%, var(--paper));
 }

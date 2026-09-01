@@ -27,13 +27,33 @@
 .intro__lead {
   display: block;
   font-size: 15px;
-  white-space: pre-line;
 }
 
 .intro__more {
   display: block;
   margin-top: 10px;
+}
+
+.classic-home-markdown :is(p, ul, ol, blockquote, pre) {
+  margin: 0;
+}
+
+.classic-home-markdown p {
   white-space: pre-line;
+}
+
+.classic-home-markdown :is(p, ul, ol, blockquote, pre) + :is(p, ul, ol, blockquote, pre) {
+  margin-top: 0.65em;
+}
+
+.classic-home-markdown :is(ul, ol) {
+  padding-left: 1.45em;
+}
+
+.classic-home-markdown blockquote {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.8em;
+  color: var(--muted);
 }
 
 .intro__link-tail {

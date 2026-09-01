@@ -335,20 +335,21 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
             <ImageUpload value={values.classic_home_image || null} onChange={(path) => update("classic_home_image", path ?? "")} label="首页图片（可选）" />
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-neutral-600">首页引导文字</label>
+                <label className="mb-1 block text-xs text-neutral-600">首页引导文字（支持 Markdown）</label>
                 <textarea value={values.classic_home_intro} onChange={(event) => update("classic_home_intro", event.target.value)} rows={3} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="个人博客：记录文章、想法与作品。" />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-neutral-600">首页补充文字</label>
+                <label className="mb-1 block text-xs text-neutral-600">首页补充文字（支持 Markdown）</label>
                 <textarea value={values.classic_home_more} onChange={(event) => update("classic_home_more", event.target.value)} rows={3} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="更多内容请访问" />
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-neutral-600">信息流标题</label>
+              <label className="mb-1 block text-xs text-neutral-600">信息流标题（支持行内 Markdown）</label>
               <input value={values.classic_home_section_title} onChange={(event) => update("classic_home_section_title", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="索引" />
+              <p className="mt-1.5 text-xs leading-5 text-neutral-500">可使用粗体、斜体、行内代码和链接；标题始终保持单行。</p>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-neutral-600">桌面侧栏介绍</label>
+              <label className="mb-1 block text-xs text-neutral-600">桌面侧栏介绍（支持 Markdown）</label>
               <textarea
                 value={values.classic_sidebar_intro}
                 onChange={(event) => update("classic_sidebar_intro", event.target.value)}
@@ -356,7 +357,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
                 className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
                 placeholder={DEFAULT_CLASSIC_SIDEBAR_INTRO}
               />
-              <p className="mt-1.5 text-xs leading-5 text-neutral-500">显示在经典版桌面左侧、站点名称与菜单之间；支持换行，清空后不显示。</p>
+              <p className="mt-1.5 text-xs leading-5 text-neutral-500">显示在经典版桌面左侧、站点名称与菜单之间；支持 Markdown 与换行，清空后不显示。</p>
             </div>
             <fieldset className="space-y-3 rounded-lg border border-amber-200/80 bg-white/70 p-3">
               <legend className="px-1 text-sm font-medium text-neutral-700">本站扩展</legend>

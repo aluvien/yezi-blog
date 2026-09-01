@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderMarkdown, extractHeadings, stripMarkdown } from "../src/lib/markdown.ts";
+import { renderMarkdown, renderMarkdownInline, extractHeadings, stripMarkdown } from "../src/lib/markdown.ts";
 import { normalizeMediaShortcodes } from "../src/lib/media-shortcodes.ts";
 
 test("escapes raw HTML instead of executing it", () => {
@@ -34,6 +34,14 @@ test("external links get target and noopener rel", () => {
 test("internal links stay same-tab", () => {
   const html = renderMarkdown("[内链](/posts/a)");
   assert.ok(!html.includes("target="));
+});
+
+test("renders safe inline Markdown for classic home titles", () => {
+  const html = renderMarkdownInline("**索引** · [阅读](/posts) · <script>alert(1)</script>");
+  assert.ok(html.includes("<strong>索引</strong>"));
+  assert.ok(html.includes('<a href="/posts">阅读</a>'));
+  assert.ok(!html.includes("<script"));
+  assert.ok(html.includes("&lt;script&gt;"));
 });
 
 test("headings get ids for TOC while h1 stays id-less", () => {

@@ -259,6 +259,40 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
   return sanitizeHtml(marked.parse(preparedContent, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
 }
 
+/**
+ * Render a short UI label with the same URL and HTML safety rules as article
+ * Markdown. Newlines intentionally become spaces: a title must stay inline
+ * even when it contains a pasted line break.
+ */
+export function renderMarkdownInline(content: string): string {
+  const renderer = new marked.Renderer();
+  renderer.html = function (this: Renderer, { text }: Tokens.HTML | Tokens.Tag) {
+    return escapeHtml(text);
+  };
+  renderer.link = function (this: Renderer, { href, title, tokens }: Tokens.Link) {
+    const safeHref = safeMarkdownUrl(href, "link");
+    const label = this.parser.parseInline(tokens);
+    if (!safeHref) return label;
+    const external = /^https?:\/\//i.test(safeHref);
+    const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
+    const externalAttributes = external ? ' target="_blank" rel="noopener noreferrer"' : "";
+    return `<a href="${escapeHtml(safeHref)}"${titleAttribute}${externalAttributes}>${label}</a>`;
+  };
+  renderer.image = function (this: Renderer, { href, title, text }: Tokens.Image) {
+    const safeSrc = safeMarkdownUrl(href, "image");
+    if (!safeSrc) return escapeHtml(text);
+    const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
+    return renderMarkdownImage(safeSrc, text, titleAttribute);
+  };
+
+  return sanitizeHtml(marked.parseInline(content.replace(/\r?\n+/g, " "), {
+    async: false,
+    gfm: true,
+    breaks: false,
+    renderer,
+  }), SANITIZE_OPTIONS);
+}
+
 /** 从 markdown 提取 h2/h3 标题列表，用于生成目录 */
 export function extractHeadings(content: string): TocHeading[] {
   const headings: TocHeading[] = [];
