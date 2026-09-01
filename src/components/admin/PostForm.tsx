@@ -160,9 +160,15 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     replaceTextAtRange(`\n\n!video ${spec}\n\n`, range);
   }
 
-  function insertReferenceMarker(marker: string) {
+  function insertReferenceMarker(marker: string, inline = false) {
     const range = dialogRangeRef.current ?? getEditingRange();
     dialogRangeRef.current = null;
+    if (inline) {
+      const before = range.start > 0 && !/\s/.test(content.charAt(range.start - 1)) ? " " : "";
+      const after = range.end < content.length && !/\s/.test(content.charAt(range.end)) ? " " : "";
+      replaceTextAtRange(`${before}${marker}${after}`, range);
+      return;
+    }
     replaceTextAtRange(`\n${marker}\n`, range);
   }
 
@@ -623,11 +629,13 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           onClose={(selection) => {
             setReferenceDialog(false);
             if (selection) {
-              setReferenceSnapshots((current) => {
-                const next = current.filter((item) => item.canonicalUrl !== selection.snapshot.canonicalUrl);
-                return [...next, selection.snapshot];
-              });
-              insertReferenceMarker(selection.marker);
+              if ("snapshot" in selection) {
+                setReferenceSnapshots((current) => {
+                  const next = current.filter((item) => item.canonicalUrl !== selection.snapshot.canonicalUrl);
+                  return [...next, selection.snapshot];
+                });
+              }
+              insertReferenceMarker(selection.marker, "siteReference" in selection);
             } else {
               dialogRangeRef.current = null;
             }

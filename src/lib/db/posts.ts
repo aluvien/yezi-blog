@@ -62,6 +62,26 @@ export function listPosts(options: PublishedPostQuery = {}): Post[] {
   return db.prepare(sql).all(...params) as Post[];
 }
 
+/** 后台“本站文章引用”搜索专用：只返回公开文章及生成摘要所需正文。 */
+export function searchPublishedPostsForReference(keyword = "", limit = 20): Array<Pick<Post, "slug" | "title" | "content">> {
+  const needle = keyword.trim().slice(0, 120);
+  const safeLimit = Math.min(30, Math.max(1, Math.trunc(limit)));
+  const conditions = ["status = 'published'"];
+  const parameters: Array<string | number> = [];
+  if (needle) {
+    const pattern = `%${needle}%`;
+    conditions.push("(title LIKE ? COLLATE NOCASE OR slug LIKE ? COLLATE NOCASE OR content LIKE ? COLLATE NOCASE)");
+    parameters.push(pattern, pattern, pattern);
+  }
+  return db.prepare(`
+    SELECT slug, title, content
+    FROM posts
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY updated_at DESC, id DESC
+    LIMIT ?
+  `).all(...parameters, safeLimit) as Array<Pick<Post, "slug" | "title" | "content">>;
+}
+
 // posts.tags 保留为兼容字段；标签页通过 post_tags 的 normalized_tag 索引查询，避免读取所有正文。
 export function listPostsByTag(tag: string): Post[] {
   const needle = normalizeTagKey(tag);

@@ -5,11 +5,15 @@ import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 import {
   articleReferenceCoverSrc,
   encodeArticleReferenceMarker,
+  encodeSiteArticleReferenceMarker,
   normalizeArticleReferenceSnapshot,
   type ArticleReferenceSnapshot,
+  type SiteArticleReferenceSnapshot,
 } from "@/lib/article-reference";
 
-type ArticleReferenceSelection = { marker: string; snapshot: ArticleReferenceSnapshot; category?: string; tags?: string };
+export type ArticleReferenceSelection =
+  | { marker: string; snapshot: ArticleReferenceSnapshot; category?: string; tags?: string }
+  | { marker: string; siteReference: SiteArticleReferenceSnapshot };
 type Props = {
   onClose: (selection: ArticleReferenceSelection | null) => void;
   showCategory?: boolean;
@@ -24,6 +28,7 @@ type PreviewResponse = {
 };
 type SummaryResponse = { configured?: boolean; summary?: string; keyPoints?: string[]; error?: string };
 type HistoryResponse = { references?: ArticleReferenceSnapshot[]; error?: string };
+type SitePostsResponse = { posts?: SiteArticleReferenceSnapshot[]; error?: string };
 
 async function fetchReferenceHistory(keyword: string): Promise<ArticleReferenceSnapshot[]> {
   const response = await fetch(`/api/admin/article-references/history?q=${encodeURIComponent(keyword)}`, {
@@ -35,7 +40,18 @@ async function fetchReferenceHistory(keyword: string): Promise<ArticleReferenceS
   return data.references ?? [];
 }
 
+async function fetchSitePosts(keyword: string): Promise<SiteArticleReferenceSnapshot[]> {
+  const response = await fetch(`/api/admin/article-references/site-posts?q=${encodeURIComponent(keyword)}`, {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({})) as SitePostsResponse;
+  if (!response.ok) throw new Error(data.error || "读取本站文章失败");
+  return data.posts ?? [];
+}
+
 export function ArticleReferenceDialog({ onClose, showCategory = false, categoryOptions = [], tagOptions = [] }: Props) {
+  const [tab, setTab] = useState<"web" | "site">("web");
   const [url, setUrl] = useState("");
   const [snapshot, setSnapshot] = useState<ArticleReferenceSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,6 +67,11 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
   const [history, setHistory] = useState<ArticleReferenceSnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [siteKeyword, setSiteKeyword] = useState("");
+  const [sitePosts, setSitePosts] = useState<SiteArticleReferenceSnapshot[]>([]);
+  const [siteLoading, setSiteLoading] = useState(false);
+  const [siteError, setSiteError] = useState("");
+  const [siteSelection, setSiteSelection] = useState<SiteArticleReferenceSnapshot | null>(null);
 
   const loadHistory = useCallback(async (keyword: string) => {
     setHistoryLoading(true);
@@ -61,6 +82,18 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
       setHistoryError(reason instanceof Error ? reason.message : "读取历史引用失败");
     } finally {
       setHistoryLoading(false);
+    }
+  }, []);
+
+  const loadSitePosts = useCallback(async (keyword: string) => {
+    setSiteLoading(true);
+    setSiteError("");
+    try {
+      setSitePosts(await fetchSitePosts(keyword));
+    } catch (reason) {
+      setSiteError(reason instanceof Error ? reason.message : "读取本站文章失败");
+    } finally {
+      setSiteLoading(false);
     }
   }, []);
 
@@ -143,6 +176,11 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
   }
 
   function insert() {
+    if (tab === "site") {
+      if (!siteSelection) return;
+      onClose({ marker: encodeSiteArticleReferenceMarker(siteSelection), siteReference: siteSelection });
+      return;
+    }
     if (!snapshot) return;
     onClose({ marker: encodeArticleReferenceMarker(snapshot), snapshot, ...(showCategory ? { category: category.trim(), tags } : {}) });
   }
@@ -165,11 +203,19 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id="article-reference-dialog-title" className="text-base font-semibold text-neutral-900">{showCategory ? "收藏文章" : "引用文章"}</h2>
-            <p className="mt-1 text-xs leading-5 text-neutral-500">粘贴公众号或网页文章链接，读取标题、来源和封面后{showCategory ? "保存到收藏库" : "插入引用卡片"}。</p>
+            <p className="mt-1 text-xs leading-5 text-neutral-500">{tab === "site" ? "搜索已发布的本站文章，插入简洁链接和摘要提示。" : `粘贴公众号或网页文章链接，读取标题、来源和封面后${showCategory ? "保存到收藏库" : "插入引用卡片"}。`}</p>
           </div>
           <button type="button" aria-label="关闭对话框" onClick={() => onClose(null)} className="rounded-full p-1 text-xl leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">×</button>
         </div>
 
+        {!showCategory && (
+          <div role="tablist" aria-label="引用来源" className="mt-4 flex w-fit rounded-lg bg-neutral-100 p-1 text-sm">
+            <button type="button" role="tab" aria-selected={tab === "web"} onClick={() => setTab("web")} className={`rounded-md px-3 py-1.5 transition-colors ${tab === "web" ? "bg-white font-medium text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-800"}`}>网页文章</button>
+            <button type="button" role="tab" aria-selected={tab === "site"} onClick={() => { setTab("site"); if (sitePosts.length === 0 && !siteLoading) void loadSitePosts(""); }} className={`rounded-md px-3 py-1.5 transition-colors ${tab === "site" ? "bg-white font-medium text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-800"}`}>本站搜索</button>
+          </div>
+        )}
+
+        {tab === "web" && <>
         <div className="mt-4 flex gap-2">
           <input
             value={url}
@@ -259,7 +305,7 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
           </div>
           {historyError && <p className="mt-2 text-xs text-red-600">{historyError}</p>}
           {!historyLoading && !historyError && history.length === 0 && <p className="mt-3 text-xs text-neutral-400">没有找到匹配的历史引用</p>}
-          {history.length > 0 && (
+        {history.length > 0 && (
             <div className="mt-3 flex flex-col gap-2">
               {history.map((item) => (
                 <button
@@ -282,7 +328,7 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
                 </button>
               ))}
             </div>
-          )}
+        )}
         </section>
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -314,12 +360,32 @@ export function ArticleReferenceDialog({ onClose, showCategory = false, category
             {archiveMessage && <p className="mt-3 text-xs text-green-700">{archiveMessage}</p>}
           </div>
         )}
+        </>}
 
-        <p className="mt-3 text-xs leading-5 text-neutral-400">{showCategory ? "收藏库只公开展示标题、来源、封面和摘要；阅读快照仅后台可读。" : "公开引用卡片只保存标题、来源、封面和摘要；勾选后会在本地保存阅读快照，正文不会对访客公开，AI 摘要也会优先使用该快照。"}</p>
+        {tab === "site" && (
+          <section className="mt-4" aria-label="本站文章搜索">
+            <div className="flex gap-2">
+              <input value={siteKeyword} onChange={(event) => setSiteKeyword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void loadSitePosts(siteKeyword); } }} placeholder="搜索已发布文章的标题、Slug 或正文" className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15" />
+              <button type="button" disabled={siteLoading} onClick={() => void loadSitePosts(siteKeyword)} className="shrink-0 rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">搜索</button>
+            </div>
+            {siteError && <p className="mt-2 text-xs text-red-600">{siteError}</p>}
+            {siteLoading && <p className="mt-3 text-xs text-neutral-400">搜索中…</p>}
+            {!siteLoading && !siteError && sitePosts.length === 0 && <p className="mt-3 text-xs text-neutral-400">没有找到已发布的本站文章</p>}
+            {sitePosts.length > 0 && <div className="mt-3 flex flex-col gap-2">
+              {sitePosts.map((item) => <button key={item.slug} type="button" onClick={() => setSiteSelection(item)} className={`w-full rounded-xl border p-3 text-left transition-colors ${siteSelection?.slug === item.slug ? "border-accent/50 bg-accent/5" : "border-neutral-200 hover:border-accent/30 hover:bg-neutral-50"}`}>
+                <span className="block text-sm font-medium text-neutral-800">{item.title}</span>
+                <span className="mt-1 block text-[11px] text-accent">/posts/{item.slug}</span>
+                {item.summary && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-neutral-500">{item.summary}</span>}
+              </button>)}
+            </div>}
+          </section>
+        )}
+
+        <p className="mt-3 text-xs leading-5 text-neutral-400">{tab === "site" ? "本站引用只插入文章链接与摘要提示，不创建外部引用卡片或阅读归档。" : showCategory ? "收藏库只公开展示标题、来源、封面和摘要；阅读快照仅后台可读。" : "公开引用卡片只保存标题、来源、封面和摘要；勾选后会在本地保存阅读快照，正文不会对访客公开，AI 摘要也会优先使用该快照。"}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={() => onClose(null)} className="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm text-neutral-600 hover:bg-neutral-50">取消</button>
-          {snapshot && !summarizing && !snapshot.summary && <button type="button" onClick={() => void generateSummary(snapshot)} className="rounded-lg border border-accent/40 px-3.5 py-2 text-sm text-accent hover:bg-accent/5">生成 AI 摘要</button>}
-          <button type="button" disabled={!snapshot} onClick={insert} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40">{showCategory ? "保存收藏" : "插入引用"}</button>
+          {tab === "web" && snapshot && !summarizing && !snapshot.summary && <button type="button" onClick={() => void generateSummary(snapshot)} className="rounded-lg border border-accent/40 px-3.5 py-2 text-sm text-accent hover:bg-accent/5">生成 AI 摘要</button>}
+          <button type="button" disabled={tab === "site" ? !siteSelection : !snapshot} onClick={insert} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40">{showCategory ? "保存收藏" : "插入引用"}</button>
         </div>
       </div>
     </div>

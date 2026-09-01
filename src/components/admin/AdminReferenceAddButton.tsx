@@ -3,8 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveReferenceLibraryAction } from "@/lib/actions/posts";
-import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
-import { ArticleReferenceDialog } from "./ArticleReferenceDialog";
+import { ArticleReferenceDialog, type ArticleReferenceSelection } from "./ArticleReferenceDialog";
 
 /** 引用库入口：保存站外文章本身，不要求先选择本地文章。 */
 export default function AdminReferenceAddButton({ categoryOptions = [], tagOptions = [] }: { categoryOptions?: string[]; tagOptions?: string[] }) {
@@ -14,9 +13,9 @@ export default function AdminReferenceAddButton({ categoryOptions = [], tagOptio
   const [error, setError] = useState("");
   const [, startTransition] = useTransition();
 
-  function selectReference(selection: { marker: string; snapshot: ArticleReferenceSnapshot; category?: string; tags?: string } | null) {
+  function selectReference(selection: ArticleReferenceSelection | null) {
     menuRef.current?.removeAttribute("open");
-    if (!selection) return;
+    if (!selection || !("snapshot" in selection)) return;
     setMessage("");
     setError("");
     startTransition(async () => {

@@ -2711,6 +2711,70 @@ summary {
   display: none;
 }
 
+/* 本站文章引用保持正文链接的轻量形态；摘要在悬停、键盘聚焦或触摸首按时出现。 */
+:is(.article-body, .classic-article-prose) .site-article-reference {
+  position: relative;
+  display: inline;
+}
+
+:is(.article-body, .classic-article-prose) .site-article-reference-link {
+  color: var(--accent);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.24em;
+  font-weight: 600;
+}
+
+:is(.article-body, .classic-article-prose) .site-article-reference-icon {
+  width: 0.86em;
+  height: 0.86em;
+  flex: 0 0 auto;
+  stroke-width: 2.1;
+}
+
+:is(.article-body, .classic-article-prose) .site-article-reference-tooltip {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 0.65rem);
+  left: 50%;
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--divider) 84%, var(--accent));
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--paper) 96%, var(--soft));
+  box-shadow: 0 12px 28px rgb(0 0 0 / 12%);
+  color: var(--muted);
+  font-family: var(--font-site-sans);
+  font-size: 0.82em;
+  font-weight: 400;
+  line-height: 1.65;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 0.25rem);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s linear 160ms;
+  visibility: hidden;
+}
+
+:is(.article-body, .classic-article-prose) .site-article-reference-tooltip::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 1px solid color-mix(in srgb, var(--divider) 84%, var(--accent));
+  border-bottom: 1px solid color-mix(in srgb, var(--divider) 84%, var(--accent));
+  background: color-mix(in srgb, var(--paper) 96%, var(--soft));
+  content: "";
+  transform: translate(-50%, -0.3rem) rotate(45deg);
+}
+
+:is(.article-body, .classic-article-prose) .site-article-reference:is(:hover, :focus-within, .is-tooltip-open) .site-article-reference-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition: opacity 160ms ease, transform 160ms ease;
+  visibility: visible;
+}
+
 /* 文章引用卡片：正文只渲染本地快照，摘要默认折叠，原文在新标签页打开。 */
 .article-reference-card {
   display: block;
@@ -9307,4 +9371,17 @@ html[data-layout-theme="classic"] .classic-article-detail .comment-submit {
     ) a {
     -webkit-tap-highlight-color: transparent;
   }
+}
+
+/* 本站引用沿用经典版正文链接的颜色与虚线下划线。 */
+html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose .site-article-reference-link {
+  color: var(--text);
+  border-bottom: 1px dashed currentColor;
+  text-decoration: none;
+}
+
+html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose .site-article-reference-link:hover,
+html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose .site-article-reference-link:focus-visible {
+  color: var(--accent);
+  border-bottom-color: currentColor;
 }

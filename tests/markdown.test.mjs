@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { renderMarkdown, renderMarkdownInline, extractHeadings, stripMarkdown } from "../src/lib/markdown.ts";
 import { normalizeMediaShortcodes } from "../src/lib/media-shortcodes.ts";
+import { encodeSiteArticleReferenceMarker } from "../src/lib/article-reference.ts";
 
 test("escapes raw HTML instead of executing it", () => {
   const html = renderMarkdown('<script>alert(1)</script>\n\n<img src="x" onerror="alert(2)">');
@@ -154,4 +155,20 @@ test("invalid media shortcodes remain plain text", () => {
   const html = renderMarkdown("!video https://evil.example/embed");
   assert.ok(html.includes("!video"));
   assert.ok(!html.includes("<iframe"));
+});
+
+test("local article references render as a compact link with an inline summary tooltip", () => {
+  const marker = encodeSiteArticleReferenceMarker({
+    slug: "local-article",
+    title: "本站文章标题",
+    summary: "这是一段供悬停或触摸查看的文章摘要。",
+  });
+  const html = renderMarkdown(`引用：${marker}，可以继续阅读。`);
+  assert.ok(html.includes('class="site-article-reference-link"'));
+  assert.ok(html.includes('href="/posts/local-article"'));
+  assert.ok(html.includes('<p>引用：<span class="site-article-reference">'));
+  assert.ok(html.includes("本站文章标题"));
+  assert.ok(html.includes("这是一段供悬停或触摸查看的文章摘要。"));
+  assert.ok(!html.includes('class="article-reference-card"'));
+  assert.equal(stripMarkdown(`正文\n${marker}`, 200), "正文");
 });

@@ -17,6 +17,7 @@ const {
   getPost,
   getPostAttachments,
   listArticleReferencesForPost,
+  searchPublishedPostsForReference,
   syncArticleReferences,
   updatePost,
 } = await import("../src/lib/db.ts");
@@ -77,4 +78,13 @@ test("post writes preserve slug, state, attachment and reference invariants", ()
   deletePost(first.id);
   assert.equal(getPost(first.id), undefined);
   assert.equal(getPostAttachments(first.id).length, 0);
+});
+
+test("local article reference search only exposes published posts and bounds results", () => {
+  createPost({ title: "可引用的本站文章", content: "这篇文章可被本站搜索引用。", status: "published" });
+  createPost({ title: "不可公开引用", content: "草稿不应出现在本站引用搜索。", status: "draft" });
+
+  const results = searchPublishedPostsForReference("本站搜索", 20);
+  assert.deepEqual(results.map((post) => post.title), ["可引用的本站文章"]);
+  assert.equal(searchPublishedPostsForReference("不可公开", 20).length, 0);
 });

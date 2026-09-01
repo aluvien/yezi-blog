@@ -19,6 +19,13 @@ export interface ArticleReferenceSnapshot {
   keyPoints: string[];
 }
 
+/** 本站文章引用：只保留跳转所需的 slug 与简短提示信息，不进入外部引用库。 */
+export interface SiteArticleReferenceSnapshot {
+  slug: string;
+  title: string;
+  summary: string;
+}
+
 const MAX_TITLE_LENGTH = 240;
 const MAX_SOURCE_LENGTH = 100;
 const MAX_AUTHOR_LENGTH = 100;
@@ -27,6 +34,7 @@ const MAX_DESCRIPTION_LENGTH = 500;
 const MAX_SUMMARY_LENGTH = 800;
 const MAX_POINT_LENGTH = 180;
 const MAX_POINTS = 6;
+const SITE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
 function text(value: unknown, maxLength: number): string {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
@@ -58,6 +66,13 @@ function decodeBase64Url(value: string): string {
   const binary = atob(base64);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+function encodeBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 function normalizeUrl(value: unknown): string {
@@ -101,6 +116,16 @@ export function normalizeArticleReferenceSnapshot(input: Partial<ArticleReferenc
   };
 }
 
+export function normalizeSiteArticleReferenceSnapshot(input: Partial<SiteArticleReferenceSnapshot>): SiteArticleReferenceSnapshot | null {
+  const slug = text(input.slug, 80).toLocaleLowerCase();
+  if (!SITE_SLUG_PATTERN.test(slug)) return null;
+  return {
+    slug,
+    title: text(input.title, MAX_TITLE_LENGTH) || "本站文章",
+    summary: text(input.summary, MAX_DESCRIPTION_LENGTH),
+  };
+}
+
 /**
  * 根据规范化网址生成稳定的短引用 ID。
  * 引用正文只保存这个 ID，完整快照继续放在文章引用缓存中，避免 Markdown 被长 URL 和 JSON 撑大。
@@ -121,6 +146,28 @@ export function articleReferenceToken(input: Partial<ArticleReferenceSnapshot>):
 export function encodeArticleReferenceMarker(input: Partial<ArticleReferenceSnapshot>): string {
   const snapshot = normalizeArticleReferenceSnapshot(input);
   return `!reference:${articleReferenceToken(snapshot)}`;
+}
+
+/** 本站文章引用使用独立的紧凑快照，不会被同步到 article_references 表。 */
+export function encodeSiteArticleReferenceMarker(input: Partial<SiteArticleReferenceSnapshot>): string {
+  const snapshot = normalizeSiteArticleReferenceSnapshot(input);
+  if (!snapshot) return "";
+  return `!site-reference:${encodeBase64Url(JSON.stringify({ s: snapshot.slug, t: snapshot.title, x: snapshot.summary }))}`;
+}
+
+export function decodeSiteArticleReferencePayload(payload: string): SiteArticleReferenceSnapshot | null {
+  try {
+    const parsed = JSON.parse(decodeBase64Url(payload)) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    return normalizeSiteArticleReferenceSnapshot({
+      slug: typeof record.s === "string" ? record.s : "",
+      title: typeof record.t === "string" ? record.t : "",
+      summary: typeof record.x === "string" ? record.x : "",
+    });
+  } catch {
+    return null;
+  }
 }
 
 export function decodeArticleReferencePayload(payload: string, references: readonly ArticleReferenceSnapshot[] = []): ArticleReferenceSnapshot | null {
@@ -165,6 +212,10 @@ function referenceMarkerRegex(): RegExp {
   return /^[ \t]*!reference(?::|[ \t]+)(\S+)[ \t]*$/gm;
 }
 
+function siteReferenceMarkerRegex(): RegExp {
+  return /!site-reference(?::|[ \t]+)([A-Za-z0-9_-]+)/g;
+}
+
 /** 读取文章正文里已经插入的引用快照，供保存时写入 SQLite 缓存。 */
 export function parseArticleReferenceMarkers(content: string, cachedReferences: readonly ArticleReferenceSnapshot[] = []): ArticleReferenceSnapshot[] {
   const snapshots: ArticleReferenceSnapshot[] = [];
@@ -187,6 +238,20 @@ export function compactArticleReferenceMarkers(content: string, cachedReferences
 export function expandArticleReferenceMarkers(content: string): string {
   return content.replace(referenceMarkerRegex(), (_line, payload: string) => {
     return `\n\`\`\`reference\n${payload}\n\`\`\`\n`;
+  });
+}
+
+/**
+ * 本站文章引用是真正的行内标记。先用纯文本占位符穿过 Markdown 与白名单清洗，
+ * 最后再恢复为已转义的固定 HTML，避免把原始 HTML 放回作者正文中。
+ */
+export function expandSiteArticleReferenceMarkers(content: string, replacements: Map<string, string>): string {
+  return content.replace(siteReferenceMarkerRegex(), (marker, payload: string) => {
+    const snapshot = decodeSiteArticleReferencePayload(payload);
+    if (!snapshot) return marker;
+    const token = `YEZISITEREFERENCE${replacements.size}TOKEN`;
+    replacements.set(token, siteArticleReferenceHtml(snapshot));
+    return token;
   });
 }
 
@@ -216,6 +281,15 @@ export function articleReferenceCoverSrc(coverUrl: string, sourceUrl: string): s
   if (coverUrl.startsWith("/uploads/")) return coverUrl;
   const params = new URLSearchParams({ url: coverUrl, referer: sourceUrl });
   return `/api/article-references/image?${params.toString()}`;
+}
+
+/** 生成简洁的本站文章链接；摘要交由全局提示层在悬停/触摸时展示。 */
+export function siteArticleReferenceHtml(input: Partial<SiteArticleReferenceSnapshot>): string {
+  const snapshot = normalizeSiteArticleReferenceSnapshot(input);
+  if (!snapshot) return "";
+  const href = `/posts/${encodeURIComponent(snapshot.slug)}`;
+  const hint = snapshot.summary || "点击前往阅读全文";
+  return `<span class="site-article-reference"><a class="site-article-reference-link" href="${escapeHtml(href)}" aria-label="${escapeHtml(`${snapshot.title}。${hint}`)}"><svg class="site-article-reference-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"></path><path d="M8 7h9v9"></path></svg><span>${escapeHtml(snapshot.title)}</span></a><span class="site-article-reference-tooltip" role="tooltip">${escapeHtml(hint)}</span></span>`;
 }
 
 /** 生成前台和后台预览共用的引用卡片 HTML。 */

@@ -3,7 +3,10 @@ import sanitizeHtml from "sanitize-html";
 import {
   articleReferenceCardHtml,
   decodeArticleReferencePayload,
+  decodeSiteArticleReferencePayload,
   expandArticleReferenceMarkers,
+  expandSiteArticleReferenceMarkers,
+  siteArticleReferenceHtml,
   type ArticleReferenceSnapshot,
 } from "@/lib/article-reference";
 import { musicContainerHtml, parseMusicBlock, parseMusicSpec } from "@/lib/music";
@@ -18,7 +21,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "aside", "details", "summary", "time", "iframe", "button", "svg", "path", "rect",
   ],
   allowedAttributes: {
-    a: ["href", "title", "target", "rel", "class"],
+    a: ["href", "title", "target", "rel", "class", "aria-label"],
     img: ["src", "srcset", "sizes", "alt", "title", "loading", "decoding", "class", "data-original-src"],
     code: ["class"],
     blockquote: ["class"],
@@ -32,7 +35,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     summary: ["class"],
     time: ["class", "datetime"],
     iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
-    span: ["class", "aria-hidden"],
+    span: ["class", "aria-hidden", "role"],
     button: ["class", "type", "aria-label", "title", "data-state", "data-code-copy"],
     svg: ["class", "width", "height", "viewBox", "fill", "stroke", "stroke-width", "aria-hidden"],
     path: ["d", "fill", "stroke", "stroke-width"],
@@ -166,6 +169,7 @@ function expandSafeCalloutHtml(content: string, blocks: Map<string, string>): st
 export function renderMarkdown(content: string, references: readonly ArticleReferenceSnapshot[] = []): string {
   const renderer = new marked.Renderer();
   const specialBlocks = new Map<string, string>();
+  const inlineSiteReferences = new Map<string, string>();
   let counter = 0;
 
   renderer.html = function (this: Renderer, { text }: Tokens.HTML | Tokens.Tag) {
@@ -204,6 +208,7 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
   // ```music 代码块：渲染为 QQ VIP 播放器容器，交由前端 MusicInitializer 初始化。
   // ```video 代码块：只渲染由 parseVideoBlock 校验过的 Bilibili/YouTube iframe。
   // !reference:... 会先展开成 reference 代码块，使用正文内置的元数据卡片；不会在前台请求第三方网页。
+  // !site-reference:... 则渲染为本站文章链接与摘要提示，不使用外部引用卡片样式。
   // 非 music/video 语言使用与目标主题一致的代码容器：顶部语言/编码信息、
   // 行号以及复制按钮。代码文本本身仍由 escapeHtml 处理，不打开任意 HTML。
   const defaultCode = renderer.code.bind(renderer);
@@ -229,6 +234,10 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
       const snapshot = decodeArticleReferencePayload(token.text.trim(), references);
       return snapshot ? articleReferenceCardHtml(snapshot) : defaultCode(token);
     }
+    if (language === "site-reference") {
+      const snapshot = decodeSiteArticleReferencePayload(token.text.trim());
+      return snapshot ? siteArticleReferenceHtml(snapshot) : defaultCode(token);
+    }
     const languageLabel = language ? ({
       js: "JavaScript",
       javascript: "JavaScript",
@@ -253,10 +262,12 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
     return `<div class="code-block" data-lang="${escapeHtml(language)}" data-lines="${lines.length}"><div class="code-toolbar"><span class="code-lang">${iconMarkup}<span>${escapeHtml(languageLabel)}</span></span><div class="code-meta"><span class="code-info">UTF-8</span><span class="code-separator">|</span><span class="code-info">${lines.length} Lines</span><span class="code-separator">|</span>${copyMarkup}</div></div>${codeMarkup}</div>`;
   };
 
-  const expandedContent = expandMediaShortcodes(expandArticleReferenceMarkers(content));
+  const expandedContent = expandMediaShortcodes(expandArticleReferenceMarkers(expandSiteArticleReferenceMarkers(content, inlineSiteReferences)));
   const safeHtmlContent = expandSafeCalloutHtml(expandedContent, specialBlocks);
   const preparedContent = expandCalloutDirectives(safeHtmlContent, references, specialBlocks);
-  return sanitizeHtml(marked.parse(preparedContent, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
+  let html = sanitizeHtml(marked.parse(preparedContent, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
+  for (const [token, markup] of inlineSiteReferences) html = html.replaceAll(token, markup);
+  return html;
 }
 
 /**
@@ -313,6 +324,7 @@ export function extractHeadings(content: string): TocHeading[] {
 export function stripMarkdown(content: string, maxLength = 100): string {
   let text = content
     .replace(/^[ \t]*!reference(?::|[ \t]+)\S+[ \t]*$/gm, " ")
+    .replace(/^[ \t]*!site-reference(?::|[ \t]+)\S+[ \t]*$/gm, " ")
     .replace(/^[ \t]*!(?:music|video)\s+.+?[ \t]*$/gmi, " ")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]*)`/g, "$1")

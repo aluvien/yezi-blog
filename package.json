@@ -8,6 +8,7 @@
   "scripts": {
     "postinstall": "node scripts/patch-aplayer.mjs",
     "dev": "next dev -p 3030",
+    "dev:qq-music": "node scripts/start-local-qq-music-api.mjs",
     "build": "node scripts/build.mjs",
     "start": "node scripts/start-standalone.mjs",
     "seed": "node scripts/seed.mjs",
