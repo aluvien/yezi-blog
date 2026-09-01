@@ -15,6 +15,10 @@ const replacements = [
     'this.player.template.title.textContent="No audio",this.player.template.author.textContent=""',
   ],
   [
+    '<span class="aplayer-icon aplayer-icon-back">\\n                    \',t+=s.skip,t+=\'\\n                </span>\\n                <span class="aplayer-icon aplayer-icon-play">\\n                    \',t+=s.play,t+=\'\\n                </span>\\n                <span class="aplayer-icon aplayer-icon-forward">\\n                    \',t+=s.skip,t+=\'\\n                </span>\\n                ',
+    '<button type="button" class="aplayer-icon aplayer-icon-back">\\n                    \',t+=s.skip,t+=\'\\n                </button>\\n                <button type="button" class="aplayer-icon aplayer-icon-play">\\n                    \',t+=s.play,t+=\'\\n                </button>\\n                <button type="button" class="aplayer-icon aplayer-icon-forward">\\n                    \',t+=s.skip,t+=\'\\n                </button>\\n                ',
+  ],
+  [
     'this.player.template.skipPlayButton.addEventListener("click",function(){e.player.toggle()})',
     'this.player.template.skipPlayButton.addEventListener("click",function(){e.player.audio.paused?e.player.play():e.player.pause()})',
   ],
@@ -29,9 +33,13 @@ const replacements = [
 ];
 
 for (const [unsafe, safe] of replacements) {
-  if (source.includes(safe)) continue;
-  if (!source.includes(unsafe)) throw new Error("APlayer 版本或目标 sink 已变化，拒绝静默跳过安全补丁");
-  source = source.replace(unsafe, safe);
+  if (!source.includes(unsafe)) {
+    if (source.includes(safe)) continue;
+    throw new Error("APlayer 版本或目标 sink 已变化，拒绝静默跳过安全补丁");
+  }
+  // APlayer 的常规与窄屏模板包含重复控件，必须全部替换；只改第一个会让
+  // 手机端仍保留首次触摸只聚焦、第二次才点击的 span 伪按钮。
+  source = source.replaceAll(unsafe, safe);
 }
 
 fs.writeFileSync(target, source);

@@ -46,6 +46,7 @@ declare module "aplayer" {
     destroy(): void;
     play(): void;
     pause(): void;
+    skipBack(): void;
     skipForward(): void;
     paused: boolean;
     audio: HTMLAudioElement;

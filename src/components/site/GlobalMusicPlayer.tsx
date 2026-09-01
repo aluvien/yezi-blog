@@ -17,6 +17,12 @@ import {
 import { getMusicLyrics } from "@/lib/music-lyrics";
 import { lyricAt, type LyricLine } from "@/lib/lyrics";
 import { emitGlobalPlaybackState, setGlobalPlayListener } from "@/lib/player-store";
+import {
+  clearMediaSession,
+  installMediaSessionActions,
+  syncMediaSessionMetadata,
+  syncMediaSessionPlayback,
+} from "@/lib/media-session";
 import { SiteImage } from "@/components/site/SiteImage";
 
 type APlayerInstance = import("aplayer").default;
@@ -152,6 +158,7 @@ export function GlobalMusicPlayer({
       : null;
     let defaultMusicLoaded = false;
     let defaultMusicLoading: Promise<void> | null = null;
+    let cleanupMediaSessionActions: (() => void) | null = null;
 
     function updateCurrentTrack(track: MusicTrack | null): void {
       currentTrackRef.current = track;
@@ -469,6 +476,7 @@ export function GlobalMusicPlayer({
           theme: accent,
         });
         playerRef.current = player;
+        cleanupMediaSessionActions = installMediaSessionActions(player);
         // APlayer 通过媒体元数据补齐时长，供统一播放状态展示。
         player.on("durationchange", () => {
           const track = player.list.audios[player.list.index] as MusicTrack | undefined;
@@ -477,12 +485,14 @@ export function GlobalMusicPlayer({
           track.duration = duration;
           const normalized = trackMap.get(trackKey(track));
           if (normalized) normalized.duration = duration;
+          syncMediaSessionPlayback(player.audio, !player.paused);
         });
         player.on("play", () => {
           pauseCompetingMedia(player);
           setPlaying(true);
           decoratePlayerChrome(player);
           emitPlayerState(player, true, currentCardIdRef.current);
+          syncMediaSessionPlayback(player.audio, true);
         });
         player.on("pause", () => {
           window.setTimeout(() => {
@@ -492,14 +502,17 @@ export function GlobalMusicPlayer({
           setPlaying(false);
           decoratePlayerChrome(player);
           emitPlayerState(player, false, currentCardIdRef.current);
+          syncMediaSessionPlayback(player.audio, false);
         });
         player.on("ended", () => {
           setPlaying(false);
           currentCardIdRef.current = null;
           emitPlayerState(player, false, null);
+          syncMediaSessionPlayback(player.audio, false);
         });
         player.on("timeupdate", () => {
           emitPlayerState(player, !player.paused, currentCardIdRef.current);
+          syncMediaSessionPlayback(player.audio, !player.paused);
         });
         // 面板内手动切歌：按当前 index 找到归属卡片，回显"正在播放"
         player.on("listswitch", (event) => {
@@ -511,6 +524,9 @@ export function GlobalMusicPlayer({
           queueMicrotask(() => {
             decoratePlayerChrome(player);
             emitPlayerState(player, !player.paused, cardId, index ?? player.list.index);
+            const track = player.list.audios[index ?? player.list.index] as MusicTrack | undefined;
+            if (track) syncMediaSessionMetadata(trackMap.get(trackKey(track)) ?? track);
+            syncMediaSessionPlayback(player.audio, !player.paused);
           });
         });
 
@@ -544,6 +560,9 @@ export function GlobalMusicPlayer({
     return () => {
       disposed = true;
       unlisten?.();
+      cleanupMediaSessionActions?.();
+      cleanupMediaSessionActions = null;
+      clearMediaSession();
       try {
         playerRef.current?.destroy();
       } catch {

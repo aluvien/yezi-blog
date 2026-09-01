@@ -15,6 +15,8 @@ test("reproducible APlayer patch replaces the current-track HTML sinks", () => {
 
 test("APlayer controls playback from the real media state and swaps icons synchronously", () => {
   const bundle = fs.readFileSync(path.resolve("node_modules/aplayer/dist/APlayer.min.js"), "utf8");
+  assert.match(bundle, /<button type="button" class="aplayer-icon aplayer-icon-play">/);
+  assert.doesNotMatch(bundle, /<span class="aplayer-icon aplayer-icon-(?:back|play|forward)">/);
   assert.match(bundle, /skipPlayButton\.addEventListener\("click",function\(\)\{e\.player\.audio\.paused\?e\.player\.play\(\):e\.player\.pause\(\)\}\)/);
   assert.doesNotMatch(bundle, /skipPlayButton\.addEventListener\("click",function\(\)\{e\.player\.toggle\(\)\}\)/);
   assert.match(bundle, /template\.button\.innerHTML=o\.default\.pause,this\.template\.skipPlayButton\.innerHTML=o\.default\.pause/);
