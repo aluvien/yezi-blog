@@ -14,6 +14,18 @@ const replacements = [
     'this.player.template.title.innerHTML="No audio",this.player.template.author.innerHTML=""',
     'this.player.template.title.textContent="No audio",this.player.template.author.textContent=""',
   ],
+  [
+    'this.player.template.skipPlayButton.addEventListener("click",function(){e.player.toggle()})',
+    'this.player.template.skipPlayButton.addEventListener("click",function(){e.player.audio.paused?e.player.play():e.player.pause()})',
+  ],
+  [
+    'this.template.button.innerHTML="",setTimeout(function(){e.template.button.innerHTML=o.default.pause},100),this.template.skipPlayButton.innerHTML=o.default.pause',
+    'this.template.button.innerHTML=o.default.pause,this.template.skipPlayButton.innerHTML=o.default.pause',
+  ],
+  [
+    'this.template.button.innerHTML="",setTimeout(function(){e.template.button.innerHTML=o.default.play},100),this.template.skipPlayButton.innerHTML=o.default.play',
+    'this.template.button.innerHTML=o.default.play,this.template.skipPlayButton.innerHTML=o.default.play',
+  ],
 ];
 
 for (const [unsafe, safe] of replacements) {

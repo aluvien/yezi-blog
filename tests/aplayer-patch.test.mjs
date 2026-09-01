@@ -13,6 +13,15 @@ test("reproducible APlayer patch replaces the current-track HTML sinks", () => {
   assert.doesNotMatch(bundle, /template\.author\.innerHTML=t\.artist/);
 });
 
+test("APlayer controls playback from the real media state and swaps icons synchronously", () => {
+  const bundle = fs.readFileSync(path.resolve("node_modules/aplayer/dist/APlayer.min.js"), "utf8");
+  assert.match(bundle, /skipPlayButton\.addEventListener\("click",function\(\)\{e\.player\.audio\.paused\?e\.player\.play\(\):e\.player\.pause\(\)\}\)/);
+  assert.doesNotMatch(bundle, /skipPlayButton\.addEventListener\("click",function\(\)\{e\.player\.toggle\(\)\}\)/);
+  assert.match(bundle, /template\.button\.innerHTML=o\.default\.pause,this\.template\.skipPlayButton\.innerHTML=o\.default\.pause/);
+  assert.match(bundle, /template\.button\.innerHTML=o\.default\.play,this\.template\.skipPlayButton\.innerHTML=o\.default\.play/);
+  assert.doesNotMatch(bundle, /template\.button\.innerHTML="",setTimeout\(function\(\)\{e\.template\.button\.innerHTML=o\.default\.(?:play|pause)\},100\)/);
+});
+
 test("hostile upstream labels remain text at the final player DOM boundary", () => {
   const { document } = parseHTML("<div><span id=title></span><span id=artist></span></div>");
   const title = document.getElementById("title");

@@ -4810,8 +4810,27 @@ html[data-layout-theme="classic"] :is(.classic-home-feed, #bits-list) .music-tri
   background: var(--accent);
 }
 .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play svg {
-  width: 18px;
-  height: 18px;
+  /* APlayer 会在状态切换时替换 SVG；稳定图标由按钮伪元素绘制。 */
+  display: none !important;
+}
+.global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play::before {
+  content: "";
+  display: block;
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 11px solid #fff;
+  transform: translateX(1px);
+}
+.global-player-panel .aplayer.aplayer-host.is-playing .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play::before {
+  width: 4px;
+  height: 14px;
+  border: 0;
+  border-radius: 1px;
+  background: #fff;
+  box-shadow: 8px 0 0 #fff;
+  transform: translateX(-4px);
 }
 .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-order svg,
 .global-player-panel .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-menu svg {
