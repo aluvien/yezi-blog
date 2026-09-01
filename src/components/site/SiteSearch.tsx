@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
-export function SiteSearch() {
+export function SiteSearch({ placeholder = "搜索文章和想法" }: { placeholder?: string } = {}) {
   const router = useRouter();
   const searchRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -59,7 +59,7 @@ export function SiteSearch() {
               id="site-search-input"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索文章和想法"
+              placeholder={placeholder}
               autoFocus
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
