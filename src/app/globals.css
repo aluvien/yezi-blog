@@ -3747,10 +3747,16 @@ textarea.comment-field {
   display: none;
 }
 
+.moment-inline-music .music-trigger.has-lyric .music-trigger-artist {
+  flex: 1 1 auto;
+  max-width: 19em;
+}
+
 .moment-inline-music .music-trigger-lyric {
   position: static;
   display: none;
-  max-width: 19em;
+  width: 100%;
+  max-width: none;
   overflow: hidden;
   color: var(--accent-strong);
   font: inherit;
