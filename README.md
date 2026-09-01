@@ -1,6 +1,6 @@
 # Yezi's Blog
 
-个人博客：文章、想法（类朋友圈短内容）、作品集与评论。前后台一体，数据存放在本地 SQLite（`better-sqlite3`），无外部服务依赖。
+个人博客：文章、想法（类朋友圈短内容）、作品集与评论。前后台一体，数据存放在本地 SQLite（`better-sqlite3`）；QQ 音乐和 Telegram 属于可选的本机/外部通知能力，不启用时仍可独立运行。
 
 - 前台：首页内容流、文章详情（Markdown 排版）、想法、作品、关于、评论（无感防垃圾、审核后展示、作者回复）、全站音乐播放器
 - 后台：`/admin` 管理文章草稿与发布、分类、附件、想法、作品，以及评论审核、撤回和作者回复；站点设置可修改页头、页脚、Logo 与音乐播放器；可接入自建 QQ Music API 扫码登录并搜索选歌；文章编辑器支持引用公众号/网页文章
@@ -8,7 +8,7 @@
 
 ## 界面截图
 
-截图使用本地生产模式生成，覆盖前台桌面端、前台手机端和后台手机端。后台截图中的仪表盘卡片、分类/标签管理、文章元信息、评论审核和站点设置均来自本地演示库。
+截图使用本地生产模式生成，覆盖前台桌面端、前台手机端和后台手机端。全部截图于 2026-09-01 重新采集，使用本地演示库当前的 Mortal 主题与正常亮色模式；桌面截图为 1440×1000，手机截图为 390×844。后台截图中的仪表盘卡片、分类/标签管理、文章元信息、评论审核和站点设置均来自本地演示库，实际颜色会随后台主题设置变化。
 
 ### 前台桌面端
 
@@ -45,6 +45,15 @@ npm run seed                       # 可选：写入演示数据（仅空库时�
 npm run dev                        # http://localhost:3030
 # 生产模式：先 npm run build，再 npm start
 ```
+
+本地同时运行网站和 QQ 音乐 API 时，先在一个终端启动内置的 QQ Music API（默认 3200 端口），再在另一个终端启动博客（默认 3030 端口）：
+
+```bash
+PORT=3200 node node_modules/@yakult-green-tea/qq-music-api/dist/src/app.js
+npm run build && npm start
+```
+
+QQ 音乐服务只需要监听 `127.0.0.1`，不要把 3200 端口暴露到公网。
 
 后台入口 `http://localhost:3030/admin`，密码为 `.env.local` 中的 `ADMIN_PASSWORD`。
 
@@ -141,14 +150,16 @@ Bilibili 支持完整视频 URL、BV/av ID 和分 P 参数，YouTube 支持完�
 
 ### QQ 音乐扫码登录、搜索与播放
 
-项目可选接入 [sansenjian/qq-music-api](https://github.com/sansenjian/qq-music-api)，用于使用自己的 QQ 音乐账号扫码登录、在后台搜索歌曲，并由本站服务端获取播放地址。
+项目可选接入 [yakult-green-tea/qq-music-api](https://github.com/yakult-green-tea/qq-music-api)，用于使用自己的 QQ 音乐账号扫码登录、在后台搜索歌曲，并由本站服务端获取播放地址。该项目是基于 [Rain120/qq-music-api](https://github.com/Rain120/qq-music-api) 的社区维护版本，非腾讯官方服务。
 
 接入后：
 
 1. 在“设置 → 音乐设置”选择“使用手机 QQ 扫码”或“使用 QQ 音乐 App 扫码”。QQ 音乐 App 通道由博客 Node 进程直接连接 `u.y.qq.com` 与 `mu.y.qq.com`，不会修改或重启现有 QQ Music API 服务。
 2. 扫码并确认；两种通道最终都把兼容 Cookie 保存在服务器的受限会话文件中，并仅通过本机请求头转给 QQ Music API。网站数据库、访客浏览器和 Telegram 均不会保存或收到 Cookie。
 3. 在文章或想法编辑器点击“+ 音乐 → QQ 音乐搜索”，选择歌曲即可插入。
-4. 插入的格式为 `qqvip:歌曲MID:song` 或 `qqvip:歌单ID:playlist`。前台播放时由本站 `/api/music/qq` 服务端接口临时解析播放地址，并带有限频保护。
+4. 插入的格式为 `qqvip:歌曲MID:song` 或 `qqvip:歌单ID:playlist`。前台只有在用户真正播放时才由本站 `/api/music/qq` 服务端接口临时解析播放地址，并带有限频保护；歌曲名称、歌手和封面等稳定元数据会写入 SQLite 缓存，临时播放地址和 Cookie 不会写入数据库。
+
+健康检查只请求一首探测歌曲的 `getMusicPlay` 播放地址，并检查返回的 URL 是否有效，不会下载或播放整首音频。后台可按 1 / 6 / 12 / 24 小时调度；程序及上游项目均未公布 QQ 音乐每日请求配额，因此应以实际响应和退避提示为准。
 
 当前音乐系统只使用 `qqvip`。请仅使用自己拥有合法播放权限的账号，并留意 QQ 音乐的服务规则；第三方接口或上游登录机制变化后，可能需要重新扫码登录。
 
@@ -361,7 +372,7 @@ QQ Music API 应作为博客之外的本机服务运行，**不要**放在博客
 ```bash
 mkdir -p /www/wwwroot/services
 cd /www/wwwroot/services
-git clone https://github.com/sansenjian/qq-music-api.git
+git clone https://github.com/yakult-green-tea/qq-music-api.git
 cd qq-music-api
 npm ci
 npm run build
