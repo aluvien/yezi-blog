@@ -14,7 +14,7 @@
 
 | 首页 | 文章详情 | 作品集 |
 | --- | --- | --- |
-| ![前台首页桌面端](docs/screenshots/frontend-home-desktop.jpg) | ![文章详情桌面端](docs/screenshots/frontend-article-desktop.jpg) | ![作品集桌面端](docs/screenshots/frontend-works-desktop.jpg) |
+| ![前台首页桌面端](docs/screenshots/frontend-home-desktop-current.jpg) | ![文章详情桌面端](docs/screenshots/frontend-article-desktop.jpg) | ![作品集桌面端](docs/screenshots/frontend-works-desktop.jpg) |
 
 ### 前台手机端
 
