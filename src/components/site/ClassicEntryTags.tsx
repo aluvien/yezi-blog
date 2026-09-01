@@ -12,12 +12,24 @@ const DIALOG_DISMISS_FLICK_DISTANCE = 42;
 const DIALOG_DISMISS_FLICK_VELOCITY = 0.8;
 
 /** 经典归档页的标签入口：使用原生 dialog，保持键盘与移动端关闭行为。 */
-export function ClassicEntryTags({ tags }: { tags: EntryTag[] }) {
+export function ClassicEntryTags({
+  tags,
+  activeTag,
+  triggerLabel = "#标签",
+  dialogId = "archive-tags",
+}: {
+  tags: EntryTag[];
+  activeTag?: string;
+  triggerLabel?: string;
+  dialogId?: string;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dragRef = useRef<DialogDrag | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [open, setOpen] = useState(false);
+  const activeTagKey = activeTag?.trim().toLocaleLowerCase();
 
   function closeDialog() {
     const dialog = dialogRef.current;
@@ -26,6 +38,7 @@ export function ClassicEntryTags({ tags }: { tags: EntryTag[] }) {
     dragRef.current = null;
     setDragging(false);
     setDragOffset(0);
+    setOpen(false);
     // Safari may retain a native focus ring on the trigger after closing the
     // dialog. The content target itself has no outline, so clear this pointer
     // focus rather than leaving a blue box around “#标签”.
@@ -106,6 +119,7 @@ export function ClassicEntryTags({ tags }: { tags: EntryTag[] }) {
     const dialog = dialogRef.current;
     if (!dialog || dialog.open) return;
     dialog.showModal();
+    setOpen(true);
   }
 
   return (
@@ -115,14 +129,15 @@ export function ClassicEntryTags({ tags }: { tags: EntryTag[] }) {
         type="button"
         className="page-subtitle__action page-subtitle__item entry-tags-trigger"
         aria-haspopup="dialog"
-        aria-controls="archive-tags"
+        aria-controls={dialogId}
+        aria-expanded={open}
         onClick={openDialog}
       >
-        #标签
+        {triggerLabel}
       </button>
       <dialog
         ref={dialogRef}
-        id="archive-tags"
+        id={dialogId}
         className={`entry-tags-dialog${dragging ? " is-dragging" : ""}`}
         style={{ "--entry-tags-drag-y": `${dragOffset}px` } as React.CSSProperties}
         aria-labelledby="archive-tags-title"
@@ -147,7 +162,7 @@ export function ClassicEntryTags({ tags }: { tags: EntryTag[] }) {
           {tags.length > 0 ? (
             <div className="entry-tags-dialog__list">
               {tags.map(({ tag, count }) => (
-                <Link key={tag} className="entry-tag-option" href={PUBLIC_ROUTES.tag(tag)} onClick={closeDialog}>
+                <Link key={tag} className={`entry-tag-option${activeTagKey === tag.trim().toLocaleLowerCase() ? " is-active" : ""}`} href={PUBLIC_ROUTES.tag(tag)} onClick={closeDialog}>
                   <span className="entry-tag-option__label">#{tag}</span>
                   <span className="entry-tag-option__count">{count}</span>
                 </Link>

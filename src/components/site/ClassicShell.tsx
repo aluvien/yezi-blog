@@ -16,6 +16,7 @@ type ClassicShellProps = {
 /* Classic layout attribution is source-only; see LICENSES/cxro-classic-theme-MIT.txt. */
 export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: ClassicShellProps) {
   const pathname = usePathname();
+  const isHome = pathname === "/";
   const [readingState, setReadingState] = useState({ path: "", active: false });
   const reading = readingState.path === pathname && readingState.active;
   const siteName = siteSettings.site_name?.trim() || "Whono";
@@ -97,7 +98,7 @@ export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: 
               <Book className="icon icon-book-closed" strokeWidth={2} aria-hidden="true" />
             </button>
           ) : null}
-          <div className="classic-mobile-search"><SiteSearch placeholder="搜索：标题 / 摘要 / 标签" /></div>
+          {isHome ? <div className="classic-mobile-search"><SiteSearch placeholder="搜索：标题 / 摘要 / 标签" /></div> : null}
           <Link className="icon-button rss-link sidebar-action--rail-hidden" href={PUBLIC_ROUTES.rss} aria-label="RSS 订阅" data-tooltip="RSS 订阅"><Rss className="icon" strokeWidth={2} aria-hidden="true" /></Link>
           <button id="theme-toggle" className="icon-button theme-toggle" type="button" aria-label="夜间模式" data-tooltip="夜间模式" onClick={toggleTheme}>
             <Moon className="icon icon-moon" strokeWidth={2} aria-hidden="true" />

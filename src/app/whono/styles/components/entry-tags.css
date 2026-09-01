@@ -50,6 +50,11 @@
   content: none !important;
 }
 
+/* 标签弹窗紧邻的清除链接仍需保留一点呼吸感；弹窗本身是隐藏的 dialog 节点，不能依赖相邻选择器。 */
+.page-subtitle__item--tag-clear {
+  margin-left: 0.75em;
+}
+
 .page-subtitle__actions {
   gap: 10px;
 }

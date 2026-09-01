@@ -21,6 +21,7 @@ import { ClassicShell } from "@/components/site/ClassicShell";
 
 export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, categories = [], tags = [], classicSidebarIntroHtml = "" }: { children: React.ReactNode; sidebarData?: React.ReactNode; siteSettings?: Record<string, string>; categories?: Array<{ id: number; name: string; slug: string }>; tags?: Array<{ tag: string; count: number }>; classicSidebarIntroHtml?: string }) {
   const pathname = usePathname();
+  const isHome = pathname === "/";
   const isPost = isPublicPostDetailPath(pathname);
   const [menuState, setMenuState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
   const menuOpen = menuState.pathname === pathname && menuState.open;
@@ -152,7 +153,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
                 </svg>
               </Link>
             )}
-            <SiteSearch />
+            {isHome ? <SiteSearch /> : null}
             {/* 深色模式切换：仅桌面显示，位于搜索图标右侧（需求 F3） */}
             <button
               type="button"

@@ -4,8 +4,12 @@ import { notFound } from "next/navigation";
 import { countApprovedCommentsBulk, listPostsByTag } from "@/lib/db";
 import { PostEntry } from "@/components/site/PostEntry";
 import { getSession } from "@/lib/auth";
-import { getCachedSiteSettings } from "@/lib/server-data";
+import { getCachedPublishedTags, getCachedSiteSettings } from "@/lib/server-data";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
+import { ClassicArchiveList } from "@/components/site/ClassicHome";
+import { ClassicEntrySearch } from "@/components/site/ClassicEntrySearch";
+import { ClassicEntryTags } from "@/components/site/ClassicEntryTags";
+import { toPostSummary, type FeedItem } from "@/lib/mobile-feed";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +33,41 @@ export default async function TagPage({ params }: Props) {
   if (!tag) notFound();
   const posts = listPostsByTag(tag);
   const classic = getCachedSiteSettings().layout_theme === "classic";
+
+  if (classic) {
+    const emptyMetrics = { views: 0, likes: 0 };
+    const items: FeedItem[] = posts.map((post) => ({
+      type: "post",
+      value: toPostSummary(post, ""),
+      commentCount: 0,
+      metrics: emptyMetrics,
+      initialLiked: false,
+    }));
+    const tags = getCachedPublishedTags(100);
+
+    return (
+      <>
+        <div className="entry-filters" data-entry-filters>
+          <div className="page-header page-header--with-search">
+            <div className="page-heading">
+              <div className="page-title-row">
+                <h1 className="page-title">归档</h1>
+                <strong className="entry-tag-current__pill entry-tag-current__pill--inline">#{tag}</strong>
+              </div>
+              <span className="page-subtitle page-subtitle--entry-filters">
+                <span className="page-subtitle__text">共 {posts.length} 篇内容</span>
+                <ClassicEntryTags tags={tags} activeTag={tag} triggerLabel="切换标签" dialogId="tag-archive-tags" />
+                <Link className="page-subtitle__link page-subtitle__item page-subtitle__item--tag-clear" href={PUBLIC_ROUTES.archives}>清除筛选</Link>
+              </span>
+            </div>
+            <div className="page-actions"><ClassicEntrySearch label="归档" /></div>
+          </div>
+        </div>
+        {items.length === 0 ? <p>这个标签下暂时没有文章。</p> : <div id="classic-entry-list"><ClassicArchiveList items={items} /></div>}
+      </>
+    );
+  }
+
   const isAuthorized = !!(await getSession());
   const commentCounts = countApprovedCommentsBulk("post", posts.map((post) => post.id));
 

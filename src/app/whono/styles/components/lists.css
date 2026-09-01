@@ -304,7 +304,7 @@
 }
 
 .archive-tag .tag {
-  color: var(--accent);
+  color: var(--muted);
   white-space: nowrap;
 }
 
