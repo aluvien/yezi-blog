@@ -46,6 +46,13 @@ export function ClassicBitsToolbar({ years, count, isAuthorized }: { years: stri
               <form className="bits-search" role="search" onSubmit={submitSearch}>
                 <label className="sr-only" htmlFor="classic-bits-search">搜索絮语</label>
                 <input id="classic-bits-search" value={query} onChange={(event) => { setQuery(event.target.value); applyFilter(event.target.value, activeYear); }} type="search" placeholder="搜索：关键词 / 标签" autoComplete="off" enterKeyHint="search" />
+                <div className="bits-year-select-wrap" data-empty={activeYear ? "false" : "true"} data-active={activeYear ? "true" : "false"}>
+                  <label className="sr-only" htmlFor="classic-bits-year">按年份筛选絮语</label>
+                  <select id="classic-bits-year" className="bits-year-select" value={activeYear} onChange={(event) => chooseYear(event.target.value)} aria-label="按年份筛选絮语">
+                    <option value="">全部</option>
+                    {years.map((year) => <option value={year} key={year}>{year}</option>)}
+                  </select>
+                </div>
                 <button className="bits-search-btn" type="submit">搜索</button>
               </form>
             </div>

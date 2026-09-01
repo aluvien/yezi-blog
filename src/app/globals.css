@@ -3697,8 +3697,7 @@ textarea.comment-field {
 
 .moment-inline-music .music-trigger-swipe-preview,
 .moment-inline-music .music-trigger-cover,
-.moment-inline-music .music-trigger-retry,
-.moment-inline-music .music-trigger-lyric {
+.moment-inline-music .music-trigger-retry {
   display: none !important;
 }
 
@@ -3727,15 +3726,40 @@ textarea.comment-field {
 }
 
 .moment-inline-music .music-trigger-artist {
+  position: static;
+  display: inline-flex;
   width: auto;
   min-width: 0;
   max-width: 8em;
   height: auto;
   min-height: 0;
+  align-items: center;
+  gap: 0;
 }
 
 .moment-inline-music .music-trigger-artist-name::before {
   content: "· ";
+}
+
+/* 播放中让歌词接替歌名和歌手的位置，暂停时由默认的歌名/歌手恢复。 */
+.moment-inline-music .music-trigger.has-lyric .music-trigger-name,
+.moment-inline-music .music-trigger.has-lyric .music-trigger-artist-name {
+  display: none;
+}
+
+.moment-inline-music .music-trigger-lyric {
+  position: static;
+  display: none;
+  max-width: 19em;
+  overflow: hidden;
+  color: var(--accent-strong);
+  font: inherit;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.moment-inline-music .music-trigger-lyric.is-visible {
+  display: block;
 }
 
 .moment-inline-music .music-trigger-play {
