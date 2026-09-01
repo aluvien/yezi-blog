@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
-import { getQQMusicMetadata, upsertQQMusicMetadata } from "@/lib/db";
+import {
+  getQQMusicMetadata,
+  getQQMusicPlaylistMetadata,
+  upsertQQMusicMetadata,
+  upsertQQMusicPlaylistMetadata,
+} from "@/lib/db";
 import { getClientIp, hashIp } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 import { isPublicQQMusicSpec, lyricUrl, verifyLyricAuthorization } from "@/lib/qq-music-access";
@@ -129,6 +134,20 @@ function cacheTrackMetadata(mid: string, metadata: ReturnType<typeof trackInfo>)
   }]);
 }
 
+function cachedPlaylistMetadata(playlistId: string) {
+  const cached = getQQMusicPlaylistMetadata(playlistId);
+  if (!cached) return null;
+  return {
+    total: cached.total,
+    tracks: cached.tracks.slice(0, MAX_PLAYLIST_TRACKS).map((track) => ({
+      name: normalizeMusicDisplayText(track.name, "QQ 音乐"),
+      artist: normalizeMusicDisplayText(track.artist),
+      cover: safeHttpsUrl(track.cover),
+      key: `qqvip:${track.mid}`,
+    })),
+  };
+}
+
 /**
  * qq-music-api 的 batchGetSongInfo 在部分部署中会成功返回但不携带详情。
  * QQ 的公开单曲详情接口不需要登录 Cookie，作为“仅补展示信息”的后备；
@@ -233,6 +252,35 @@ function playlistSongs(raw: unknown): JsonRecord[] {
   return findPlaylistSongs(unwrapData(raw));
 }
 
+function cachePlaylistSongs(playlistId: string, songs: JsonRecord[]) {
+  const records = songs.flatMap((song) => {
+    const mid = getRecordString(song, ["songmid", "mid", "songMid", "songid", "songId"]);
+    if (!/^[A-Za-z0-9_-]{4,80}$/.test(mid)) return [];
+    const metadata = trackInfo({ data: song }, mid);
+    return [{ mid, ...metadata }];
+  });
+  if (records.length === 0) throw new Error("QQ 音乐歌单没有返回有效歌曲");
+  upsertQQMusicPlaylistMetadata(playlistId, songs.length, records);
+  return {
+    total: songs.length,
+    tracks: records.slice(0, MAX_PLAYLIST_TRACKS).map((record) => ({
+      name: record.name,
+      artist: record.artist,
+      cover: record.cover,
+      key: record.key,
+    })),
+  };
+}
+
+async function resolvePlaylistMetadata(playlistId: string, signal: AbortSignal) {
+  const cached = cachedPlaylistMetadata(playlistId);
+  if (cached) return cached;
+  const raw = await qqMusicRequest("/getSongListDetail", { query: { disstid: playlistId }, signal });
+  const songs = playlistSongs(raw);
+  if (songs.length === 0) throw new Error("QQ 音乐歌单没有返回歌曲");
+  return cachePlaylistSongs(playlistId, songs);
+}
+
 type ResolvedPlaylistTrack = ReturnType<typeof trackInfo> & { url: string; lrc: string };
 
 async function resolvePlaylistTrack(song: JsonRecord, signal: AbortSignal): Promise<ResolvedPlaylistTrack | null> {
@@ -316,6 +364,8 @@ async function resolvePlaylist(disstid: string, signal: AbortSignal) {
   const raw = await qqMusicRequest("/getSongListDetail", { query: { disstid }, signal });
   const songs = playlistSongs(raw);
   if (songs.length === 0) throw new Error("QQ 音乐歌单没有返回歌曲");
+  // 先一次性保存完整展示快照；后续页面刷新只读取本站数据库。
+  cachePlaylistSongs(disstid, songs);
   const source = songs.slice(0, MAX_PLAYLIST_TRACKS);
   const tracks: ResolvedPlaylistTrack[] = [];
   // 限制并发，避免一个歌单同时触发大量播放地址请求。
@@ -337,10 +387,10 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const kind = url.searchParams.get("type") ?? "track";
   const identifier = (url.searchParams.get("id") ?? url.searchParams.get("mid") ?? "").trim();
-  if (!["track", "playlist", "lyric", "song", "metadata"].includes(kind)) return jsonError("请求类型无效", 400);
-  if (!/^[A-Za-z0-9_-]{1,80}$/.test(identifier)) return jsonError(kind === "playlist" ? "歌单标识无效" : "歌曲标识无效", 400);
+  if (!["track", "playlist", "playlist-metadata", "lyric", "song", "metadata"].includes(kind)) return jsonError("请求类型无效", 400);
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(identifier)) return jsonError(kind.startsWith("playlist") ? "歌单标识无效" : "歌曲标识无效", 400);
   const admin = await requireAdminApi();
-  const publicType = kind === "playlist" ? "playlist" : "song";
+  const publicType = kind.startsWith("playlist") ? "playlist" : "song";
   if (kind === "lyric") {
     const token = url.searchParams.get("token") ?? "";
     if (!admin && !verifyLyricAuthorization(identifier, token)) return jsonError("歌词授权无效或已过期", 403);
@@ -359,6 +409,20 @@ export async function GET(request: Request) {
     } catch (error) {
       const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
       return jsonError(timedOut ? "QQ 音乐信息解析超时，请稍后再试" : "QQ 音乐信息暂不可用，请稍后再试", timedOut ? 504 : 502);
+    }
+  }
+  if (kind === "playlist-metadata") {
+    const cached = cachedPlaylistMetadata(identifier);
+    if (cached) {
+      return NextResponse.json(cached, { headers: { "cache-control": "private, max-age=86400" } });
+    }
+    if (!allowQQMusicRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);
+    try {
+      const metadata = await expensiveResolution.run(`playlist-metadata:${identifier}`, (signal) => resolvePlaylistMetadata(identifier, signal));
+      return NextResponse.json(metadata, { headers: { "cache-control": "private, max-age=86400" } });
+    } catch (error) {
+      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      return jsonError(timedOut ? "QQ 音乐歌单信息解析超时，请稍后再试" : "QQ 音乐歌单信息暂不可用，请稍后再试", timedOut ? 504 : 502);
     }
   }
   if (!allowQQMusicRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);

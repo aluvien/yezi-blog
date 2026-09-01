@@ -155,6 +155,8 @@ export interface MusicTrack {
   duration?: number;
   /** 跨页面/跨请求保持稳定，用于避免同一首歌重复加入全局列表。 */
   key?: string;
+  /** 歌单接口给出的完整曲目数，仅用于卡片展示，不传给播放源。 */
+  playlistTotal?: number;
 }
 
 function firstScalar(...values: unknown[]): string {
@@ -195,8 +197,11 @@ export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
     const payload = await res.json().catch(() => null) as { error?: unknown } | null;
     throw new Error(typeof payload?.error === "string" ? payload.error : `QQ 音乐 ${res.status}`);
   }
-  const payload = await res.json() as Partial<MusicTrack> & { tracks?: unknown };
+  const payload = await res.json() as Partial<MusicTrack> & { tracks?: unknown; total?: unknown };
   if (spec.type === "playlist") {
+    const playlistTotal = typeof payload.total === "number" && Number.isFinite(payload.total)
+      ? Math.max(0, Math.trunc(payload.total))
+      : undefined;
     const tracks = Array.isArray(payload.tracks)
       ? payload.tracks.flatMap((value, index) => {
           if (!value || typeof value !== "object") return [];
@@ -210,6 +215,7 @@ export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
             cover: compactMusicCoverUrl(firstScalar(track.cover)),
             lrc: firstScalar(track.lrc),
             key: firstScalar(track.key) || `qqvip:${spec.id}:${index}`,
+            playlistTotal,
           }];
         })
       : [];
@@ -234,8 +240,8 @@ export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
  * 因而不会在访客尚未点击时触发 QQ 音乐的播放地址解析。
  */
 export async function fetchMusicMetadata(spec: MusicSpec): Promise<MusicTrack[]> {
-  if (spec.type !== "song") return [];
-  const res = await fetch(`/api/music/qq?id=${encodeURIComponent(spec.id)}&type=metadata`, {
+  const kind = spec.type === "playlist" ? "playlist-metadata" : "metadata";
+  const res = await fetch(`/api/music/qq?id=${encodeURIComponent(spec.id)}&type=${kind}`, {
     signal: AbortSignal.timeout(20_000),
     cache: "default",
   });
@@ -243,7 +249,29 @@ export async function fetchMusicMetadata(spec: MusicSpec): Promise<MusicTrack[]>
     const payload = await res.json().catch(() => null) as { error?: unknown } | null;
     throw new Error(typeof payload?.error === "string" ? payload.error : `QQ 音乐信息 ${res.status}`);
   }
-  const payload = await res.json() as Partial<MusicTrack>;
+  const payload = await res.json() as Partial<MusicTrack> & { tracks?: unknown; total?: unknown };
+  if (spec.type === "playlist") {
+    const playlistTotal = typeof payload.total === "number" && Number.isFinite(payload.total)
+      ? Math.max(0, Math.trunc(payload.total))
+      : undefined;
+    const tracks = Array.isArray(payload.tracks)
+      ? payload.tracks.flatMap((value, index) => {
+          if (!value || typeof value !== "object") return [];
+          const track = value as Partial<MusicTrack>;
+          const key = firstScalar(track.key);
+          return [{
+            name: normalizeMusicDisplayText(firstScalar(track.name), "QQ 音乐"),
+            artist: normalizeMusicDisplayText(firstScalar(track.artist)),
+            url: "",
+            cover: compactMusicCoverUrl(firstScalar(track.cover)),
+            lrc: "",
+            key: key || `qqvip:${spec.id}:${index}`,
+            playlistTotal,
+          }];
+        })
+      : [];
+    return spec.shuffle && tracks.length > 1 ? shuffleTracks(tracks) : tracks;
+  }
   return [{
     name: normalizeMusicDisplayText(firstScalar(payload.name) || spec.title, "QQ 音乐"),
     artist: normalizeMusicDisplayText(firstScalar(payload.artist) || spec.artist),

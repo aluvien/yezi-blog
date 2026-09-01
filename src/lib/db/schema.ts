@@ -147,6 +147,19 @@ export const BASE_SCHEMA_SQL = `
     cover TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS qq_music_playlists (
+    playlist_id TEXT PRIMARY KEY,
+    total INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS qq_music_playlist_tracks (
+    playlist_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    mid TEXT NOT NULL,
+    PRIMARY KEY (playlist_id, position),
+    FOREIGN KEY (playlist_id) REFERENCES qq_music_playlists(playlist_id) ON DELETE CASCADE,
+    FOREIGN KEY (mid) REFERENCES qq_music_metadata(mid) ON DELETE RESTRICT
+  );
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -172,6 +185,8 @@ export const BASE_SCHEMA_SQL = `
 
 // 旧库在补齐列之前不能建依赖新列的索引，所以索引作为迁移 v2 的最后一步单独执行。
 export const INDEX_SCHEMA_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_qq_music_playlist_tracks_mid
+    ON qq_music_playlist_tracks (mid);
   CREATE INDEX IF NOT EXISTS idx_article_reference_archive_jobs_state_time
     ON article_reference_archive_jobs (state, updated_at ASC);
   CREATE INDEX IF NOT EXISTS idx_article_reference_archive_jobs_url

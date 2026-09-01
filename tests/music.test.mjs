@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createQQMusicSpec, normalizeMusicDisplayText, parseMusicSpec, resolveMusicCover } from "../src/lib/music.ts";
+import { createQQMusicSpec, fetchMusicMetadata, normalizeMusicDisplayText, parseMusicSpec, resolveMusicCover } from "../src/lib/music.ts";
 import { normalizeQQSearchTracks } from "../src/lib/qq-music-api.ts";
 import { isGlobalPlaybackActiveForCard } from "../src/lib/player-store.ts";
 
@@ -69,4 +69,37 @@ test("matching inline tracks remain marked as playing after client navigation re
   assert.equal(isGlobalPlaybackActiveForCard(playingState, "article-card-after-navigation", true), true);
   assert.equal(isGlobalPlaybackActiveForCard(playingState, "unrelated-card", false), false);
   assert.equal(isGlobalPlaybackActiveForCard({ ...playingState, playing: false }, "article-card-after-navigation", true), false);
+});
+
+test("playlist display metadata keeps cached song details and total while random mode reshuffles on page initialization", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalRandom = Math.random;
+  const requested = [];
+  globalThis.fetch = async (input) => {
+    requested.push(String(input));
+    return Response.json({
+      total: 12,
+      tracks: [
+        { name: "第一首", artist: "甲", cover: "https://example.com/1.jpg", key: "qqvip:Song01" },
+        { name: "第二首", artist: "乙", cover: "https://example.com/2.jpg", key: "qqvip:Song02" },
+        { name: "第三首", artist: "丙", cover: "https://example.com/3.jpg", key: "qqvip:Song03" },
+      ],
+    });
+  };
+  Math.random = () => 0;
+  try {
+    const spec = parseMusicSpec("qqvip:Playlist01:playlist:random");
+    assert.ok(spec);
+    const tracks = await fetchMusicMetadata(spec);
+    assert.equal(requested[0], "/api/music/qq?id=Playlist01&type=playlist-metadata");
+    assert.deepEqual(tracks.map(({ name, artist, playlistTotal }) => ({ name, artist, playlistTotal })), [
+      { name: "第二首", artist: "乙", playlistTotal: 12 },
+      { name: "第三首", artist: "丙", playlistTotal: 12 },
+      { name: "第一首", artist: "甲", playlistTotal: 12 },
+    ]);
+    assert.equal(tracks.every((track) => track.url === "" && track.lrc === ""), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    Math.random = originalRandom;
+  }
 });

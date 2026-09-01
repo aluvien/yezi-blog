@@ -196,6 +196,31 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    // 歌单展示必须同时保存曲目顺序和总数，才能在刷新页面时只读本站数据库，
+    // 不因渲染卡片而再次请求 QQ。播放 URL 和登录态依然不会进入这些表。
+    version: 11,
+    name: "qq-music-playlist-metadata-cache",
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS qq_music_playlists (
+          playlist_id TEXT PRIMARY KEY,
+          total INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS qq_music_playlist_tracks (
+          playlist_id TEXT NOT NULL,
+          position INTEGER NOT NULL,
+          mid TEXT NOT NULL,
+          PRIMARY KEY (playlist_id, position),
+          FOREIGN KEY (playlist_id) REFERENCES qq_music_playlists(playlist_id) ON DELETE CASCADE,
+          FOREIGN KEY (mid) REFERENCES qq_music_metadata(mid) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_qq_music_playlist_tracks_mid
+          ON qq_music_playlist_tracks (mid);
+      `);
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

@@ -17,8 +17,8 @@ import {
 } from "@/lib/qq-music-native-login";
 import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
 import { inspectQQMusicHealth, qqMusicHealthStatusLabel } from "@/lib/qq-music-health";
-import { cleanupUnusedQQMusicMetadata, upsertQQMusicMetadata } from "@/lib/db";
-import { listReferencedQQMusicSongIds } from "@/lib/qq-music-access";
+import { cleanupUnusedQQMusicCache, upsertQQMusicMetadata } from "@/lib/db";
+import { listReferencedQQMusicPlaylistIds, listReferencedQQMusicSongIds } from "@/lib/qq-music-access";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
 import {
   QQ_LOGIN_SOURCE,
@@ -159,9 +159,15 @@ export async function POST(request: Request) {
     return noCache({ ok: true, source: QQ_MUSIC_APP_SOURCE });
   }
   if (body.op === "cleanup-metadata-cache") {
-    const referenced = listReferencedQQMusicSongIds();
-    const deleted = cleanupUnusedQQMusicMetadata(referenced);
-    return noCache({ deleted, referenced: referenced.size });
+    const referencedSongs = listReferencedQQMusicSongIds();
+    const referencedPlaylists = listReferencedQQMusicPlaylistIds();
+    const deleted = cleanupUnusedQQMusicCache(referencedSongs, referencedPlaylists);
+    return noCache({
+      deleted: deleted.songs,
+      deletedPlaylists: deleted.playlists,
+      referenced: referencedSongs.size,
+      referencedPlaylists: referencedPlaylists.size,
+    });
   }
   if (body.op === "native-poll") {
     const key = String(body.key ?? "").trim();

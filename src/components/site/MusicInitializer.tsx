@@ -143,7 +143,8 @@ export function MusicInitializer() {
       if (slide) renderTrackSlide(slide, track);
       const titleEl = slide?.querySelector<HTMLElement>(".music-trigger-name");
       if (titleEl) {
-        titleEl.textContent = data.tracks.length === 1 ? track.name : `${track.name} 等 ${data.tracks.length} 首`;
+        const total = track.playlistTotal ?? data.tracks.length;
+        titleEl.textContent = total === 1 ? track.name : `${track.name} 等 ${total} 首`;
       }
       return track;
     }
@@ -260,6 +261,7 @@ export function MusicInitializer() {
       card.classList.toggle("is-resolving", hasDisplaySnapshot);
       card.setAttribute("aria-busy", "true");
       card.setAttribute("aria-label", "正在加载音乐");
+      const selectedKey = data.tracks[data.activeIndex] ? trackKey(data.tracks[data.activeIndex]) : "";
       const slowTimer = window.setTimeout(() => {
         // 不把快照替换成错误文字：请求较慢时仍保留用户已经看到的歌名、歌手和封面。
         if (data.resolvePromise) {
@@ -279,6 +281,8 @@ export function MusicInitializer() {
             };
           }
           data.tracks = tracks;
+          const selectedIndex = selectedKey ? tracks.findIndex((track) => trackKey(track) === selectedKey) : -1;
+          data.activeIndex = selectedIndex >= 0 ? selectedIndex : Math.min(data.activeIndex, tracks.length - 1);
           renderCardTrack(card, data, data.activeIndex);
           syncCard(card, getGlobalPlaybackState());
           card.classList.remove("is-error", "is-pending", "is-resolving", "is-slow");
@@ -321,8 +325,14 @@ export function MusicInitializer() {
           if (data.tracks[0]?.url) return data.tracks;
           if (tracks.length > 0) {
             data.tracks = tracks;
-            renderCardTrack(card, data, data.activeIndex);
+            data.activeIndex = 0;
+            renderCardTrack(card, data, 0);
             syncCard(card, getGlobalPlaybackState());
+            card.classList.add("is-ready");
+            if (!cardSwipeCleanups.has(card)) {
+              const swipeCleanup = bindCardSwipe(card, data);
+              if (swipeCleanup) cardSwipeCleanups.set(card, swipeCleanup);
+            }
           }
           card.classList.remove("is-pending");
           card.setAttribute("aria-busy", "false");
@@ -674,7 +684,7 @@ export function MusicInitializer() {
             const card = entry.target as HTMLElement;
             metadataObserver?.unobserve(card);
             const data = cardMusicState.get(card);
-            if (!data || data.metadataPromise || data.tracks[0]?.name || data.spec.type !== "song") return;
+            if (!data || data.metadataPromise || data.tracks[0]?.name) return;
             void resolveMetadata(card, data);
           });
         }, { rootMargin: "320px 0px", threshold: 0.01 });

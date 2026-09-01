@@ -62,6 +62,16 @@ export function listReferencedQQMusicSongIds(): Set<string> {
   return new Set(collectMusicSpecs(rows).flatMap((spec) => spec.type === "song" ? [spec.id] : []));
 }
 
+/** 所有已保存内容中的歌单来源；供持久化歌单快照清理使用。 */
+export function listReferencedQQMusicPlaylistIds(): Set<string> {
+  const rows = db.prepare(`
+    SELECT content AS value FROM posts
+    UNION ALL SELECT content AS value FROM moments
+    UNION ALL SELECT value FROM site_settings WHERE key IN ('about_content', 'default_music')
+  `).all() as Array<{ value: string }>;
+  return new Set(collectMusicSpecs(rows).flatMap((spec) => spec.type === "playlist" ? [spec.id] : []));
+}
+
 function lyricSecret(): Buffer {
   const state = globalThis as AccessGlobal;
   if (state.__yeziQQLyricSecret) return state.__yeziQQLyricSecret;

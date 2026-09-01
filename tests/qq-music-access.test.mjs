@@ -9,12 +9,24 @@ process.env.BLOG_ROOT = root;
 process.env.BLOG_DB_PATH = path.join(root, "data", "blog.db");
 process.env.QQ_MUSIC_SIGNING_KEY = "test-signing-key-that-is-at-least-thirty-two-bytes";
 
-const { cleanupUnusedQQMusicMetadata, createMoment, createPost, db, getQQMusicMetadata, setSiteSettings, updatePost, upsertQQMusicMetadata } = await import("../src/lib/db.ts");
+const {
+  cleanupUnusedQQMusicCache,
+  createMoment,
+  createPost,
+  db,
+  getQQMusicMetadata,
+  getQQMusicPlaylistMetadata,
+  setSiteSettings,
+  updatePost,
+  upsertQQMusicMetadata,
+  upsertQQMusicPlaylistMetadata,
+} = await import("../src/lib/db.ts");
 const {
   createLyricAuthorization,
   extractMusicSpecs,
   invalidateQQMusicAccessCache,
   isPublicQQMusicSpec,
+  listReferencedQQMusicPlaylistIds,
   listReferencedQQMusicSongIds,
   verifyLyricAuthorization,
 } = await import("../src/lib/qq-music-access.ts");
@@ -58,7 +70,7 @@ test("music spec extraction accepts shortcodes and fenced values without arbitra
   );
 });
 
-test("QQ music display metadata persists independently from temporary playback URLs and cleans unused rows", () => {
+test("QQ music song and playlist metadata persists independently from playback URLs and cleans unused snapshots", () => {
   upsertQQMusicMetadata([{
     mid: "AboutSong01",
     name: "缓存歌曲",
@@ -78,8 +90,46 @@ test("QQ music display metadata persists independently from temporary playback U
   );
   assert.match(metadata.updated_at, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(getQQMusicMetadata("invalid id"), null);
+  upsertQQMusicPlaylistMetadata("MomentList01", 8, [{
+    mid: "PlaylistSong01",
+    name: "歌单歌曲一",
+    artist: "歌单歌手一",
+    cover: "https://example.com/playlist-1.jpg",
+  }, {
+    mid: "PlaylistSong02",
+    name: "歌单歌曲二",
+    artist: "歌单歌手二",
+    cover: "https://example.com/playlist-2.jpg",
+  }]);
+  upsertQQMusicPlaylistMetadata("UnusedList01", 1, [{
+    mid: "UnusedListSong01",
+    name: "未引用歌单歌曲",
+    artist: "歌单歌手",
+    cover: "https://example.com/playlist-unused.jpg",
+  }]);
+  const playlist = getQQMusicPlaylistMetadata("MomentList01");
+  assert.ok(playlist);
+  assert.equal(playlist.total, 8);
+  assert.deepEqual(playlist.tracks.map(({ mid, name, artist }) => ({ mid, name, artist })), [{
+    mid: "PlaylistSong01",
+    name: "歌单歌曲一",
+    artist: "歌单歌手一",
+  }, {
+    mid: "PlaylistSong02",
+    name: "歌单歌曲二",
+    artist: "歌单歌手二",
+  }]);
   assert.equal(listReferencedQQMusicSongIds().has("AboutSong01"), true);
   assert.equal(listReferencedQQMusicSongIds().has("DraftSong01"), true);
-  assert.equal(cleanupUnusedQQMusicMetadata(listReferencedQQMusicSongIds()), 1);
+  assert.equal(listReferencedQQMusicPlaylistIds().has("MomentList01"), true);
+  assert.equal(listReferencedQQMusicPlaylistIds().has("DefaultList01"), true);
+  assert.deepEqual(
+    cleanupUnusedQQMusicCache(listReferencedQQMusicSongIds(), listReferencedQQMusicPlaylistIds()),
+    { songs: 2, playlists: 1 },
+  );
   assert.equal(getQQMusicMetadata("UnusedSong01"), null);
+  assert.equal(getQQMusicMetadata("UnusedListSong01"), null);
+  assert.ok(getQQMusicMetadata("PlaylistSong01"));
+  assert.ok(getQQMusicPlaylistMetadata("MomentList01"));
+  assert.equal(getQQMusicPlaylistMetadata("UnusedList01"), null);
 });
