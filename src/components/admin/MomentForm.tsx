@@ -60,22 +60,28 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
   }
 
   function useCurrentLocation() {
-    if (!navigator.geolocation) {
+    if (typeof window === "undefined" || !window.navigator.geolocation) {
       setError("当前浏览器不支持定位，请手动填写城市");
+      return;
+    }
+    const secureContext = window.isSecureContext ?? window.location.protocol === "https:";
+    if (!secureContext && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      setError("定位需要在 HTTPS 页面中使用，请手动填写城市");
       return;
     }
     setLocating(true);
     setError("");
-    navigator.geolocation.getCurrentPosition(
+    window.navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
         try {
           const response = await fetch(
             `/api/admin/moments/reverse-geocode?lat=${encodeURIComponent(coords.latitude)}&lng=${encodeURIComponent(coords.longitude)}`,
-            { cache: "no-store" },
+            { cache: "no-store", credentials: "same-origin" },
           );
           const data = await response.json() as { location?: unknown; error?: unknown };
           if (!response.ok || typeof data.location !== "string" || !data.location.trim()) {
-            throw new Error(typeof data.error === "string" ? data.error : "未能识别所在地级市");
+            if (response.status === 401) throw new Error("登录状态已失效，请刷新页面后重试");
+            throw new Error(typeof data.error === "string" ? data.error : "未能识别所在地级市，请手动填写");
           }
           setLocation(data.location);
         } catch (reason) {
@@ -86,7 +92,13 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
       },
       (reason) => {
         setLocating(false);
-        setError(reason.code === reason.PERMISSION_DENIED ? "未获得定位权限，请手动填写城市" : "无法获取当前位置，请手动填写城市");
+        setError(
+          reason.code === reason.PERMISSION_DENIED
+            ? "未获得定位权限，请在浏览器设置中允许本站定位后重试"
+            : reason.code === reason.TIMEOUT
+              ? "定位超时，请检查系统定位服务后重试"
+              : "无法获取当前位置，请手动填写城市",
+        );
       },
       { enableHighAccuracy: false, timeout: 12_000, maximumAge: 5 * 60_000 },
     );
@@ -132,7 +144,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={location}
-            onChange={(event) => setLocation(event.target.value)}
+            onChange={(event) => { setLocation(event.target.value); setError(""); }}
             className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm"
             placeholder="位置（可选，如杭州市）"
             aria-label="想法位置"
@@ -208,7 +220,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
             </button>
           </div>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         {musicDialog && (
           <MusicInsertDialog
             allowFolded
@@ -241,7 +253,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={location}
-          onChange={(event) => setLocation(event.target.value)}
+          onChange={(event) => { setLocation(event.target.value); setError(""); }}
           className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-base"
           placeholder="位置（可选，如杭州市）"
           aria-label="想法位置"
@@ -302,7 +314,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
           onChange={(e) => handleFiles(e.target.files)}
         />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <button
         type="button"
         disabled={pending || uploading}

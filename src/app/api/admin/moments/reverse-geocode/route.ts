@@ -13,7 +13,9 @@ function noCache(data: unknown, status = 200): NextResponse {
 }
 
 function coordinate(value: string | null, min: number, max: number): number | null {
-  if (value === null || !/^-?\d{1,3}(?:\.\d{1,8})?$/.test(value)) return null;
+  // 浏览器返回的坐标精度因设备而异，不能把小数位硬限制在 8 位；
+  // 同时保留长度上限，拒绝科学计数法和异常超长输入。
+  if (value === null || !/^-?\d{1,3}(?:\.\d{1,15})?$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : null;
 }

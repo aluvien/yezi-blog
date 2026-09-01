@@ -8979,6 +8979,102 @@ html[data-layout-theme="classic"][data-theme="dark"] .global-player-panel .aplay
   background: var(--classic-panel);
 }
 
+/* 移动端“碎碎念”复用后台的音乐插入组件。组件本身为了兼容后台浅色
+ * 主题使用了 neutral 工具类，这里只在经典版暗色弹窗内映射为书页配色，
+ * 不影响新视觉版或管理后台的其它表单。 */
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog {
+  background: rgb(0 0 0 / 62%) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel {
+  border: 1px solid var(--classic-border) !important;
+  background: var(--classic-paper) !important;
+  color: var(--classic-text) !important;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 42%) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(
+  .text-neutral-950,
+  .text-neutral-900,
+  .text-neutral-800,
+  .text-neutral-700
+) {
+  color: var(--classic-text) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(
+  .text-neutral-600,
+  .text-neutral-500,
+  .text-neutral-400
+) {
+  color: var(--classic-muted) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(
+  .border-neutral-300,
+  .border-neutral-200
+) {
+  border-color: var(--classic-border) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(
+  .bg-white,
+  .bg-neutral-100
+) {
+  background-color: var(--classic-panel) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(input, select) {
+  border-color: var(--classic-border) !important;
+  background-color: var(--classic-bg) !important;
+  color: var(--classic-text) !important;
+  color-scheme: dark;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel input::placeholder {
+  color: var(--classic-faint) !important;
+  opacity: 1;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel option {
+  background: var(--classic-bg);
+  color: var(--classic-text);
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(
+  .bg-neutral-900,
+  .bg-neutral-900.text-white
+) {
+  background-color: var(--classic-accent) !important;
+  color: var(--classic-bg) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(
+  [class~="hover:bg-neutral-50"],
+  [class~="hover:bg-neutral-100"],
+  [class~="hover:bg-neutral-700"]
+):hover {
+  background-color: color-mix(in srgb, var(--classic-accent) 12%, var(--classic-panel)) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(
+  [class~="hover:text-neutral-700"],
+  [class~="hover:text-neutral-900"]
+):hover {
+  color: var(--classic-text) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel :is(
+  .text-red-600,
+  .text-red-700
+) {
+  color: var(--classic-accent-strong) !important;
+}
+
+html[data-layout-theme="classic"][data-theme="dark"] .music-insert-dialog__panel input[type="checkbox"] {
+  accent-color: var(--classic-accent);
+}
+
 html[data-layout-theme="classic"][data-theme="dark"] :is(.site-footer, .classic-home-feed__bit .bit-body, .classic-home-feed__bit .bit-body p) {
   color: var(--faint);
 }

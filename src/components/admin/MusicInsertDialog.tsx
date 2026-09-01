@@ -82,12 +82,12 @@ export function MusicInsertDialog({ onClose, allowFolded = false }: { onClose: (
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-neutral-900/30 p-4 backdrop-blur-[2px]"
+      className="music-insert-dialog fixed inset-0 z-[80] flex items-center justify-center bg-neutral-900/30 p-4 backdrop-blur-[2px]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose(null);
       }}
     >
-      <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+      <div role="dialog" aria-modal="true" className="music-insert-dialog__panel w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-base font-semibold text-neutral-900">插入 QQ 音乐</h2>
           <button type="button" aria-label="关闭对话框" onClick={() => onClose(null)} className="rounded-full p-1 text-xl leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">×</button>

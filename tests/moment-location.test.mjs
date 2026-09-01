@@ -12,5 +12,10 @@ test("moment location stores only a short normalized display label", () => {
 test("reverse geocoding chooses a city-level address component", () => {
   assert.equal(cityFromReverseGeocode({ address: { suburb: "西湖区", city: "杭州市", province: "浙江省" } }), "杭州市");
   assert.equal(cityFromReverseGeocode({ address: { municipality: "北京市", county: "海淀区" } }), "北京市");
+  assert.equal(cityFromReverseGeocode({
+    display_name: "天水街道, 拱墅区, 杭州市, 浙江省, 中国",
+    address: { suburb: "天水街道", city: "拱墅区", state: "浙江省" },
+  }), "杭州市");
+  assert.equal(cityFromReverseGeocode({ display_name: "杭州市, 浙江省, 中国" }), "杭州市");
   assert.equal(cityFromReverseGeocode({ address: { suburb: "西湖区" } }), "");
 });

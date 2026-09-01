@@ -9,6 +9,7 @@ import { getVisitorKeyFromRequest } from "@/lib/request";
 import { MomentWriter } from "@/components/site/MomentWriter";
 import { ClassicBitsList } from "@/components/site/ClassicBitsList";
 import { ClassicBitsToolbar } from "@/components/site/ClassicBitsToolbar";
+import { ClassicBitsMobileWriter } from "@/components/site/ClassicBitsMobileWriter";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
@@ -38,6 +39,7 @@ export default async function MomentsPage() {
       <>
         <div className="page-header page-header--bits">
           <div className="page-heading"><h1 className="page-title">絮语</h1><span className="page-subtitle">生活不只是长篇</span></div>
+          <ClassicBitsMobileWriter isAuthorized={isAuthorized} />
         </div>
         <ClassicBitsToolbar years={years} count={moments.length} isAuthorized={isAuthorized} />
         <ClassicBitsList

@@ -17,6 +17,57 @@
   margin: 9px 0 4px;
 }
 
+/* 移动端把发布入口放到絮语标题行右侧，与随笔页的搜索图标保持同一位置；
+   桌面端仍由筛选工具栏里的“碎碎念”文字按钮承担入口。 */
+.page-header .classic-bits-mobile-actions,
+.classic-bits-mobile-publisher {
+  display: none;
+}
+
+.classic-bits-mobile-action {
+  display: inline-flex;
+  width: auto;
+  min-width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-readable);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.classic-bits-mobile-action:hover,
+.classic-bits-mobile-action[aria-expanded="true"] {
+  color: var(--text);
+}
+
+.classic-bits-mobile-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.classic-bits-mobile-action__icon {
+  display: block;
+  font: inherit;
+  line-height: 1;
+}
+
+.classic-bits-mobile-action__label {
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .bits-controls {
   display: flex;
   align-items: center;
@@ -916,6 +967,34 @@
 }
 
 @media (max-width: 640px) {
+  .page-header.page-header--bits {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .page-header.page-header--bits .page-heading {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .page-header.page-header--bits .classic-bits-mobile-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-self: flex-start;
+    margin-left: 8px;
+    transform: translateY(8px);
+  }
+
+  .page-header.page-header--bits .classic-bits-mobile-publisher {
+    display: block;
+    flex: 1 0 100%;
+    width: 100%;
+    margin-top: 2px;
+  }
+
   .bits-controls {
     --bits-control-h: 36px;
     --bits-year-filter-h: 34px;
