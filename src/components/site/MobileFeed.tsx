@@ -9,8 +9,9 @@ import type { FeedItem, PostSummary } from "@/lib/mobile-feed";
 import { MetricIcon, type MetricIconType } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
 import { LikeButton } from "@/components/site/LikeButton";
-import { splitMomentContent } from "@/lib/music";
+import { foldedMomentMusic, splitMomentContent } from "@/lib/music";
 import { MusicEmbed } from "@/components/site/MusicEmbed";
+import { MomentLocation } from "@/components/site/MomentLocation";
 import { useMomentView } from "@/components/site/MomentViewTracker";
 import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 import { SiteImage } from "@/components/site/SiteImage";
@@ -26,7 +27,8 @@ function Metric({ type, value, href }: { type: MetricIconType; value: number; hr
 
 function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, authorAvatarNoBorder, initialLiked, canEdit }: { moment: Moment; commentCount: number; metrics: ContentMetrics; authorName: string; authorAvatar?: string; authorAvatarNoBorder: boolean; initialLiked: boolean; canEdit: boolean }) {
   const images = parseMomentImages(moment);
-  const segments = splitMomentContent(moment.content);
+  const segments = splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded);
+  const inlineMusic = foldedMomentMusic(moment.content);
   const { views, targetRef } = useMomentView(moment.id, metrics.views);
   return (
     <ArticleEditZone
@@ -46,8 +48,12 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
           )}
         </div>
         <div className="mobile-feed-memo-author">
-          <strong>{authorName}</strong>
+          <div className="mobile-feed-memo-author-line">
+            <strong>{authorName}</strong>
+            {inlineMusic.map((spec, index) => <MusicEmbed key={`${spec.id}-${index}`} spec={spec} compact />)}
+          </div>
           <time>{formatDateOnly(moment.created_at)}</time>
+          <MomentLocation location={moment.location} />
         </div>
       </div>
       <div className="mobile-feed-memo-content">

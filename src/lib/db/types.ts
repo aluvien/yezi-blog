@@ -108,6 +108,8 @@ export interface Moment {
   images: string;
   /** JSON 数组字符串，如 '["摄影","随手记"]' */
   tags: string;
+  /** 可选的公开城市文字；精确坐标不会落库。 */
+  location: string;
   created_at: string;
   updated_at: string;
 }

@@ -6,7 +6,7 @@ export type MediaShortcode =
   | { kind: "video"; spec: VideoSpec; value: string };
 
 function serializeMusicSpec(spec: MusicSpec): string {
-  return `${spec.server}:${spec.id}:${spec.type}${spec.shuffle ? ":random" : ""}`;
+  return `${spec.server}:${spec.id}:${spec.type}${spec.shuffle ? ":random" : ""}${spec.folded ? ":fold" : ""}`;
 }
 
 export function serializeVideoSpec(spec: VideoSpec): string {

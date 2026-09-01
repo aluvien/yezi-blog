@@ -15,10 +15,11 @@ type QQPlaylist = {
 };
 
 /** QQ VIP 音乐插入对话框：支持歌曲/歌单搜索，也支持手动填写 ID。 */
-export function MusicInsertDialog({ onClose }: { onClose: (spec: string | null) => void }) {
+export function MusicInsertDialog({ onClose, allowFolded = false }: { onClose: (spec: string | null) => void; allowFolded?: boolean }) {
   const [id, setId] = useState("");
   const [type, setType] = useState<string>(MUSIC_TYPES[0]);
   const [shuffle, setShuffle] = useState(false);
+  const [folded, setFolded] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"manual" | "qq">("qq");
   const [searchType, setSearchType] = useState<"song" | "playlist">("song");
@@ -28,12 +29,16 @@ export function MusicInsertDialog({ onClose }: { onClose: (spec: string | null) 
   const [searching, setSearching] = useState(false);
 
   function confirm() {
-    const spec = `qqvip:${id.trim()}:${type}${shuffle ? ":random" : ""}`;
+    const spec = `qqvip:${id.trim()}:${type}${shuffle ? ":random" : ""}${folded ? ":fold" : ""}`;
     if (!parseMusicSpec(spec)) {
       setError("请输入有效的 QQ 音乐 ID");
       return;
     }
     onClose(spec);
+  }
+
+  function selectedSpec(base: string): string {
+    return `${base}${folded ? ":fold" : ""}`;
   }
 
   function changeSearchType(next: "song" | "playlist") {
@@ -110,6 +115,12 @@ export function MusicInsertDialog({ onClose }: { onClose: (spec: string | null) 
               <input type="checkbox" checked={shuffle} onChange={(event) => setShuffle(event.target.checked)} className="h-4 w-4 accent-neutral-700" />
               随机播放歌单
             </label>
+            {allowFolded && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700">
+                <input type="checkbox" checked={folded} onChange={(event) => setFolded(event.target.checked)} className="h-4 w-4 accent-neutral-700" />
+                折叠显示（在絮语作者后显示歌曲）
+              </label>
+            )}
             <p className="text-xs leading-5 text-neutral-400">文章中使用的格式为 <code>qqvip:id:song</code> 或 <code>qqvip:id:playlist</code>。</p>
           </div>
         ) : (
@@ -129,16 +140,22 @@ export function MusicInsertDialog({ onClose }: { onClose: (spec: string | null) 
                 插入后默认随机播放
               </label>
             )}
+            {allowFolded && (
+              <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-neutral-600">
+                <input type="checkbox" checked={folded} onChange={(event) => setFolded(event.target.checked)} className="h-4 w-4 accent-neutral-800" />
+                折叠显示到絮语作者后
+              </label>
+            )}
             <div className="mt-3 max-h-64 space-y-1 overflow-y-auto pr-1">
               {tracks.map((track) => (
-                <button key={track.mid} type="button" onClick={() => onClose(createQQMusicSpec(track.mid))} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-neutral-100">
+                <button key={track.mid} type="button" onClick={() => onClose(selectedSpec(createQQMusicSpec(track.mid)))} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-neutral-100">
                   {track.cover ? <img src={track.cover} alt="" className="h-10 w-10 rounded-md bg-neutral-100 object-cover" /> : <span className="h-10 w-10 rounded-md bg-neutral-100" />}
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-neutral-800">{track.name}</span><span className="mt-0.5 block truncate text-xs text-neutral-500">{[track.artist, track.album].filter(Boolean).join(" · ")}</span></span>
                   <span className="text-xs text-neutral-400">插入</span>
                 </button>
               ))}
               {playlists.map((playlist) => (
-                <button key={playlist.id} type="button" onClick={() => onClose(`qqvip:${playlist.id}:playlist${shuffle ? ":random" : ""}`)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-neutral-100">
+                <button key={playlist.id} type="button" onClick={() => onClose(selectedSpec(`qqvip:${playlist.id}:playlist${shuffle ? ":random" : ""}`))} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-neutral-100">
                   {playlist.cover ? <img src={playlist.cover} alt="" className="h-10 w-10 rounded-md bg-neutral-100 object-cover" /> : <span className="h-10 w-10 rounded-md bg-neutral-100" />}
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-neutral-800">{playlist.name}</span><span className="mt-0.5 block truncate text-xs text-neutral-500">{[playlist.creator, playlist.count === null ? "" : `${playlist.count} 首`].filter(Boolean).join(" · ")}</span></span>
                   <span className="text-xs text-neutral-400">插入</span>

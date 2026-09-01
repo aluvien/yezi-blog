@@ -242,6 +242,7 @@ export function serializeAdminMoment(moment: Moment, metrics?: { views: number; 
     content: moment.content,
     images: parseMomentImages(moment),
     tags: parsePostTags(moment.tags),
+    location: moment.location,
     created_at: moment.created_at,
     updated_at: moment.updated_at,
     ...(metrics ? { metrics } : {}),

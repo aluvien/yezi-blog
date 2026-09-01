@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       content: body.value.content as string,
       images: body.value.images as string[],
       tags: parsePostTags(typeof body.value.tags === "string" ? body.value.tags : JSON.stringify(body.value.tags ?? [])),
+      location: body.value.location as string | undefined,
     });
     if (!result.ok) return adminActionError(result);
     const created = result.data;

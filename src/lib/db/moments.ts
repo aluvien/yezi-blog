@@ -23,21 +23,22 @@ export function getMoment(id: number): Moment | undefined {
   return db.prepare("SELECT * FROM moments WHERE id = ?").get(id) as Moment | undefined;
 }
 
-export function createMoment(data: { content: string; images?: string[]; tags?: string[] }): Moment {
+export function createMoment(data: { content: string; images?: string[]; tags?: string[]; location?: string }): Moment {
   const ts = now();
   const info = db
-    .prepare("INSERT INTO moments (content, images, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
-    .run(data.content, JSON.stringify(data.images ?? []), JSON.stringify(normalizePostTags(data.tags)), ts, ts);
+    .prepare("INSERT INTO moments (content, images, tags, location, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(data.content, JSON.stringify(data.images ?? []), JSON.stringify(normalizePostTags(data.tags)), data.location ?? "", ts, ts);
   return getMoment(Number(info.lastInsertRowid))!;
 }
 
-export function updateMoment(id: number, data: { content: string; images?: string[]; tags?: string[] }): Moment | undefined {
+export function updateMoment(id: number, data: { content: string; images?: string[]; tags?: string[]; location?: string }): Moment | undefined {
   const current = getMoment(id);
   const tags = data.tags === undefined ? parsePostTags(current?.tags) : normalizePostTags(data.tags);
-  db.prepare("UPDATE moments SET content = ?, images = ?, tags = ?, updated_at = ? WHERE id = ?").run(
+  db.prepare("UPDATE moments SET content = ?, images = ?, tags = ?, location = ?, updated_at = ? WHERE id = ?").run(
     data.content,
     JSON.stringify(data.images ?? []),
     JSON.stringify(tags),
+    data.location === undefined ? current?.location ?? "" : data.location,
     now(),
     id,
   );

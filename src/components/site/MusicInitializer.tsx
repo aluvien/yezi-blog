@@ -37,12 +37,18 @@ function syncCardState(
   const playEl = card.querySelector<HTMLElement>(".music-trigger-play");
   if (!playEl) return;
   if (isPlaying) {
-    if (!playEl.querySelector(".eq-bar")) {
+    if (!playEl.querySelector(".eq-bar") && !card.classList.contains("moment-inline-music-trigger")) {
       playEl.innerHTML = '<i class="eq-bar"></i><i class="eq-bar"></i><i class="eq-bar"></i>';
     }
+    playEl.querySelector<SVGElement>(".moment-inline-music-icon")?.classList.add("is-playing");
   } else {
-    // 清空子节点，恢复 CSS ::before 的播放三角
-    playEl.innerHTML = "";
+    playEl.querySelector<SVGElement>(".moment-inline-music-icon")?.classList.remove("is-playing");
+    if (card.classList.contains("moment-inline-music-trigger")) {
+      playEl.querySelectorAll(".eq-bar").forEach((item) => item.remove());
+    } else {
+      // 清空子节点，恢复 CSS ::before 的播放三角
+      playEl.innerHTML = "";
+    }
   }
 }
 
@@ -571,7 +577,8 @@ export function MusicInitializer() {
       } satisfies MusicSpec;
 
       const card = document.createElement("div");
-      card.className = "music-trigger";
+      const compact = el.dataset.compact === "1";
+      card.className = `music-trigger${compact ? " moment-inline-music-trigger" : ""}`;
       card.dataset.cardId = String(cardSeqRef.current++);
       card.setAttribute("aria-busy", "true");
       card.innerHTML = `
@@ -597,7 +604,7 @@ export function MusicInitializer() {
             </span>
           </span>
         </span>
-        <span class="music-trigger-play" aria-hidden="true"></span>
+        <span class="music-trigger-play" aria-hidden="true">${compact ? '<svg class="moment-inline-music-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle></svg>' : ""}</span>
         <button class="music-trigger-retry" type="button" aria-label="重新加载音乐" title="重新加载音乐">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0 1.1 4"/><path d="M20 4v7h-7"/></svg>
         </button>

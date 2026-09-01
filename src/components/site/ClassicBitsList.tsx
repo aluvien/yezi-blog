@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import type { Moment } from "@/lib/db";
 import { groupMomentImages, parseMomentImages, parseMomentTags } from "@/lib/moments";
-import { splitMomentContent } from "@/lib/music";
+import { foldedMomentMusic, splitMomentContent } from "@/lib/music";
 import { formatDate } from "@/lib/format";
 import { parsePostTags } from "@/lib/post-tags";
 import { MusicEmbed } from "@/components/site/MusicEmbed";
+import { MomentLocation } from "@/components/site/MomentLocation";
 import { LightboxOverlay } from "@/components/site/ImageLightbox";
 import { SiteImage } from "@/components/site/SiteImage";
 
@@ -25,7 +26,8 @@ function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentC
     const stored = parsePostTags(moment.tags);
     return stored.length > 0 ? stored : parseMomentTags(moment.content);
   }, [moment.content, moment.tags]);
-  const segments = useMemo(() => splitMomentContent(moment.content), [moment.content]);
+  const segments = useMemo(() => splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded), [moment.content]);
+  const inlineMusic = useMemo(() => foldedMomentMusic(moment.content), [moment.content]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   return (
@@ -35,7 +37,10 @@ function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentC
           {authorAvatar ? <SiteImage src={authorAvatar} alt="" fill sizes="32px" priority={prioritize} /> : null}
           <span className="avatar-fallback">{authorName.charAt(0).toUpperCase()}</span>
         </div>
-        <div className="name"><strong>{authorName}</strong></div>
+        <div className="name">
+          <strong>{authorName}</strong>
+          {inlineMusic.map((spec, index) => <MusicEmbed key={`${spec.id}-${index}`} spec={spec} compact />)}
+        </div>
       </div>
       <div className="bit-body">
         {segments.map((segment, index) => segment.kind === "music" ? <MusicEmbed key={index} spec={segment.value} /> : <p key={index}>{segment.value}</p>)}
@@ -56,6 +61,7 @@ function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentC
         </div>
       ) : null}
       <div className="bit-meta">
+        <MomentLocation location={moment.location} />
         {tags.length > 0 ? (
           <div className="bit-tags" aria-label="想法标签">
             <span className="bit-tag bit-tag--normal">

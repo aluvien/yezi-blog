@@ -221,6 +221,16 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    // 想法仅保留手动填写或定位反查得到的城市文字；不存储精确坐标，避免
+    // 将发布时的敏感定位信息写入数据库或公开 API。
+    version: 12,
+    name: "moment-location",
+    up(db) {
+      const momentsTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'moments'").get();
+      if (momentsTable) ensureColumn(db, "moments", "location", "TEXT NOT NULL DEFAULT ''");
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

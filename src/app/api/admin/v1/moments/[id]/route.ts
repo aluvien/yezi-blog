@@ -33,9 +33,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const tags = hasOwn(body.value, "tags")
     ? parsePostTags(typeof body.value.tags === "string" ? body.value.tags : JSON.stringify(body.value.tags ?? []))
     : parsePostTags(existing.tags);
+  const location = hasOwn(body.value, "location") ? body.value.location : existing.location;
 
   try {
-    const result = await updateMomentAction(id, { content: content as string, images: images as string[], tags });
+    const result = await updateMomentAction(id, { content: content as string, images: images as string[], tags, location: location as string });
     if (!result.ok) return adminActionError(result);
     const moment = getMoment(id);
     if (!moment) return adminInternalError("update moment response", new Error("moment is missing"));

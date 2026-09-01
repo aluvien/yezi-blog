@@ -21,6 +21,8 @@ export interface MusicSpec {
   id: string;
   type: MusicType;
   shuffle?: boolean;
+  /** 仅想法使用：不渲染正文音乐卡片，改在作者信息旁显示紧凑播放项。 */
+  folded?: boolean;
   /** QQ 搜索时随引用保存的展示快照，保证首屏无需再等详情接口。 */
   title?: string;
   artist?: string;
@@ -67,21 +69,24 @@ export function createQQMusicSpec(mid: string): string {
   return `qqvip:${safeMid}:song`;
 }
 
-/** 解析 `qqvip:id:type[:random]` 规格。 */
+/** 解析 `qqvip:id:type[:random][:fold]` 规格。 */
 export function parseMusicSpec(input: string): MusicSpec | null {
   const raw = input.trim();
   if (!raw) return null;
   const parts = raw.split(":").map((part) => part.trim()).filter(Boolean);
-  if (parts.length < 2 || parts.length > 4) return null;
-  const [server, id, type = "song", mode] = parts;
+  if (parts.length < 2 || parts.length > 5) return null;
+  const [server, id, type = "song", ...modes] = parts;
   if (!SERVER_SET.has(server) || !/^[A-Za-z0-9_-]{4,80}$/.test(id) || !TYPE_SET.has(type)) return null;
-  const metadata = qqMusicMetadata(mode);
-  if (mode && mode !== "random" && mode !== "shuffle" && !metadata) return null;
+  const metadataModes = modes.map(qqMusicMetadata).filter((value): value is NonNullable<typeof value> => value !== null);
+  const recognized = modes.every((mode) => mode === "random" || mode === "shuffle" || mode === "fold" || mode === "collapsed" || Boolean(qqMusicMetadata(mode)));
+  if (!recognized || metadataModes.length > 1) return null;
+  const metadata = metadataModes[0] ?? null;
   return {
     server: "qqvip",
     id,
     type: type as MusicType,
-    shuffle: mode === "random" || mode === "shuffle",
+    shuffle: modes.includes("random") || modes.includes("shuffle"),
+    ...(modes.includes("fold") || modes.includes("collapsed") ? { folded: true } : {}),
     ...(metadata ?? {}),
   };
 }
@@ -123,6 +128,11 @@ export function splitMomentContent(content: string): MomentSegment[] {
   }
   flush();
   return segments;
+}
+
+/** 取出想法中选择折叠展示的音乐；它们会被放在作者信息旁而不是正文内。 */
+export function foldedMomentMusic(content: string): MusicSpec[] {
+  return splitMomentContent(content).flatMap((segment) => segment.kind === "music" && segment.value.folded ? [segment.value] : []);
 }
 
 /** 服务端渲染音乐容器，QQ 搜索快照可在客户端请求前直接显示。 */

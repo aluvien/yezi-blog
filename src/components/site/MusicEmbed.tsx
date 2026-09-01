@@ -10,7 +10,7 @@ import { compactMusicCoverUrl, type MusicSpec } from "@/lib/music";
  * the cover/title/artist are visible before client JavaScript resolves audio.
  * MusicInitializer replaces this shell with the interactive player card.
  */
-export function MusicEmbed({ spec }: { spec: MusicSpec }) {
+export function MusicEmbed({ spec, compact = false }: { spec: MusicSpec; compact?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hasSnapshot = spec.server === "qqvip" && Boolean(spec.title);
   useEffect(() => {
@@ -27,11 +27,12 @@ export function MusicEmbed({ spec }: { spec: MusicSpec }) {
   return (
     <div
       ref={containerRef}
-      className="blog-music"
+      className={`blog-music${compact ? " moment-inline-music" : ""}`}
       data-server={spec.server}
       data-id={spec.id}
       data-type={spec.type}
       data-shuffle={spec.shuffle ? "1" : "0"}
+      data-compact={compact ? "1" : "0"}
       data-music-name={spec.title || undefined}
       data-music-artist={spec.artist || undefined}
       data-music-cover={spec.cover || undefined}
@@ -51,7 +52,9 @@ export function MusicEmbed({ spec }: { spec: MusicSpec }) {
               </span>
             </span>
           </span>
-          <span className="music-trigger-play" aria-hidden="true" />
+          <span className="music-trigger-play" aria-hidden="true">
+            {compact && <svg className="moment-inline-music-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>}
+          </span>
         </div>
       )}
     </div>

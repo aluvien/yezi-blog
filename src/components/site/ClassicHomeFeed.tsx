@@ -38,7 +38,7 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
   const router = useRouter();
   const images = useMemo(() => parseMomentImages(moment).slice(0, 9), [moment]);
   const imageGroups = useMemo(() => groupMomentImages(images), [images]);
-  const segments = useMemo(() => splitMomentContent(moment.content), [moment.content]);
+  const segments = useMemo(() => splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded), [moment.content]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const destination = PUBLIC_ROUTES.moment(moment.id);
 

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createQQMusicSpec, fetchMusicMetadata, normalizeMusicDisplayText, parseMusicSpec, resolveMusicCover } from "../src/lib/music.ts";
+import { createQQMusicSpec, fetchMusicMetadata, normalizeMusicDisplayText, parseMusicSpec, resolveMusicCover, splitMomentContent } from "../src/lib/music.ts";
+import { normalizeMediaShortcodes } from "../src/lib/media-shortcodes.ts";
 import { normalizeQQSearchTracks } from "../src/lib/qq-music-api.ts";
 import { isGlobalPlaybackActiveForCard } from "../src/lib/player-store.ts";
 
@@ -38,6 +39,13 @@ test("QQ search music spec remains a compact shortcode", () => {
     shuffle: false,
   });
   assert.equal(createQQMusicSpec("002u1lkd1zb2Ie"), "qqvip:002u1lkd1zb2Ie:song");
+});
+
+test("folded moment music keeps its compact marker through normalization", () => {
+  const spec = parseMusicSpec("qqvip:002u1lkd1zb2Ie:song:fold");
+  assert.equal(spec?.folded, true);
+  assert.equal(normalizeMediaShortcodes("!music qqvip:002u1lkd1zb2Ie:song:fold"), "!music qqvip:002u1lkd1zb2Ie:song:fold");
+  assert.equal(splitMomentContent("文字\n!music qqvip:002u1lkd1zb2Ie:song:fold")[1]?.kind, "music");
 });
 
 test("legacy player labels are constrained to plain text before reaching APlayer", () => {

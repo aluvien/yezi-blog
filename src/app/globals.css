@@ -1590,11 +1590,37 @@ body {
   line-height: 1.25;
 }
 
+.moment-entry-author-line,
+.mobile-feed-memo-author-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+}
+
 .moment-entry-author time {
   color: var(--muted);
   font-family: var(--font-site-mono);
   font-size: 16px;
   line-height: 1.5;
+}
+
+.moment-location {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.22rem;
+  color: var(--muted);
+  font-family: var(--font-site-mono);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.moment-location svg {
+  width: 0.9em;
+  height: 0.9em;
+  flex: 0 0 auto;
 }
 
 .moment-entry-content {
@@ -3617,6 +3643,138 @@ textarea.comment-field {
 .blog-music {
   margin: 1.5rem 0;
   overflow: hidden;
+}
+
+/* 折叠音乐属于絮语作者元信息：保留全局播放器的同一套点击和状态同步，
+ * 但把卡片收成“音符 + 歌名 + 歌手”的一行。 */
+.moment-inline-music {
+  display: inline-flex;
+  max-width: min(100%, 22rem);
+  margin: 0;
+  overflow: visible;
+  align-items: center;
+  font-family: var(--font-copy);
+  line-height: 1.25;
+  align-self: center;
+  vertical-align: middle;
+  /* 字体的视觉重心略高于作者名；只做视觉微调，不改变行盒高度。 */
+  transform: translateY(1px);
+}
+
+.moment-inline-music .music-trigger {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--muted);
+}
+
+.moment-inline-music .music-trigger:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.moment-inline-music .music-trigger-swipe-stage {
+  width: auto;
+  min-height: 1.4em;
+  flex: 0 1 auto;
+  align-self: auto;
+  overflow: hidden;
+}
+
+.moment-inline-music .music-trigger-swipe-slide {
+  width: auto;
+  min-width: 0;
+  gap: 0;
+}
+
+.moment-inline-music .music-trigger-swipe-preview,
+.moment-inline-music .music-trigger-cover,
+.moment-inline-music .music-trigger-retry,
+.moment-inline-music .music-trigger-lyric {
+  display: none !important;
+}
+
+.moment-inline-music .music-trigger-info {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.28rem;
+  line-height: 1.25;
+}
+
+.moment-inline-music .music-trigger-name,
+.moment-inline-music .music-trigger-artist {
+  flex: 0 1 auto;
+  color: inherit;
+  font-family: var(--font-copy);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.moment-inline-music .music-trigger-name {
+  max-width: 11em;
+}
+
+.moment-inline-music .music-trigger-artist {
+  width: auto;
+  min-width: 0;
+  max-width: 8em;
+  height: auto;
+  min-height: 0;
+}
+
+.moment-inline-music .music-trigger-artist-name::before {
+  content: "· ";
+}
+
+.moment-inline-music .music-trigger-play {
+  order: -1;
+  width: 1em;
+  height: 1.25em;
+  flex: 0 0 1em;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: currentColor;
+}
+
+.moment-inline-music .music-trigger-play::before {
+  display: none !important;
+  content: none;
+}
+
+.moment-inline-music-icon {
+  display: block;
+  width: 1.05em;
+  height: 1.05em;
+  overflow: visible;
+  color: currentColor;
+  stroke: currentColor;
+}
+
+.moment-inline-music-icon.is-playing {
+  color: var(--accent);
+  animation: moment-inline-music-bob 700ms ease-in-out infinite alternate;
+}
+
+.moment-inline-music .music-trigger-play .eq-bar {
+  display: none;
+}
+
+@keyframes moment-inline-music-bob {
+  from { transform: translateY(-0.08em) rotate(-6deg); }
+  to { transform: translateY(0.1em) rotate(6deg); }
 }
 .blog-video {
   position: relative;
@@ -8390,6 +8548,24 @@ html[data-layout-theme="classic"] .classic-home-feed__bit .bit-author .name {
   gap: 8px;
 }
 
+html[data-layout-theme="classic"] :is(.classic-home-feed__bit, .classic-bit-card) .bit-author .name {
+  display: flex;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+html[data-layout-theme="classic"] :is(.classic-home-feed__bit, .classic-bit-card) .moment-inline-music {
+  max-width: min(100%, 19rem);
+}
+
+html[data-layout-theme="classic"] :is(.classic-home-feed__bit, .classic-bit-card) .moment-location {
+  color: var(--faint);
+  font: inherit;
+}
+
 html[data-layout-theme="classic"] .classic-home-feed__bit .bit-author .name time {
   display: inline;
   color: var(--faint);
@@ -8435,6 +8611,11 @@ html[data-layout-theme="classic"] .classic-bit-card__date {
   white-space: nowrap;
 }
 
+html[data-layout-theme="classic"] .classic-bit-card .moment-location {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   /* 目标站手机端将日期放在元信息行最左侧；标签随后排列，评论保持最右。 */
   html[data-layout-theme="classic"] .classic-bit-card .bit-meta {
@@ -8448,13 +8629,18 @@ html[data-layout-theme="classic"] .classic-bit-card__date {
   }
 
   html[data-layout-theme="classic"] .classic-bit-card .bit-tags {
-    order: 2;
+    order: 3;
     margin-right: 0;
     margin-left: 12px;
   }
 
+  html[data-layout-theme="classic"] .classic-bit-card .moment-location {
+    order: 2;
+    margin-left: 0;
+  }
+
   html[data-layout-theme="classic"] .classic-bit-card__meta-actions {
-    order: 3;
+    order: 4;
     margin-left: auto;
   }
 }

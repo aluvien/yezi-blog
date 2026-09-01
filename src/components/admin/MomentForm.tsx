@@ -26,8 +26,10 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
   const [content, setContent] = useState(moment?.content ?? "");
   const [tags, setTags] = useState(() => parsePostTags(moment?.tags).join(", "));
   const [images, setImages] = useState<string[]>(() => initialImages(moment));
+  const [location, setLocation] = useState(moment?.location ?? "");
   const [original, setOriginal] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
   const [musicDialog, setMusicDialog] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -57,12 +59,45 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
     });
   }
 
+  function useCurrentLocation() {
+    if (!navigator.geolocation) {
+      setError("当前浏览器不支持定位，请手动填写城市");
+      return;
+    }
+    setLocating(true);
+    setError("");
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const response = await fetch(
+            `/api/admin/moments/reverse-geocode?lat=${encodeURIComponent(coords.latitude)}&lng=${encodeURIComponent(coords.longitude)}`,
+            { cache: "no-store" },
+          );
+          const data = await response.json() as { location?: unknown; error?: unknown };
+          if (!response.ok || typeof data.location !== "string" || !data.location.trim()) {
+            throw new Error(typeof data.error === "string" ? data.error : "未能识别所在地级市");
+          }
+          setLocation(data.location);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : "定位服务暂不可用，请手动填写城市");
+        } finally {
+          setLocating(false);
+        }
+      },
+      (reason) => {
+        setLocating(false);
+        setError(reason.code === reason.PERMISSION_DENIED ? "未获得定位权限，请手动填写城市" : "无法获取当前位置，请手动填写城市");
+      },
+      { enableHighAccuracy: false, timeout: 12_000, maximumAge: 5 * 60_000 },
+    );
+  }
+
   function submit() {
     setError("");
     startTransition(async () => {
       const r = moment
-        ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags) })
-        : await createMomentAction({ content, images, tags: parsePostTags(tags) });
+        ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags), location })
+        : await createMomentAction({ content, images, tags: parsePostTags(tags), location });
       if (!r.ok) {
         setError(r.error);
         return;
@@ -94,6 +129,18 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
           placeholder="标签（可选，多个用逗号分隔）"
           aria-label="想法标签"
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={location}
+            onChange={(event) => setLocation(event.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm"
+            placeholder="位置（可选，如杭州市）"
+            aria-label="想法位置"
+          />
+          <button type="button" onClick={useCurrentLocation} disabled={locating} className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">
+            {locating ? "定位中…" : "使用现在位置"}
+          </button>
+        </div>
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {images.map((src, i) => (
@@ -164,6 +211,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
         {error && <p className="text-sm text-red-600">{error}</p>}
         {musicDialog && (
           <MusicInsertDialog
+            allowFolded
             onClose={(spec) => {
               setMusicDialog(false);
               if (spec) insertMomentMusic(spec);
@@ -190,6 +238,18 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
         placeholder="标签（可选，多个用逗号分隔）"
         aria-label="想法标签"
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={location}
+          onChange={(event) => setLocation(event.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-base"
+          placeholder="位置（可选，如杭州市）"
+          aria-label="想法位置"
+        />
+        <button type="button" onClick={useCurrentLocation} disabled={locating} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">
+          {locating ? "定位中…" : "使用现在位置"}
+        </button>
+      </div>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -253,6 +313,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
       </button>
       {musicDialog && (
         <MusicInsertDialog
+          allowFolded
           onClose={(spec) => {
             setMusicDialog(false);
             if (spec) insertMomentMusic(spec);

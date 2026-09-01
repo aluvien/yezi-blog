@@ -6,8 +6,9 @@ import type { ContentMetrics, Moment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
 import { formatDateOnly } from "@/lib/format";
 import { site } from "@/lib/site";
-import { splitMomentContent } from "@/lib/music";
+import { foldedMomentMusic, splitMomentContent } from "@/lib/music";
 import { MusicEmbed } from "@/components/site/MusicEmbed";
+import { MomentLocation } from "@/components/site/MomentLocation";
 import { MomentCommentToggle } from "@/components/site/MomentCommentToggle";
 import { MetricIcon } from "@/components/site/MetricIcon";
 import { MomentImages } from "@/components/site/MomentImages";
@@ -47,7 +48,8 @@ export function MomentEntry({
   const [editing, setEditing] = useState(false);
   const [touchActive, setTouchActive] = useState(false);
   const images = parseMomentImages(moment);
-  const segments = splitMomentContent(moment.content);
+  const segments = splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded);
+  const inlineMusic = foldedMomentMusic(moment.content);
   const displayAuthor = authorName?.trim() || site.author;
   const avatar = authorAvatar?.trim();
   const { views, targetRef } = useMomentView(moment.id, metrics?.views ?? 0);
@@ -87,8 +89,12 @@ export function MomentEntry({
           )}
         </div>
         <div className="moment-entry-author">
-          <strong>{displayAuthor}</strong>
+          <div className="moment-entry-author-line">
+            <strong>{displayAuthor}</strong>
+            {inlineMusic.map((spec, index) => <MusicEmbed key={`${spec.id}-${index}`} spec={spec} compact />)}
+          </div>
           <time>{formatDateOnly(moment.created_at)}</time>
+          <MomentLocation location={moment.location} />
         </div>
         {canEdit && (
           <button
