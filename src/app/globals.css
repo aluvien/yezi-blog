@@ -8913,15 +8913,16 @@ html[data-layout-theme="classic"] body.immersive-page[data-reading="normal"] .si
   color: var(--faint);
 }
 
-/* 目标站絮语搜索固定为 300px，并使用系统无衬线字，避免被经典版正文
- * 的衬线字体继承后显得过窄、过轻。 */
+/* 絮语搜索控件统一使用经典版摘要字体，避免输入框、年份选择器和按钮
+ * 因浏览器默认控件字体不同而出现视觉断层。 */
 html[data-layout-theme="classic"] .bits-controls__search-cluster {
   min-width: min(100%, 300px);
 }
 
 html[data-layout-theme="classic"] .bits-search input,
-html[data-layout-theme="classic"] .bits-search button {
-  font-family: Arial, sans-serif;
+html[data-layout-theme="classic"] .bits-search button,
+html[data-layout-theme="classic"] .bits-year-select {
+  font-family: var(--font-copy);
 }
 
 @media (min-width: 901px) {
