@@ -442,6 +442,34 @@ html[data-theme="dark"] .admin-shell :is(input, textarea, select) {
   caret-color: var(--foreground);
 }
 
+/* Let the browser render its native menu in the active color scheme, then pin
+ * option foreground/background colors as a fallback. This keeps the selected
+ * row legible in both the desktop popup and mobile picker. */
+.admin-shell select {
+  color-scheme: light;
+  color: var(--foreground);
+}
+
+.admin-shell select option,
+.admin-shell select optgroup {
+  background-color: var(--paper);
+  color: var(--foreground);
+}
+
+.admin-shell select option:checked {
+  background-color: var(--accent);
+  color: #fff;
+}
+
+html[data-theme="dark"] .admin-shell select {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] .admin-shell select option:checked {
+  background-color: var(--accent-strong);
+  color: #fff;
+}
+
 html[data-theme="dark"] .admin-shell :is(input, textarea)::placeholder {
   color: color-mix(in srgb, var(--foreground) 42%, var(--paper));
 }

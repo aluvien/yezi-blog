@@ -36,8 +36,23 @@ type NativeQrService = {
   }): void;
 };
 
-type NativeQrModule = {
-  createNodeQrLoginService(): NativeQrService;
+type NativeQrCoreModule = {
+  createQrLoginService(dependencies: {
+    http: unknown;
+    createSessionHttp(): unknown;
+    deviceRepository: unknown;
+    listen: unknown;
+    randomBytes(size: number): Buffer;
+  }): NativeQrService;
+  createMqttListen(webSocket: unknown): unknown;
+};
+
+type NativeHttpClientModule = {
+  default(): unknown;
+};
+
+type NativeDeviceContextModule = {
+  createFileDeviceContextRepository(filePath: string): unknown;
 };
 
 export type NativeQQMusicQr = {
@@ -60,11 +75,25 @@ export type NativeQQMusicPollResult = {
 let service: NativeQrService | null = null;
 let capturedSessions: readonly NativeAuthSession[] = [];
 
-function nativeDevicePath(): string {
-  const configured = process.env.QQ_MUSIC_NATIVE_DEVICE_PATH?.trim();
+function environmentText(env: NodeJS.ProcessEnv, name: string): string {
+  const value = env[name];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Resolve a file path only from actual strings. Some process managers can pass
+ * typed values through their in-memory environment object; treating a port
+ * number as a filesystem path was the source of the `Received type number`
+ * failure during QQ Music App QR bootstrap.
+ */
+export function resolveNativeQQMusicDevicePath(
+  env: NodeJS.ProcessEnv = process.env,
+  workingDirectory = process.cwd(),
+): string {
+  const configured = environmentText(env, "QQ_MUSIC_NATIVE_DEVICE_PATH");
   if (configured) return path.resolve(configured);
-  const dbPath = process.env.BLOG_DB_PATH?.trim();
-  const dataDir = dbPath ? path.dirname(path.resolve(dbPath)) : path.join(process.cwd(), "data");
+  const dbPath = environmentText(env, "BLOG_DB_PATH");
+  const dataDir = dbPath ? path.dirname(path.resolve(dbPath)) : path.join(workingDirectory, "data");
   return path.join(dataDir, "qq-music-native-device.json");
 }
 
@@ -80,33 +109,36 @@ function nativeService(): NativeQrService {
     ));
   }
 
-  // The package's public root starts its own Koa listener. Load only its Node QR
-  // composition module so the existing localhost:3200 sidecar remains untouched.
-  const modulePath = path.join(packageRoot, "dist", "src", "services", "auth", "qrLogin.node.js");
-  const previousDevicePath = process.env.QQ_AUTH_STATE_PATH;
-  process.env.QQ_AUTH_STATE_PATH = nativeDevicePath();
-  try {
-    // Reflect keeps webpack from trying to bundle an absolute runtime path; the
-    // exact package closure is copied by outputFileTracingIncludes instead.
-    const nativeModule = Reflect.apply(runtimeRequire, undefined, [modulePath]) as NativeQrModule;
-    const created = nativeModule.createNodeQrLoginService();
-    created.configureAuthSessionRepository({
-      kind: "yezi-capture",
-      load: () => capturedSessions,
-      save: (sessions) => {
-        capturedSessions = sessions.map((session) => ({
-          ...session,
-          credential: { ...session.credential },
-          device: { ...session.device },
-        }));
-      },
-    });
-    service = created;
-    return created;
-  } finally {
-    if (previousDevicePath === undefined) delete process.env.QQ_AUTH_STATE_PATH;
-    else process.env.QQ_AUTH_STATE_PATH = previousDevicePath;
-  }
+  // Do not load the package root (it starts a Koa listener) nor its Node
+  // composition module (it reads QQ_AUTH_STATE_PATH from a mutable process
+  // environment). Compose the documented QR primitives with our validated path
+  // instead, leaving the existing localhost:3200 music sidecar untouched.
+  const authDirectory = path.join(packageRoot, "dist", "src", "services", "auth");
+  const core = Reflect.apply(runtimeRequire, undefined, [path.join(authDirectory, "qrLogin.js")]) as NativeQrCoreModule;
+  const httpClient = Reflect.apply(runtimeRequire, undefined, [path.join(authDirectory, "httpClient.js")]) as NativeHttpClientModule;
+  const deviceContext = Reflect.apply(runtimeRequire, undefined, [path.join(authDirectory, "deviceContext.js")]) as NativeDeviceContextModule;
+  const crypto = runtimeRequire("node:crypto") as typeof import("node:crypto");
+  const webSocket = runtimeRequire("ws") as unknown;
+  const created = core.createQrLoginService({
+    http: httpClient.default(),
+    createSessionHttp: httpClient.default,
+    deviceRepository: deviceContext.createFileDeviceContextRepository(resolveNativeQQMusicDevicePath()),
+    listen: core.createMqttListen(webSocket),
+    randomBytes: crypto.randomBytes,
+  });
+  created.configureAuthSessionRepository({
+    kind: "yezi-capture",
+    load: () => capturedSessions,
+    save: (sessions) => {
+      capturedSessions = sessions.map((session) => ({
+        ...session,
+        credential: { ...session.credential },
+        device: { ...session.device },
+      }));
+    },
+  });
+  service = created;
+  return created;
 }
 
 function scalar(value: unknown): string {

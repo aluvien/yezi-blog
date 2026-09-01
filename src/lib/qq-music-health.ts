@@ -21,7 +21,10 @@ export type QQMusicHealthAlertState = {
   lastNotifiedAt?: string;
 };
 
-const FAILURE_STATUSES = new Set<QQMusicHealthStatus>(["missing_session", "expired", "unavailable"]);
+// A health check is meaningful only when it obtained an actual playable URL.
+// “Unverified” therefore requires attention too: it covers an upstream response
+// without a URL and protocol errors that are not a proven local-sidecar outage.
+const FAILURE_STATUSES = new Set<QQMusicHealthStatus>(["missing_session", "expired", "unavailable", "unverified"]);
 const REPEAT_ALERT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_PROBE_MID = "004a8wRo02vuxG";
 
@@ -35,7 +38,7 @@ function isHealthStatus(value: unknown): value is QQMusicHealthStatus {
   return value === "healthy" || value === "missing_session" || value === "expired" || value === "unavailable" || value === "unverified";
 }
 
-function isFailureStatus(value: unknown): value is QQMusicHealthStatus {
+export function qqMusicHealthNeedsAttention(value: unknown): value is QQMusicHealthStatus {
   return isHealthStatus(value) && FAILURE_STATUSES.has(value);
 }
 
@@ -126,8 +129,8 @@ export async function inspectQQMusicHealth(): Promise<QQMusicHealthResult> {
     const detail = error instanceof Error ? error.message.slice(0, 120) : "未知错误";
     return {
       // A non-2xx response from the sidecar or QQ upstream is not proof that
-      // the sidecar itself is down. Keep it visible for diagnosis but avoid a
-      // false Telegram outage alert.
+      // the sidecar itself is down, but it still means playback was not
+      // verified and must be surfaced through the Telegram health alert.
       status: isServiceUnavailable(error) ? "unavailable" : "unverified",
       checkedAt,
       detail: withSource(isServiceUnavailable(error) ? `无法连接 QQ 音乐服务：${detail}` : `播放授权探测未完成：${detail}`, QQ_MUSIC_WEB_SOURCE),
@@ -158,7 +161,7 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
   const now = Date.now();
   let notified = false;
 
-  if (isTelegramConfigured() && isFailureStatus(result.status) && shouldRepeatAlert(previous, result.status, now)) {
+  if (isTelegramConfigured() && qqMusicHealthNeedsAttention(result.status) && shouldRepeatAlert(previous, result.status, now)) {
     const sent = await sendTelegramMessage([
       "<b>⚠️ QQ 音乐需要处理</b>",
       "",
@@ -180,7 +183,7 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
       next.lastNotifiedAt = result.checkedAt;
       notified = true;
     }
-  } else if (isTelegramConfigured() && result.status === "healthy" && isFailureStatus(previous.lastNotifiedStatus)) {
+  } else if (isTelegramConfigured() && result.status === "healthy" && qqMusicHealthNeedsAttention(previous.lastNotifiedStatus)) {
     const sent = await sendTelegramMessage("<b>✅ QQ 音乐已恢复</b>\n\n播放器授权检测正常。", { parseMode: "HTML" });
     if (sent.ok) {
       next.lastNotifiedStatus = "recovered";

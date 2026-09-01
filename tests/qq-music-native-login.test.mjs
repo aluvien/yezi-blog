@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { qqMusicCredentialCookie } = await import("../src/lib/qq-music-native-login.ts");
+const { qqMusicCredentialCookie, resolveNativeQQMusicDevicePath } = await import("../src/lib/qq-music-native-login.ts");
 const { QQ_MUSIC_APP_SOURCE, withSource } = await import("../src/lib/service-source.ts");
 
 test("native QQ Music credential becomes a sidecar-compatible cookie", () => {
@@ -27,4 +27,12 @@ test("failure source annotation is explicit and idempotent", () => {
   const message = withSource("二维码生成失败", QQ_MUSIC_APP_SOURCE);
   assert.match(message, /u\.y\.qq\.com \/ mu\.y\.qq\.com/);
   assert.equal(withSource(message, QQ_MUSIC_APP_SOURCE), message);
+});
+
+test("native QR device path ignores non-string process-manager values", () => {
+  const result = resolveNativeQQMusicDevicePath({
+    QQ_MUSIC_NATIVE_DEVICE_PATH: 62079,
+    BLOG_DB_PATH: 62080,
+  }, "/srv/yezi");
+  assert.equal(result, "/srv/yezi/data/qq-music-native-device.json");
 });
