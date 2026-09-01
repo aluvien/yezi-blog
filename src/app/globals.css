@@ -3756,7 +3756,9 @@ html[data-layout-theme="classic"] :is(.classic-home-feed, #bits-list) .music-tri
 }
 /* 正在播放：隐藏三角，显示等化器动效（MusicInitializer 注入 <i class="eq-bar">） */
 .music-trigger.is-playing .music-trigger-play {
-  background: color-mix(in srgb, var(--accent) 78%, #000);
+  /* 与底部全局播放器的主播放键共用强调色；等化器本身已足够表达播放态。 */
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .music-trigger.is-playing .music-trigger-play::before {
   display: none;
@@ -4566,7 +4568,8 @@ html[data-layout-theme="classic"] :is(.classic-home-feed, #bits-list) .music-tri
   width: 30px;
   height: 30px;
   flex-basis: 30px;
-  background: var(--accent);
+  background: var(--accent) !important;
+  touch-action: manipulation;
 }
 .global-player-panel .aplayer:not(.aplayer-withlist) .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon-play {
   grid-column: 3;
@@ -8571,7 +8574,7 @@ html[data-layout-theme="classic"][data-theme="dark"] :is(.music-trigger-play, .g
 }
 
 html[data-layout-theme="classic"][data-theme="dark"] .music-trigger.is-playing .music-trigger-play {
-  background: color-mix(in srgb, var(--classic-accent) 78%, #000);
+  background: var(--classic-accent);
 }
 
 html[data-layout-theme="classic"][data-theme="dark"] :is(.global-player-float-cover, .global-player-float-fallback) {

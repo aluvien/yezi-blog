@@ -71,6 +71,22 @@ export function getGlobalPlaybackState(): GlobalPlaybackState {
   return state;
 }
 
+/**
+ * 判断某张页面音乐卡片是否应回显为播放中。
+ *
+ * `cardId` 只在一次卡片触发的生命周期内稳定；客户端路由切换会重建卡片，
+ * 因此新页面的同一首歌要按稳定曲目标识继续回显播放状态。
+ */
+export function isGlobalPlaybackActiveForCard(
+  playback: GlobalPlaybackState,
+  cardId: string | undefined,
+  matchesCurrentTrack: boolean,
+): boolean {
+  return playback.playing && (
+    (Boolean(cardId) && playback.cardId === cardId) || matchesCurrentTrack
+  );
+}
+
 /** 全局播放器更新播放状态（play/pause/ended/listswitch）。 */
 export function emitGlobalPlaybackState(next: GlobalPlaybackState): void {
   state = next;

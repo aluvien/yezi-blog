@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createQQMusicSpec, normalizeMusicDisplayText, parseMusicSpec, resolveMusicCover } from "../src/lib/music.ts";
 import { normalizeQQSearchTracks } from "../src/lib/qq-music-api.ts";
+import { isGlobalPlaybackActiveForCard } from "../src/lib/player-store.ts";
 
 test("QQ search accepts a top-level albummid and builds its cover URL", () => {
   const tracks = normalizeQQSearchTracks({
@@ -50,4 +51,22 @@ test("music without a cover uses the configured site image before the built-in p
   assert.equal(resolveMusicCover(undefined, ""), "/placeholder.svg");
   assert.equal(resolveMusicCover("", "//example.com/site-logo.png"), "https://example.com/site-logo.png");
   assert.equal(resolveMusicCover("//y.gtimg.cn/music/cover.jpg", "/uploads/site-logo.png"), "https://y.gtimg.cn/music/cover.jpg");
+});
+
+test("matching inline tracks remain marked as playing after client navigation rebuilds card ids", () => {
+  const playingState = {
+    playing: true,
+    cardId: "article-card-before-navigation",
+    trackKey: "qqvip:62079",
+    currentTime: 12,
+    lrc: null,
+    lyricText: null,
+    trackName: "测试歌曲",
+    trackArtist: "测试歌手",
+  };
+
+  assert.equal(isGlobalPlaybackActiveForCard(playingState, "article-card-before-navigation", false), true);
+  assert.equal(isGlobalPlaybackActiveForCard(playingState, "article-card-after-navigation", true), true);
+  assert.equal(isGlobalPlaybackActiveForCard(playingState, "unrelated-card", false), false);
+  assert.equal(isGlobalPlaybackActiveForCard({ ...playingState, playing: false }, "article-card-after-navigation", true), false);
 });

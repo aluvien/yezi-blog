@@ -600,13 +600,14 @@ export function GlobalMusicPlayer({
     if (!panelOpen || playerPosition === "bottom" || !event.isPrimary || event.button !== 0) return;
     const target = event.target instanceof Element ? event.target : null;
     const collapseHandle = target?.closest(".global-player-collapse");
-    const playerBody = target?.closest(".aplayer-body");
-    // 列表和播放控件必须保留完整的原生点击/滚动事件，父级既不更新状态也不捕获指针。
-    // 下滑收起只由顶部把手，以及控制卡片内的封面、歌名等非交互区域触发。
-    if (!collapseHandle && !playerBody) return;
+    const playerDragArea = target?.closest(".aplayer-music, .aplayer-lrc");
+    // 不再把整个 .aplayer-body 作为下滑收起区域：APlayer 的 SVG、按钮和
+    // 控制栏会在不同版本中改变嵌套层级，父级 pointer capture 可能抢走首击。
+    // 下滑收起只由顶部把手及纯展示的歌名/歌词区触发。
+    if (!collapseHandle && !playerDragArea) return;
     if (
       !collapseHandle &&
-      target?.closest(".aplayer-controller, .aplayer-icon, button, a, input, select, textarea, [role='button']")
+      target?.closest(".aplayer-controller, .aplayer-icon, .aplayer-button, .aplayer-list, button, a, input, select, textarea, [role='button']")
     ) {
       return;
     }

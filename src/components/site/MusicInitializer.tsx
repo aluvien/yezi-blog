@@ -2,7 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { compactMusicCoverUrl, fetchMusicMetadata, fetchMusicTracks, parseMusicSpec, type MusicSpec, type MusicTrack } from "@/lib/music";
-import { getGlobalPlaybackState, requestGlobalPlay, setGlobalStateListener } from "@/lib/player-store";
+import {
+  getGlobalPlaybackState,
+  isGlobalPlaybackActiveForCard,
+  requestGlobalPlay,
+  setGlobalStateListener,
+} from "@/lib/player-store";
 import { getMusicLyrics } from "@/lib/music-lyrics";
 import { lyricAt, type LyricLine } from "@/lib/lyrics";
 
@@ -21,9 +26,13 @@ type CardSwipeGesture = {
 };
 
 /** 依据全局播放状态刷新单张卡片：命中即显示"正在播放"（等化器动效），否则回到静态三角。 */
-function syncCardState(card: HTMLElement, state: ReturnType<typeof getGlobalPlaybackState>) {
+function syncCardState(
+  card: HTMLElement,
+  state: ReturnType<typeof getGlobalPlaybackState>,
+  matchesCurrentTrack: boolean,
+) {
   const id = card.dataset.cardId;
-  const isPlaying = state.playing && Boolean(id) && state.cardId === id;
+  const isPlaying = isGlobalPlaybackActiveForCard(state, id, matchesCurrentTrack);
   card.classList.toggle("is-playing", isPlaying);
   const playEl = card.querySelector<HTMLElement>(".music-trigger-play");
   if (!playEl) return;
@@ -226,18 +235,19 @@ export function MusicInitializer() {
       setLyricText(lyricEl, lines.length > 0 ? (lyricAt(lines, state.currentTime) || "♪") : "暂无歌词", true);
     }
 
-    function syncCardTitle(card: HTMLElement, state: ReturnType<typeof getGlobalPlaybackState>): void {
+    function syncCardTitle(card: HTMLElement, state: ReturnType<typeof getGlobalPlaybackState>): boolean {
       const data = cardMusicState.get(card);
-      if (!data || data.tracks.length === 0) return;
+      if (!data || data.tracks.length === 0) return false;
       const currentIndex = state.playing
         ? data.tracks.findIndex((item) => trackMatchesState(item, state))
         : -1;
       renderCardTrack(card, data, currentIndex >= 0 ? currentIndex : data.activeIndex);
+      return currentIndex >= 0;
     }
 
     function syncCard(card: HTMLElement, state: ReturnType<typeof getGlobalPlaybackState>): void {
-      syncCardTitle(card, state);
-      syncCardState(card, state);
+      const matchesCurrentTrack = syncCardTitle(card, state);
+      syncCardState(card, state, matchesCurrentTrack);
       syncCardLyric(card, state);
     }
 
