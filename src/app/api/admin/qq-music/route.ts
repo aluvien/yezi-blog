@@ -13,8 +13,10 @@ import {
   cancelNativeQQMusicQr,
   createNativeQQMusicQr,
   pollNativeQQMusicQr,
+  validateNativeQQMusicRuntime,
 } from "@/lib/qq-music-native-login";
 import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
+import { inspectQQMusicHealth, qqMusicHealthStatusLabel } from "@/lib/qq-music-health";
 import { cleanupUnusedQQMusicMetadata, upsertQQMusicMetadata } from "@/lib/db";
 import { listReferencedQQMusicSongIds } from "@/lib/qq-music-access";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
@@ -56,17 +58,18 @@ function mergePlaylists(...groups: QQPlaylistSummary[][]): QQPlaylistSummary[] {
 }
 
 async function status() {
-  // `qq-music-api` v2.4's getCookie/setCookie routes do not share the QR login
-  // state. The durable session is the source of truth for login state. Its
-  // health probe is deliberately best-effort: an upstream hiccup must not turn
-  // a valid local login into a 502 / “server internal error” in the admin UI.
   const session = getQQMusicSession();
-  try {
-    await qqMusicRequest("/getHotkey", { useSession: false });
-    return { available: true, loggedIn: Boolean(session), uin: session?.uin ?? null };
-  } catch {
-    return { available: false, loggedIn: Boolean(session), uin: session?.uin ?? null };
-  }
+  const health = await inspectQQMusicHealth();
+  return {
+    available: health.status !== "unavailable",
+    loggedIn: Boolean(session),
+    playable: health.status === "healthy",
+    healthStatus: health.status,
+    label: qqMusicHealthStatusLabel(health.status),
+    detail: health.detail,
+    checkedAt: health.checkedAt,
+    uin: session?.uin ?? null,
+  };
 }
 
 export async function GET(request: Request) {
@@ -88,6 +91,10 @@ export async function GET(request: Request) {
     if (op === "native-qr") {
       const qr = await createNativeQQMusicQr();
       return noCache({ channel: "qqmusic", ...qr });
+    }
+    if (op === "native-runtime") {
+      validateNativeQQMusicRuntime();
+      return noCache({ ready: true });
     }
     if (op === "search") {
       const key = (url.searchParams.get("q") ?? "").trim().slice(0, 80);

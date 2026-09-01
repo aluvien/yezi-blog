@@ -2,7 +2,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ADMIN_CSRF_HEADER } from "@/lib/client-security";
 
-type Status = { available: boolean; loggedIn: boolean; uin: string | null };
+type Status = {
+  available: boolean;
+  loggedIn: boolean;
+  playable: boolean;
+  healthStatus: "healthy" | "missing_session" | "expired" | "unavailable" | "unverified";
+  label: string;
+  detail: string;
+  checkedAt: string;
+  uin: string | null;
+};
 type LoginSource = { label: string; website: string };
 type Qr = {
   channel: "qq";
@@ -56,16 +65,22 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
   const [playlistSearchMessage, setPlaylistSearchMessage] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
   const [cacheBusy, setCacheBusy] = useState(false);
   const [cacheMessage, setCacheMessage] = useState("");
   const pollingRef = useRef(false);
 
-  const refreshStatus = useCallback(async () => {
+  const refreshStatus = useCallback(async (announce = false) => {
+    setStatusBusy(true);
     try {
-      setStatus(await api<Status>("/api/admin/qq-music?op=status"));
+      const next = await api<Status>("/api/admin/qq-music?op=status");
+      setStatus(next);
+      if (announce) setMessage(`QQ 音乐状态：${next.label} · ${next.detail}`);
     } catch (error) {
-      setStatus({ available: false, loggedIn: false, uin: null });
+      setStatus(null);
       setMessage(error instanceof Error ? error.message : "无法连接 QQ 音乐服务");
+    } finally {
+      setStatusBusy(false);
     }
   }, []);
 
@@ -150,9 +165,19 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
             : { op: "native-poll", key: qr.key }),
         });
         if (result.state === "success") {
-          setStatus({ available: true, loggedIn: true, uin: result.uin ?? null });
+          setStatus({
+            available: true,
+            loggedIn: true,
+            playable: false,
+            healthStatus: "unverified",
+            label: "正在验证",
+            detail: "登录 Cookie 已保存，正在验证播放授权",
+            checkedAt: new Date().toISOString(),
+            uin: result.uin ?? null,
+          });
           setMessage(`${qr.channel === "qqmusic" ? "QQ 音乐 App" : "QQ"} 扫码登录成功，会员权限已仅保存在服务器。`);
           setQr(null);
+          void refreshStatus();
         } else if (result.state === "expired") {
           setMessage(result.message || `二维码已过期或登录失败。来源：${qr.source.label}（${qr.source.website}）`);
           setQr(null);
@@ -178,7 +203,7 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
         }).catch(() => undefined);
       }
     };
-  }, [qr]);
+  }, [qr, refreshStatus]);
 
   async function openQr(channel: "qq" | "qqmusic") {
     setBusy(true);
@@ -223,8 +248,8 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
             扫码后的 Cookie 仅保存在服务器受保护的会话文件中，不会存入网站数据库或下发给访客。
           </p>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-xs ${status?.loggedIn ? "bg-emerald-100 text-emerald-700" : "bg-neutral-200 text-neutral-600"}`}>
-          {status === null ? "检查中…" : status.loggedIn ? `已登录${status.uin ? ` · ${status.uin}` : ""}` : status.available ? "尚未登录" : "服务未连接"}
+        <span className={`rounded-full px-2.5 py-1 text-xs ${status?.playable ? "bg-emerald-100 text-emerald-700" : status?.healthStatus === "missing_session" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
+          {statusBusy && status === null ? "检查中…" : status ? `${status.label}${status.uin ? ` · ${status.uin}` : ""}` : "检测失败"}
         </span>
       </div>
 
@@ -235,10 +260,12 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
         <button type="button" disabled={busy} onClick={() => void openQr("qqmusic")} className="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50">
           使用 QQ 音乐 App 扫码
         </button>
-        <button type="button" onClick={() => void refreshStatus()} className="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm text-neutral-600 hover:bg-neutral-100">
-          刷新状态
+        <button type="button" disabled={statusBusy} onClick={() => void refreshStatus(true)} className="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50">
+          {statusBusy ? "检测中…" : "刷新状态"}
         </button>
       </div>
+
+      {status?.detail && <p className={`mt-2 text-xs leading-5 ${status.playable ? "text-emerald-700" : "text-red-700"}`}>诊断：{status.detail}</p>}
 
       {qr && (
         <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:flex-row sm:items-start">

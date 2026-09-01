@@ -1,11 +1,28 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { QQ_MUSIC_APP_SOURCE, type ServiceSource, withSource } from "@/lib/service-source";
 
 const EXPECTED_PACKAGE_VERSION = "3.1.0";
+const PACKAGE_NAME = "@yakult-green-tea/qq-music-api";
 const NATIVE_QR_TTL_MS = 3 * 60 * 1000;
-const runtimeRequire = createRequire(import.meta.url);
+
+function createOpaqueRuntimeRequire(): NodeJS.Require {
+  // This project requires Node 22. process.getBuiltinModule is deliberately
+  // accessed through reflection so webpack cannot replace createRequire() and
+  // subsequent dynamic loads with its own empty module context.
+  const getBuiltinModule = Reflect.get(process, "getBuiltinModule") as unknown;
+  if (typeof getBuiltinModule !== "function") {
+    throw new Error(withSource("当前 Node.js 版本不支持 QQ 音乐原生登录", QQ_MUSIC_APP_SOURCE));
+  }
+  const moduleApi = Reflect.apply(getBuiltinModule, process, ["node:module"]) as typeof import("node:module");
+  // Anchor lookup at the actual running release. import.meta.url is replaced
+  // by webpack with the build machine's absolute source path, which is invalid
+  // on the production server. Both the release root and Next standalone root
+  // contain a package.json beside their traced node_modules directory.
+  return moduleApi.createRequire(path.join(process.cwd(), "package.json"));
+}
+
+const runtimeRequire = createOpaqueRuntimeRequire();
 
 type NativeCredential = Record<string, unknown>;
 
@@ -97,9 +114,28 @@ export function resolveNativeQQMusicDevicePath(
   return path.join(dataDir, "qq-music-native-device.json");
 }
 
+/**
+ * Keep package resolution opaque to webpack. A direct
+ * `runtimeRequire.resolve("…/package.json")` is rewritten in the production
+ * route bundle to webpack's numeric module id (for example 62079), which then
+ * crashes as soon as it reaches path.dirname().
+ */
+export function resolveNativeQQMusicPackageJsonPath(): string {
+  const resolver = Reflect.get(runtimeRequire, "resolve") as unknown;
+  if (typeof resolver !== "function") {
+    throw new Error(withSource("QQ 音乐原生登录模块无法解析", QQ_MUSIC_APP_SOURCE));
+  }
+  const specifier = [PACKAGE_NAME, "package.json"].join("/");
+  const resolved = Reflect.apply(resolver, runtimeRequire, [specifier]) as unknown;
+  if (typeof resolved !== "string" || !resolved) {
+    throw new Error(withSource("QQ 音乐原生登录模块路径无效", QQ_MUSIC_APP_SOURCE));
+  }
+  return resolved;
+}
+
 function nativeService(): NativeQrService {
   if (service) return service;
-  const packageJsonPath = runtimeRequire.resolve("@yakult-green-tea/qq-music-api/package.json");
+  const packageJsonPath = resolveNativeQQMusicPackageJsonPath();
   const packageRoot = path.dirname(packageJsonPath);
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
   if (packageJson.version !== EXPECTED_PACKAGE_VERSION) {
@@ -139,6 +175,11 @@ function nativeService(): NativeQrService {
   });
   service = created;
   return created;
+}
+
+/** Initialize the exact standalone runtime closure without contacting QQ. */
+export function validateNativeQQMusicRuntime(): void {
+  void nativeService();
 }
 
 function scalar(value: unknown): string {

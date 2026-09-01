@@ -129,6 +129,17 @@ try {
   const adminCookie = validLoginAfterIpLock.headers.get("set-cookie")?.split(";", 1)[0] || "";
   if (!adminCookie) throw new Error("standalone 登录未返回管理员会话 Cookie");
 
+  // Exercise the production-bundled native QQ Music loader without contacting
+  // QQ. This catches webpack rewriting createRequire.resolve() into a numeric
+  // module id, which only fails in standalone builds and cannot be reproduced
+  // by source-level unit tests.
+  const nativeQQRuntime = await fetch(`${baseUrl}/api/admin/qq-music?op=native-runtime`, {
+    headers: { cookie: adminCookie, origin: baseUrl },
+  });
+  if (!nativeQQRuntime.ok || (await nativeQQRuntime.json())?.ready !== true) {
+    throw new Error(`QQ 音乐原生登录运行时校验失败：HTTP ${nativeQQRuntime.status}`);
+  }
+
   async function uploadSizedText(endpoint, bytes, expectedStatus = 200) {
     const form = new FormData();
     form.append("file", new File([new Uint8Array(bytes)], `smoke-${bytes}.txt`, { type: "text/plain" }));

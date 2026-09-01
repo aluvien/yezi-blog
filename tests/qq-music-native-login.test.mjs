@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { qqMusicCredentialCookie, resolveNativeQQMusicDevicePath } = await import("../src/lib/qq-music-native-login.ts");
+const { qqMusicCredentialCookie, resolveNativeQQMusicDevicePath, resolveNativeQQMusicPackageJsonPath } = await import("../src/lib/qq-music-native-login.ts");
 const { QQ_MUSIC_APP_SOURCE, withSource } = await import("../src/lib/service-source.ts");
 
 test("native QQ Music credential becomes a sidecar-compatible cookie", () => {
@@ -35,4 +35,10 @@ test("native QR device path ignores non-string process-manager values", () => {
     BLOG_DB_PATH: 62080,
   }, "/srv/yezi");
   assert.equal(result, "/srv/yezi/data/qq-music-native-device.json");
+});
+
+test("native QR package resolution returns a filesystem path instead of a bundler module id", () => {
+  const result = resolveNativeQQMusicPackageJsonPath();
+  assert.equal(typeof result, "string");
+  assert.match(result, /qq-music-api\/package\.json$/);
 });
