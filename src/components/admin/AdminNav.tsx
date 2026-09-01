@@ -87,7 +87,7 @@ export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
       <div className={`admin-nav-menu relative shrink-0${expanded ? " is-open" : ""}`}>
         <button
           type="button"
-          className={`admin-nav-link admin-nav-menu-trigger flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${active ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"}`}
+          className={`admin-nav-link admin-nav-menu-trigger flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${active ? "is-active bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"}`}
           aria-haspopup="menu"
           aria-expanded={expanded}
           aria-controls={menuId}
@@ -114,7 +114,7 @@ export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
     <nav ref={navRef} className="admin-nav flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-visible" aria-label="后台导航">
       {NAV.map((item) => {
         const active = isActive(pathname, item.href, item.exact);
-        return <Link key={item.href} href={item.href} onClick={() => setOpenMenu(null)} className={`admin-nav-link relative shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${active ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"}`}>{item.label}</Link>;
+        return <Link key={item.href} href={item.href} onClick={() => setOpenMenu(null)} className={`admin-nav-link relative shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${active ? "is-active bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"}`}>{item.label}</Link>;
       })}
       {renderMenu("data", "数据", DATA_NAV)}
       {renderMenu("pages", "页面", PAGE_NAV)}
