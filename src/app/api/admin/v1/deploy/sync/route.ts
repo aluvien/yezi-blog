@@ -5,7 +5,7 @@ import {
   authorizeAdminApi,
   requireEmptyAdminJsonBody,
 } from "@/lib/admin-api";
-import { syncLatestGithubAction } from "@/lib/actions/sync";
+import { syncLatestGithub } from "@/lib/admin/deploy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   syncInFlight = true;
   try {
-    const result = await syncLatestGithubAction();
+    const result = await syncLatestGithub();
     if (!result.ok) return adminError("DEPLOY_SYNC_FAILED", result.error, 400);
     return adminSuccess({ status: "success", message: result.message });
   } catch (error) {

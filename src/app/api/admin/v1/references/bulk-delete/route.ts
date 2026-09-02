@@ -6,7 +6,7 @@ import {
   authorizeAdminApi,
   readAdminJson,
 } from "@/lib/admin-api";
-import { deleteReferenceLibraryManyAction } from "@/lib/actions/references";
+import { deleteReferenceMany } from "@/lib/admin/references";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return adminError("INVALID_PARAMETER", "ids 必须是正整数数组", 400);
   }
   try {
-    const result = await deleteReferenceLibraryManyAction(ids as number[]);
+    const result = await deleteReferenceMany(ids as number[]);
     if (!result.ok) return adminActionError(result, "REFERENCE_BULK_DELETE_FAILED");
     return adminSuccess(result.data ?? { deletedCount: ids.length });
   } catch (error) {

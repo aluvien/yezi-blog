@@ -5,7 +5,7 @@ import {
   authorizeAdminApi,
   requireEmptyAdminJsonBody,
 } from "@/lib/admin-api";
-import { getGithubDeployStatusAction, scheduleGithubRestartAction } from "@/lib/actions/sync";
+import { getGithubDeployStatus, scheduleGithubRestart } from "@/lib/admin/deploy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,11 +21,11 @@ export async function POST(request: Request) {
 
   restartInFlight = true;
   try {
-    const status = await getGithubDeployStatusAction();
+    const status = await getGithubDeployStatus();
     if (["queued", "building", "switching", "checking", "rolling_back"].includes(status.status)) {
       return adminError("DEPLOY_IN_PROGRESS", "已有一次部署正在执行，请稍后重试", 409);
     }
-    const result = await scheduleGithubRestartAction();
+    const result = await scheduleGithubRestart();
     if (!result.ok) return adminError("DEPLOY_RESTART_FAILED", result.error, 400);
     return adminSuccess({ status: "restarting" });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
 import { cityFromReverseGeocode } from "@/lib/moment-location";
+import { readLimitedJson, RequestBodyError } from "@/lib/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,20 +13,31 @@ function noCache(data: unknown, status = 200): NextResponse {
   return NextResponse.json(data, { status, headers: { "cache-control": "no-store" } });
 }
 
-function coordinate(value: string | null, min: number, max: number): number | null {
-  // 浏览器返回的坐标精度因设备而异，不能把小数位硬限制在 8 位；
-  // 同时保留长度上限，拒绝科学计数法和异常超长输入。
-  if (value === null || !/^-?\d{1,3}(?:\.\d{1,15})?$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : null;
+// 浏览器返回的坐标精度因设备而异；城市级逆地理编码最多需要 6 位小数，
+// 主动降精度既满足需求，也减少发给第三方位置服务的精确信息。
+function coordinate(value: unknown, min: number, max: number): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) return null;
+  return value.toFixed(6);
 }
 
-/** 将管理员经浏览器授权得到的坐标转换为城市文字；坐标不存储也不返回。 */
-export async function GET(request: Request) {
+/**
+ * 将管理员经浏览器授权得到的坐标转换为城市文字；坐标不存储也不返回。
+ * 精确坐标只允许出现在 POST JSON 请求体里：GET 查询串会进入应用与
+ * 反向代理的访问日志，请求体则不会被任何 access log 记录。
+ * Cookie 会话的 POST 由 requireAdminApi 强制同源与 CSRF 头校验。
+ */
+export async function POST(request: Request) {
   if (!await requireAdminApi(request)) return noCache({ error: "未登录" }, 401);
-  const url = new URL(request.url);
-  const lat = coordinate(url.searchParams.get("lat"), -90, 90);
-  const lng = coordinate(url.searchParams.get("lng"), -180, 180);
+  let body: unknown;
+  try {
+    body = await readLimitedJson(request, 1024);
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return noCache({ error: "请求体必须是包含 lat 与 lng 的 JSON" }, status);
+  }
+  const payload = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+  const lat = coordinate(payload.lat, -90, 90);
+  const lng = coordinate(payload.lng, -180, 180);
   if (lat === null || lng === null) return noCache({ error: "定位坐标无效" }, 400);
 
   const now = Date.now();
@@ -35,8 +47,8 @@ export async function GET(request: Request) {
   try {
     const upstream = new URL(NOMINATIM_REVERSE_URL);
     upstream.searchParams.set("format", "jsonv2");
-    upstream.searchParams.set("lat", String(lat));
-    upstream.searchParams.set("lon", String(lng));
+    upstream.searchParams.set("lat", lat);
+    upstream.searchParams.set("lon", lng);
     upstream.searchParams.set("zoom", "10");
     upstream.searchParams.set("addressdetails", "1");
     const response = await fetch(upstream, {

@@ -393,6 +393,7 @@ let switched = false;
 let previousStopped = false;
 let writeGuardPath = "";
 let writesReleased = false;
+let rollbackRecovered = false;
 let stableEnvironment = {};
 let previousCommitMarker = null;
 try {
@@ -496,8 +497,17 @@ try {
         BLOG_DEPLOY_WRITE_GUARD_FILE: "",
       });
       await verifyHttp(finalHealthUrl, "", 120, false);
+      rollbackRecovered = true;
     } catch (rollbackError) {
-      writeStatus("failed", { error: `${detail}${rollbackSummary}；自动回滚也失败：${rollbackError instanceof Error ? rollbackError.message : rollbackError}` });
+      // Rollback failed: the candidate process may still be alive, so keep
+      // both the write gate (which holds it read-only) and the recovery
+      // snapshot. Deleting either here would let a surviving candidate write
+      // to the database and destroy the only known-good restore point.
+      writeStatus("failed", {
+        error: `${detail}${rollbackSummary}；自动回滚也失败：${rollbackError instanceof Error ? rollbackError.message : rollbackError}`,
+        writeGuardRetained: writeGuardPath || null,
+        databaseSnapshotRetained: databaseSnapshot || null,
+      });
       process.exitCode = 1;
       throw rollbackError;
     }
@@ -513,6 +523,14 @@ try {
     fs.closeSync(lockFd);
     fs.rmSync(lockFile, { force: true });
   }
-  if (writeGuardPath) fs.rmSync(writeGuardPath, { force: true });
-  if (databaseSnapshot) fs.rmSync(databaseSnapshot, { force: true });
+  if (writesReleased || rollbackRecovered) {
+    if (writeGuardPath) fs.rmSync(writeGuardPath, { force: true });
+    if (databaseSnapshot) fs.rmSync(databaseSnapshot, { force: true });
+  } else if (writeGuardPath || databaseSnapshot) {
+    // Reaching here means the run failed before activation and either never
+    // attempted a rollback or the rollback itself failed. A candidate started
+    // behind the gate may still be alive, so preserve both artifacts and
+    // point operators at them instead of silently removing the safety net.
+    console.error(`[deploy] 保留写入闸门 ${writeGuardPath || "(无)"} 与数据库快照 ${databaseSnapshot || "(无)"}，请人工确认服务状态后再清理`);
+  }
 }

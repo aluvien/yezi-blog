@@ -9,7 +9,7 @@ import {
   readAdminJson,
   serializeAdminPost,
 } from "@/lib/admin-api";
-import { deletePostAction, updatePostAction } from "@/lib/actions/posts";
+import { deletePostEntry, updatePostEntry } from "@/lib/admin/posts";
 import type { PostInput } from "@/lib/actions/posts";
 import {
   getContentMetrics,
@@ -53,7 +53,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!input.ok) return input.response;
 
   try {
-    const result = await updatePostAction(id, input.value);
+    const result = await updatePostEntry(id, input.value);
     if (!result.ok) return adminActionError(result);
     return adminSuccess(serializePost(id));
   } catch (error) {
@@ -70,7 +70,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!getPost(id)) return adminError("POST_NOT_FOUND", "文章不存在", 404);
 
   try {
-    const result = await deletePostAction(id);
+    const result = await deletePostEntry(id);
     if (!result.ok) return adminActionError(result);
     return adminSuccess({ id });
   } catch (error) {

@@ -1,15 +1,25 @@
 import { apiJson, apiOptions, paginationMeta, parseCollectionFilter, parsePagination, publicPost, publicPostSummary } from "@/lib/api";
 import { countApprovedCommentsBulk, countPublishedPosts, getContentMetricsBulk, listPosts } from "@/lib/db";
+import { getClientIp, hashIp } from "@/lib/request";
+import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// 完整正文模式单条最大 150 万字符；把整页条数压到 10，最坏响应约 15 MB，
+// 不再允许 50 × 1.5 MB 的 75 MB 级别响应。摘要模式仍可用 50 条大分页。
+const FULL_CONTENT_MAX_LIMIT = 10;
+const allowPostsRequest = createSlidingWindowLimiter({ windowMs: 60_000, maxRequests: 60, maxKeys: 5_000 });
+
 export function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  const { page, limit } = parsePagination(params);
+  const summary = params.get("view") === "summary";
+  const { page, limit } = parsePagination(params, summary ? 50 : FULL_CONTENT_MAX_LIMIT);
+  if (!allowPostsRequest(hashIp(getClientIp(request)))) {
+    return apiJson({ error: "文章列表请求过于频繁，请稍后再试" }, 429);
+  }
   const category = parseCollectionFilter(params, "category");
   const tag = parseCollectionFilter(params, "tag");
-  const summary = params.get("view") === "summary";
   const filters = { category: category || undefined, tag: tag || undefined };
   const posts = listPosts({ ...filters, limit, offset: (page - 1) * limit });
   const ids = posts.map((post) => post.id);

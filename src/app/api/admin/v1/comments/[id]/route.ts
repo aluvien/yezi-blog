@@ -9,11 +9,11 @@ import {
   serializeAdminComment,
 } from "@/lib/admin-api";
 import {
-  approveCommentAction,
-  deleteCommentAction,
-  hideCommentAction,
-  replyCommentAction,
-} from "@/lib/actions/comments";
+  approveCommentById,
+  deleteCommentById,
+  hideCommentById,
+  replyCommentById,
+} from "@/lib/admin/comments";
 import { getComment, getCommentForAdmin } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -40,10 +40,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     const result = action === "approve"
-      ? await approveCommentAction(id)
+      ? await approveCommentById(id)
       : action === "hide"
-        ? await hideCommentAction(id)
-        : await replyCommentAction(id, typeof rawReply === "string" ? rawReply : "");
+        ? await hideCommentById(id)
+        : await replyCommentById(id, typeof rawReply === "string" ? rawReply : "");
     if (!result.ok) return adminActionError(result);
     const comment = getCommentForAdmin(id);
     if (!comment) return adminInternalError("update comment response", new Error("comment is missing"));
@@ -62,7 +62,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!getComment(id)) return adminError("COMMENT_NOT_FOUND", "评论不存在", 404);
 
   try {
-    const result = await deleteCommentAction(id);
+    const result = await deleteCommentById(id);
     if (!result.ok) return adminActionError(result);
     return adminSuccess({ id });
   } catch (error) {

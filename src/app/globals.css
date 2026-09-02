@@ -2000,14 +2000,28 @@ body {
   text-decoration: underline;
 }
 
-.site-mobile-menu {
+dialog.site-mobile-menu {
   position: fixed;
   inset: 0;
   z-index: 60;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  color: inherit;
+}
+
+.site-mobile-menu {
+  background: rgb(0 0 0 / 20%);
+}
+
+dialog.site-mobile-menu[open] {
   display: flex;
   justify-content: flex-end;
-  overflow: hidden;
-  background: rgb(0 0 0 / 20%);
 }
 
 .site-mobile-drawer {

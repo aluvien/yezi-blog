@@ -8,7 +8,7 @@ import {
   readAdminJson,
   serializeAdminReference,
 } from "@/lib/admin-api";
-import { deleteReferenceLibraryAction, updateReferenceLibraryMetadataAction } from "@/lib/actions/references";
+import { deleteReference, updateReferenceMetadata } from "@/lib/admin/references";
 import { getReferenceLibraryItem } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -44,11 +44,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   if (body.value.category.trim().length > 80) return adminError("INVALID_PARAMETER", "分类名称不能超过 80 个字符", 400);
   if (!getReferenceLibraryItem(id)) return adminError("REFERENCE_NOT_FOUND", "引用不存在", 404);
-  const formData = new FormData();
-  formData.set("category", body.value.category);
-  formData.set("tags", body.value.tags);
   try {
-    await updateReferenceLibraryMetadataAction(id, formData);
+    const result = await updateReferenceMetadata(id, body.value.category, body.value.tags);
+    if (!result.ok) return adminActionError(result, "REFERENCE_UPDATE_FAILED");
     const reference = getReferenceLibraryItem(id);
     if (!reference) return adminInternalError("update reference result", new Error("updated reference is missing"));
     return adminSuccess(serializeAdminReference(reference));
@@ -63,7 +61,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const id = await referenceId(params);
   if (id === null) return adminError("INVALID_ID", "引用 ID 必须是正整数", 400);
   try {
-    const result = await deleteReferenceLibraryAction(id);
+    const result = await deleteReference(id);
     if (!result.ok) return adminActionError(result, "REFERENCE_DELETE_FAILED");
     return adminSuccess({ id });
   } catch (error) {

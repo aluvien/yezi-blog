@@ -5,7 +5,7 @@ import {
   authorizeAdminApi,
   readAdminJson,
 } from "@/lib/admin-api";
-import { updateSiteSettingsAction } from "@/lib/actions/settings";
+import { updateSiteSettings } from "@/lib/admin/settings";
 import { getSiteSettings } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -34,7 +34,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const result = await updateSiteSettingsAction(values);
+    const result = await updateSiteSettings(values);
     if (!result.ok) return adminError("SETTINGS_UPDATE_FAILED", result.error, 400);
     return adminSuccess(getSiteSettings());
   } catch (error) {

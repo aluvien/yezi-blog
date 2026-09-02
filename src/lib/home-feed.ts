@@ -1,11 +1,9 @@
 import {
-  countMoments,
-  countPublishedPosts,
   countApprovedCommentsBulk,
+  countPublicFeedItems,
   getContentMetricsBulk,
   hasLikedBulk,
-  listMoments,
-  listPosts,
+  listPublicFeedPage,
 } from "@/lib/db";
 import { stripMarkdown } from "@/lib/markdown";
 import { toPostSummary, type FeedItem } from "@/lib/mobile-feed";
@@ -25,24 +23,17 @@ export type HomeFeedPage = {
 };
 
 /**
- * 合并文章与想法后再分页。两个来源各取到 offset + limit 条，足以保证合并
- * 时间流的这一页完整，同时避免首页把全部正文和图片信息都发送给浏览器。
+ * 合并文章与想法后的时间流分页。SQL 层用 UNION ALL + LIMIT/OFFSET 只取出
+ * 本页需要的轻量引用并批量水合，避免深分页时把两侧全部记录（含完整正文）
+ * 读进内存再排序。
  */
 export function getHomeFeedPage({ offset, limit, visitorKey }: HomeFeedPageOptions): HomeFeedPage {
   const safeOffset = Math.max(0, Math.floor(offset));
   const safeLimit = Math.min(20, Math.max(1, Math.floor(limit)));
-  const total = countPublishedPosts() + countMoments();
+  const total = countPublicFeedItems();
   if (safeOffset >= total) return { items: [], hasMore: false };
 
-  const candidateLimit = Math.min(total, safeOffset + safeLimit);
-  const posts = listPosts({ limit: candidateLimit });
-  const moments = listMoments({ limit: candidateLimit });
-  const selected = [
-    ...moments.map((moment) => ({ type: "moment" as const, value: moment })),
-    ...posts.map((post) => ({ type: "post" as const, value: post })),
-  ]
-    .sort((a, b) => new Date(b.value.created_at).getTime() - new Date(a.value.created_at).getTime())
-    .slice(safeOffset, safeOffset + safeLimit);
+  const selected = listPublicFeedPage(safeLimit, safeOffset);
 
   const postIds = selected.flatMap((item) => item.type === "post" ? [item.value.id] : []);
   const momentIds = selected.flatMap((item) => item.type === "moment" ? [item.value.id] : []);

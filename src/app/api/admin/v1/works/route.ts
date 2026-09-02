@@ -8,7 +8,7 @@ import {
   readAdminJson,
   serializeAdminWork,
 } from "@/lib/admin-api";
-import { createWorkAction } from "@/lib/actions/works";
+import { createWorkEntry } from "@/lib/admin/works";
 import { countWorks, getWork, listWorks } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   if (!body.ok) return body.response;
 
   try {
-    const result = await createWorkAction({
+    const result = await createWorkEntry({
       title: body.value.title as string,
       description: body.value.description as string,
       cover: body.value.cover as string | null,

@@ -1,48 +1,18 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { createMoment, deleteMoment, getMoment, updateMoment } from "@/lib/db";
+import {
+  createMomentEntry,
+  deleteMomentEntry,
+  updateMomentEntry,
+} from "@/lib/admin/moments";
 import type { ActionResult } from "@/lib/actions/posts";
-import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
-import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
-import { normalizeMomentLocation } from "@/lib/moment-location";
-import { normalizePostTags } from "@/lib/post-tags";
 
-const MAX_MOMENT_CONTENT_LENGTH = 20_000;
-
-function normalizeMomentImages(value: unknown): string[] | null {
-  if (!Array.isArray(value) || value.length > 9) return null;
-  const images = value.map((item) => String(item ?? "").trim());
-  const valid = images.every((image) => {
-    if (!image || image.length > 2_000) return false;
-    if (image.startsWith("/uploads/") && !image.startsWith("//")) return true;
-    try {
-      const url = new URL(image);
-      return url.protocol === "http:" || url.protocol === "https:";
-    } catch {
-      return false;
-    }
-  });
-  return valid ? [...new Set(images)] : null;
-}
+/** Server Action 入口：只做 Cookie 会话鉴权，业务逻辑在 @/lib/admin/moments。 */
 
 export async function createMomentAction(data: { content: string; images: string[]; tags?: string[]; location?: string }): Promise<ActionResult> {
   await requireAdmin();
-  if (!data || typeof data.content !== "string") return { ok: false, error: "想法数据格式无效" };
-  const content = normalizeMediaShortcodes(data.content.trim());
-  if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "想法内容不能超过 2 万个字符" };
-  const images = normalizeMomentImages(data.images);
-  if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
-  const location = normalizeMomentLocation(data.location);
-  if (location === null) return { ok: false, error: "位置格式无效或超过 80 个字符" };
-  if (!content && images.length === 0) return { ok: false, error: "写点什么或至少传一张图" };
-  const moment = createMoment({ content, images, tags: normalizePostTags(data.tags), location });
-  revalidatePath("/admin/moments");
-  revalidatePath("/moments");
-  revalidatePath("/");
-  invalidateQQMusicAccessCache();
-  return { ok: true, data: moment };
+  return createMomentEntry(data);
 }
 
 export async function updateMomentAction(
@@ -50,31 +20,10 @@ export async function updateMomentAction(
   data: { content: string; images: string[]; tags?: string[]; location?: string },
 ): Promise<ActionResult> {
   await requireAdmin();
-  if (!Number.isInteger(id) || id < 1 || !data || typeof data.content !== "string") return { ok: false, error: "想法数据格式无效" };
-  if (!getMoment(id)) return { ok: false, error: "想法不存在" };
-  const content = normalizeMediaShortcodes(data.content.trim());
-  if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "想法内容不能超过 2 万个字符" };
-  const images = normalizeMomentImages(data.images);
-  if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
-  const location = data.location === undefined ? undefined : normalizeMomentLocation(data.location);
-  if (location === null) return { ok: false, error: "位置格式无效或超过 80 个字符" };
-  if (!content && images.length === 0) return { ok: false, error: "写点什么或至少保留一张图" };
-  const tags = data.tags === undefined ? undefined : normalizePostTags(data.tags);
-  const moment = updateMoment(id, { content, images, ...(tags === undefined ? {} : { tags }), ...(location === undefined ? {} : { location }) });
-  revalidatePath("/admin/moments");
-  revalidatePath("/moments");
-  revalidatePath("/");
-  invalidateQQMusicAccessCache();
-  return { ok: true, data: moment };
+  return updateMomentEntry(id, data);
 }
 
 export async function deleteMomentAction(id: number): Promise<ActionResult> {
   await requireAdmin();
-  if (!getMoment(id)) return { ok: false, error: "想法不存在" };
-  deleteMoment(id);
-  revalidatePath("/admin/moments");
-  revalidatePath("/moments");
-  revalidatePath("/");
-  invalidateQQMusicAccessCache();
-  return { ok: true, data: { id } };
+  return deleteMomentEntry(id);
 }

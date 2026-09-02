@@ -8,7 +8,7 @@ import {
   parseAdminPagination,
   readAdminJson,
 } from "@/lib/admin-api";
-import { createCategoryByNameAction } from "@/lib/actions/settings";
+import { createCategoryByName } from "@/lib/admin/settings";
 import { listCategoriesWithPublishedPostCount } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   if (typeof body.value.name !== "string") return adminError("INVALID_PARAMETER", "name 必须是字符串", 400);
 
   try {
-    const result = await createCategoryByNameAction(body.value.name);
+    const result = await createCategoryByName(body.value.name);
     if (!result.ok) return adminActionError(result, "CATEGORY_CREATE_FAILED");
     const createdId = (result.data as { id?: unknown } | undefined)?.id;
     const category = listCategoriesWithPublishedPostCount().find((item) => item.id === createdId);

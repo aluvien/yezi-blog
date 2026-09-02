@@ -6,7 +6,7 @@ import {
   authorizeAdminApi,
   parseAdminId,
 } from "@/lib/admin-api";
-import { deleteAttachmentAction } from "@/lib/actions/attachments";
+import { deleteAttachmentById } from "@/lib/admin/attachments";
 import { getAttachment, listAttachments } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -36,7 +36,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (id === null) return adminError("INVALID_ID", "附件 ID 必须是正整数", 400);
 
   try {
-    const result = await deleteAttachmentAction(id);
+    const result = await deleteAttachmentById(id);
     if (!result.ok) return adminActionError(result, "ATTACHMENT_DELETE_FAILED");
     return adminSuccess({ id });
   } catch (error) {

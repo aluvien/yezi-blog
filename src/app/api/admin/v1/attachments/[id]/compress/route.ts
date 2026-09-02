@@ -7,7 +7,8 @@ import {
   parseAdminId,
   readAdminJson,
 } from "@/lib/admin-api";
-import { compressAttachmentAction, type CompressionProfile } from "@/lib/actions/attachments";
+import { compressAttachmentById } from "@/lib/admin/attachments";
+import type { CompressionProfile } from "@/lib/actions/attachments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const profile = parseProfile(body.value.profile);
   if (!profile) return adminError("INVALID_PARAMETER", "profile 只能是 balanced、quality 或 small", 400);
   try {
-    const result = await compressAttachmentAction(id, profile);
+    const result = await compressAttachmentById(id, profile);
     if (!result.ok) return adminActionError(result, "ATTACHMENT_COMPRESS_FAILED");
     return adminSuccess(result.data ?? {});
   } catch (error) {

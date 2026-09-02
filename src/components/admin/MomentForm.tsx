@@ -74,10 +74,14 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
     window.navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
         try {
-          const response = await fetch(
-            `/api/admin/moments/reverse-geocode?lat=${encodeURIComponent(coords.latitude)}&lng=${encodeURIComponent(coords.longitude)}`,
-            { cache: "no-store", credentials: "same-origin" },
-          );
+          const response = await fetch("/api/admin/moments/reverse-geocode", {
+            method: "POST",
+            cache: "no-store",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json", "x-yezi-csrf": "1" },
+            // 精确坐标放进 POST 请求体，避免进入浏览器 URL、应用与代理的访问日志。
+            body: JSON.stringify({ lat: coords.latitude, lng: coords.longitude }),
+          });
           const data = await response.json() as { location?: unknown; error?: unknown };
           if (!response.ok || typeof data.location !== "string" || !data.location.trim()) {
             if (response.status === 401) throw new Error("登录状态已失效，请刷新页面后重试");

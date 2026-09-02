@@ -9,6 +9,7 @@ process.env.BLOG_ROOT = tempRoot;
 process.env.BLOG_DB_PATH = path.join(tempRoot, "data", "blog.db");
 
 const { countPublicFeedItems, db, listPublicFeedPage } = await import("../src/lib/db.ts");
+const { getHomeFeedPage } = await import("../src/lib/home-feed.ts");
 const { GET } = await import("../src/app/api/v1/feed/route.ts");
 
 test.after(() => {
@@ -45,6 +46,22 @@ test("feed pages lightweight references before hydrating only the selected rows"
     [...first, ...second].map((item) => item.created_at).sort().reverse(),
   );
   assert.ok(first.every((item) => item.value.content.includes("-body-")));
+});
+
+test("home feed pages through the same SQL window instead of loading offset+limit rows from both sources", () => {
+  const page = getHomeFeedPage({ offset: 500, limit: 20, visitorKey: "home-feed-test" });
+  const expected = listPublicFeedPage(20, 500);
+  assert.equal(page.items.length, 20);
+  assert.deepEqual(
+    page.items.map((item) => `${item.type}:${item.value.id}`),
+    expected.map((item) => `${item.type}:${item.value.id}`),
+  );
+  const stamps = page.items.map((item) => item.value.created_at);
+  assert.deepEqual(stamps, [...stamps].sort().reverse());
+  assert.equal(page.hasMore, true);
+  const tail = getHomeFeedPage({ offset: 1_195, limit: 20, visitorKey: "home-feed-test" });
+  assert.equal(tail.items.length, 5);
+  assert.equal(tail.hasMore, false);
 });
 
 test("feed route rejects unbounded page offsets with a stable response", async () => {

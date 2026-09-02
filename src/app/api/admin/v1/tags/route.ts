@@ -8,7 +8,7 @@ import {
   parseAdminPagination,
   readAdminJson,
 } from "@/lib/admin-api";
-import { deleteTagAction, renameTagAction } from "@/lib/actions/settings";
+import { deleteTag, renameTag } from "@/lib/admin/settings";
 import { listAllTags } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -40,7 +40,7 @@ export async function PATCH(request: Request) {
     return adminError("INVALID_PARAMETER", "old_tag 和 new_tag 必须是字符串", 400);
   }
   try {
-    const result = await renameTagAction(body.value.old_tag, body.value.new_tag);
+    const result = await renameTag(body.value.old_tag, body.value.new_tag);
     if (!result.ok) return adminActionError(result, "TAG_RENAME_FAILED");
     return adminSuccess({ tag: body.value.new_tag.trim().replace(/^#+/, ""), tags: listAllTags() });
   } catch (error) {
@@ -55,7 +55,7 @@ export async function DELETE(request: Request) {
   if (!body.ok) return body.response;
   if (typeof body.value.tag !== "string") return adminError("INVALID_PARAMETER", "tag 必须是字符串", 400);
   try {
-    const result = await deleteTagAction(body.value.tag);
+    const result = await deleteTag(body.value.tag);
     if (!result.ok) return adminActionError(result, "TAG_DELETE_FAILED");
     return adminSuccess({ tag: body.value.tag.trim().replace(/^#+/, ""), tags: listAllTags() });
   } catch (error) {

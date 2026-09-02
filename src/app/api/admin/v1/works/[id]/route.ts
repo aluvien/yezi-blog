@@ -9,7 +9,7 @@ import {
   readAdminJson,
   serializeAdminWork,
 } from "@/lib/admin-api";
-import { deleteWorkAction, updateWorkAction } from "@/lib/actions/works";
+import { deleteWorkEntry, updateWorkEntry } from "@/lib/admin/works";
 import { getWork } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -35,7 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   };
 
   try {
-    const result = await updateWorkAction(id, data);
+    const result = await updateWorkEntry(id, data);
     if (!result.ok) return adminActionError(result);
     const work = getWork(id);
     if (!work) return adminInternalError("update work response", new Error("work is missing"));
@@ -54,7 +54,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!getWork(id)) return adminError("WORK_NOT_FOUND", "作品不存在", 404);
 
   try {
-    const result = await deleteWorkAction(id);
+    const result = await deleteWorkEntry(id);
     if (!result.ok) return adminActionError(result);
     return adminSuccess({ id });
   } catch (error) {

@@ -26,6 +26,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
   const [menuState, setMenuState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
   const menuOpen = menuState.pathname === pathname && menuState.open;
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuDialogRef = useRef<HTMLDialogElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
 
   // 状态绑定当前路径；布局在客户端路由间常驻时，新路径自然视为关闭，
@@ -37,22 +38,23 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
     });
   }, [pathname]);
 
+  // 原生 <dialog>.showModal() 提供焦点陷阱、背景 inert 与关闭时的焦点归还；
+  // 组件只负责同步开关状态，Escape 与背景点击不再手写。
   useEffect(() => {
-    if (!menuOpen) return;
+    const dialog = menuDialogRef.current;
+    if (!dialog) return;
+    if (!menuOpen) {
+      if (dialog.open) dialog.close();
+      return;
+    }
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    if (!dialog.open) dialog.showModal();
     drawerRef.current?.focus({ preventScroll: true });
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setMenuOpen(false);
-      menuTriggerRef.current?.focus({ preventScroll: true });
-    };
-    document.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.removeEventListener("keydown", closeOnEscape);
       document.body.style.overflow = previousOverflow;
     };
-  }, [menuOpen, setMenuOpen]);
+  }, [menuOpen]);
 
   // 主题由 <html data-theme> 驱动（RootLayout 内联脚本在首帧前设置）。
   // 按钮图标用 CSS 按 data-theme 显隐，服务端与客户端渲染永远一致，避免水合错位。
@@ -229,9 +231,17 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
         })}
       </nav>
 
-      {menuOpen && (
-        <div className="site-mobile-menu md:hidden" role="dialog" aria-modal="true" aria-label="移动端菜单" onClick={() => setMenuOpen(false)}>
-          <aside ref={drawerRef} tabIndex={-1} className="site-mobile-drawer outline-none" onClick={(e) => e.stopPropagation()}>
+      <dialog
+        ref={menuDialogRef}
+        className="site-mobile-menu md:hidden"
+        aria-label="移动端菜单"
+        onClose={() => setMenuOpen(false)}
+        onClick={(event) => {
+          // 点击遮罩区域（dialog 自身，而非抽屉内容）时关闭。
+          if (event.target === menuDialogRef.current) setMenuOpen(false);
+        }}
+      >
+        <aside ref={drawerRef} tabIndex={-1} className="site-mobile-drawer outline-none">
             <div className="site-mobile-menu-head">
               <span className="site-mobile-menu-title">MENU</span>
               <button type="button" aria-label="关闭菜单" onClick={() => setMenuOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-divider text-muted hover:border-accent hover:text-accent">
@@ -280,8 +290,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
               </section>
             )}
           </aside>
-        </div>
-      )}
+      </dialog>
       <ErrorBoundary label="MusicInitializer">
         <MusicInitializer />
       </ErrorBoundary>

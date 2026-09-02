@@ -29,12 +29,12 @@ export function apiOptions(): Response {
   return new Response(null, { status: 204, headers: apiHeaders() });
 }
 
-export function parsePagination(searchParams: URLSearchParams): { page: number; limit: number } {
+export function parsePagination(searchParams: URLSearchParams, maxLimit = 50): { page: number; limit: number } {
   const pageValue = Number.parseInt(searchParams.get("page") ?? "1", 10);
   const limitValue = Number.parseInt(searchParams.get("limit") ?? "20", 10);
   return {
     page: Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1,
-    limit: Number.isFinite(limitValue) ? Math.min(50, Math.max(1, limitValue)) : 20,
+    limit: Number.isFinite(limitValue) ? Math.min(maxLimit, Math.max(1, limitValue)) : 20,
   };
 }
 

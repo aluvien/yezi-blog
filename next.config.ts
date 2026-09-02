@@ -162,7 +162,12 @@ const nextConfig: NextConfig = {
       // 动态页面由 Next 自己决定缓存策略；后台与写接口必须明确禁止中间层缓存。
       {
         source: "/admin/:path*",
-        headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }],
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          // 后台“使用现在位置”需要浏览器定位授权；Permissions-Policy 解析
+          // 按声明顺序覆盖同名特性，所以这条放在全局禁用之后，只对本页放开。
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self), browsing-topics=()" },
+        ],
       },
       {
         source: "/api/admin/:path*",

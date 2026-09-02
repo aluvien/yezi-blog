@@ -11,7 +11,7 @@ import {
   readQueryText,
   serializeAdminReference,
 } from "@/lib/admin-api";
-import { saveReferenceLibraryAction } from "@/lib/actions/posts";
+import { saveReferenceLibraryEntry } from "@/lib/admin/posts";
 import { countReferenceLibrary, getReferenceLibraryItem, listReferenceLibrary } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   if (body.value.tags !== undefined && typeof body.value.tags !== "string") return adminError("INVALID_PARAMETER", "tags 必须是字符串", 400);
 
   try {
-    const result = await saveReferenceLibraryAction(snapshot, body.value.category as string | undefined, body.value.tags as string | undefined);
+    const result = await saveReferenceLibraryEntry(snapshot, body.value.category as string | undefined, body.value.tags as string | undefined);
     if (!result.ok) return adminActionError(result, "REFERENCE_CREATE_FAILED");
     const id = (result.data as { id?: unknown } | undefined)?.id;
     const saved = typeof id === "number" ? getReferenceLibraryItem(id) : undefined;

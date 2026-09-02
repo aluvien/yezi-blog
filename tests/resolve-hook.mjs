@@ -30,6 +30,11 @@ export async function resolve(specifier, context, nextResolve) {
   if (specifier === "next/server" || specifier === "next/headers" || specifier === "next/navigation") {
     return nextResolve(`${specifier}.js`, context);
   }
+  // 纯 Node 没有 Next 的请求上下文，真实 revalidatePath 会直接抛错；
+  // 测试里用无副作用 stub 代替，让已鉴权 Route Handler 能完整跑通。
+  if (specifier === "next/cache") {
+    return { url: new URL("./stubs/next-cache.mjs", import.meta.url).href, shortCircuit: true };
+  }
   if (specifier.startsWith("@/")) {
     let mapped = path.join(projectSrc, specifier.slice(2));
     // `@/lib/db` 同时存在 db.ts 与 db/ 目录时，应与 Next 的解析一致，

@@ -6,7 +6,8 @@ import {
   authorizeAdminApi,
   readAdminJson,
 } from "@/lib/admin-api";
-import { compressUntrackedAttachmentAction, type CompressionProfile } from "@/lib/actions/attachments";
+import { compressUntrackedAttachmentByPath } from "@/lib/admin/attachments";
+import type { CompressionProfile } from "@/lib/actions/attachments";
 import { parseUntrackedUploadPath } from "../_path";
 
 export const runtime = "nodejs";
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   const profile = parseProfile(body.value.profile);
   if (!profile) return adminError("INVALID_PARAMETER", "profile 只能是 balanced、quality 或 small", 400);
   try {
-    const result = await compressUntrackedAttachmentAction(path, profile);
+    const result = await compressUntrackedAttachmentByPath(path, profile);
     if (!result.ok) return adminActionError(result, "UNTRACKED_ATTACHMENT_COMPRESS_FAILED");
     return adminSuccess({ path, ...(result.data as Record<string, unknown> | undefined) });
   } catch (error) {

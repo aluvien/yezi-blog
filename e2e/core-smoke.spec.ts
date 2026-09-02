@@ -27,6 +27,10 @@ test.describe.serial("core editorial smoke flows", () => {
     await page.addInitScript(() => {
       Object.defineProperty(window.navigator, "standalone", { configurable: true, value: true });
     });
+    // PWA 底部导航属于现代版式；空库现在按默认经典版渲染，先显式切到编辑版。
+    await login(page);
+    const themeSwitch = await page.request.patch("/api/admin/v1/settings", { data: { layout_theme: "editorial" } });
+    expect(themeSwitch.status()).toBe(200);
     await page.goto("/");
 
     await expect(page.locator("html")).toHaveAttribute("data-display-mode", "standalone");
@@ -118,7 +122,7 @@ test.describe.serial("core editorial smoke flows", () => {
     await page.goto(`/posts/${slug}`);
     await page.getByRole("button", { name: "写评论" }).click();
     await page.getByPlaceholder("昵称（必填）").fill("E2E 访客");
-    await page.getByPlaceholder("邮箱（选填，不公开）").fill("visitor@example.com");
+    await page.getByPlaceholder("邮箱（选填，用于头像，不公开）").fill("visitor@example.com");
     await page.getByPlaceholder("写下你的想法…").fill("E2E 评论内容");
     await page.getByRole("button", { name: "提交" }).click();
     await expect(page.getByRole("status")).toHaveText("评论已提交，将在审核后展示。");

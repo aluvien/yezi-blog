@@ -12,7 +12,7 @@ import {
   serializeAdminPost,
   serializeAdminPostSummary,
 } from "@/lib/admin-api";
-import { createPostAction } from "@/lib/actions/posts";
+import { createPostEntry } from "@/lib/admin/posts";
 import {
   countAllPosts,
   getContentMetrics,
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   if (!input.ok) return input.response;
 
   try {
-    const result = await createPostAction(input.value);
+    const result = await createPostEntry(input.value);
     if (!result.ok) return adminActionError(result);
     const created = result.data;
     if (!created || typeof created !== "object" || !("id" in created) || typeof created.id !== "number") {

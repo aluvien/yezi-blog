@@ -6,7 +6,7 @@ import {
   authorizeAdminApi,
   readAdminJson,
 } from "@/lib/admin-api";
-import { deleteUntrackedAttachmentAction } from "@/lib/actions/attachments";
+import { deleteUntrackedAttachmentByPath } from "@/lib/admin/attachments";
 import { parseUntrackedUploadPath } from "./_path";
 
 export const runtime = "nodejs";
@@ -21,7 +21,7 @@ export async function DELETE(request: Request) {
   const path = parseUntrackedUploadPath(body.value.path);
   if (!path) return adminError("INVALID_PATH", "path 必须是 uploads 目录内的相对文件路径", 400);
   try {
-    const result = await deleteUntrackedAttachmentAction(path);
+    const result = await deleteUntrackedAttachmentByPath(path);
     if (!result.ok) return adminActionError(result, "UNTRACKED_ATTACHMENT_DELETE_FAILED");
     return adminSuccess(result.data ?? { path, deletedCount: 1, skippedCount: 0 });
   } catch (error) {

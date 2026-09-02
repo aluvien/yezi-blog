@@ -9,7 +9,7 @@ import {
   readAdminJson,
   serializeAdminMoment,
 } from "@/lib/admin-api";
-import { deleteMomentAction, updateMomentAction } from "@/lib/actions/moments";
+import { deleteMomentEntry, updateMomentEntry } from "@/lib/admin/moments";
 import { getContentMetrics, getMoment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
 import { parsePostTags } from "@/lib/post-tags";
@@ -36,7 +36,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const location = hasOwn(body.value, "location") ? body.value.location : existing.location;
 
   try {
-    const result = await updateMomentAction(id, { content: content as string, images: images as string[], tags, location: location as string });
+    const result = await updateMomentEntry(id, { content: content as string, images: images as string[], tags, location: location as string });
     if (!result.ok) return adminActionError(result);
     const moment = getMoment(id);
     if (!moment) return adminInternalError("update moment response", new Error("moment is missing"));
@@ -55,7 +55,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!getMoment(id)) return adminError("MOMENT_NOT_FOUND", "动态不存在", 404);
 
   try {
-    const result = await deleteMomentAction(id);
+    const result = await deleteMomentEntry(id);
     if (!result.ok) return adminActionError(result);
     return adminSuccess({ id });
   } catch (error) {

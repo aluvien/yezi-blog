@@ -180,7 +180,7 @@ Bilibili 支持完整视频 URL、BV/av ID 和分 P 参数，YouTube 支持完�
 ```text
 GET /api/v1                 # 接口发现与版本信息
 GET /api/v1/site            # 原生端需要的公开品牌、作者、导航、关于页 Markdown 与社交链接
-GET /api/v1/posts           # 文章列表，支持 ?page=1&limit=20（limit 最大 50）
+GET /api/v1/posts           # 文章列表，支持 ?page=1&limit=20；?view=summary 时 limit 最大 50，默认完整正文模式 limit 最大 10（并按 IP 限流）
 GET /api/v1/posts/:slug     # 文章详情、已审核评论和正文引用快照
 GET /api/v1/moments         # 想法列表，支持分页
 GET /api/v1/works           # 作品列表，支持分页
