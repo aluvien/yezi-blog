@@ -70,6 +70,19 @@ function readStableEnvironment(filePath) {
   } catch {
     throw new Error("稳定外部环境文件缺少有效的 NEXT_PUBLIC_SITE_URL");
   }
+  // 标准生产拓扑是 Nginx 反代（示例配置会覆盖 X-Real-IP/X-Forwarded-*）。
+  // 漏设 TRUST_PROXY 时 getClientIp() 把所有访客折叠成同一个 unknown 限流桶，
+  // 漏设 SESSION_COOKIE_SECURE 时反代协议判定失败会退化出不带 Secure 的会话
+  // Cookie。两者都属于“部署后悄悄坏掉”的配置，这里改为部署前 fail-fast；
+  // 真正直连 HTTP 的部署用 DEPLOY_DIRECT_HTTP=true 显式豁免。
+  if (values.DEPLOY_DIRECT_HTTP !== "true") {
+    if (values.TRUST_PROXY !== "true") {
+      throw new Error("稳定外部环境文件缺少 TRUST_PROXY=true；反向代理部署必须让限流看到真实客户端 IP。确为直连部署时请显式设置 DEPLOY_DIRECT_HTTP=true");
+    }
+    if (values.SESSION_COOKIE_SECURE !== "true") {
+      throw new Error("稳定外部环境文件缺少 SESSION_COOKIE_SECURE=true；HTTPS 反代下会话 Cookie 应显式带 Secure。确为直连部署时请显式设置 DEPLOY_DIRECT_HTTP=true");
+    }
+  }
   return values;
 }
 

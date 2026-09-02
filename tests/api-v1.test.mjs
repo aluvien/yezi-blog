@@ -166,3 +166,13 @@ test("native visitor UUIDs deduplicate interactions per installation without wea
   assert.equal(toggle.data.liked, false, "同一 Keychain UUID 仍应执行点赞切换");
   assert.equal(toggle.data.likes, 1);
 });
+
+test("public reference endpoints opt into short shared-cache TTLs while metric-bearing lists stay no-store", async () => {
+  const tags = tagsGet(new Request("http://yezi.test/api/v1/tags?limit=50"));
+  assert.match(tags.headers.get("cache-control"), /public, max-age=15, s-maxage=60, stale-while-revalidate=600/);
+  const categories = await categoriesGet();
+  assert.match(categories.headers.get("cache-control"), /s-maxage=60/);
+
+  const posts = await postsGet(new Request("http://yezi.test/api/v1/posts?limit=5"));
+  assert.equal(posts.headers.get("cache-control"), "no-store", "含实时 views/likes 的列表不得进入共享缓存");
+});

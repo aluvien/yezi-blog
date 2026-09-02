@@ -17,6 +17,7 @@ const {
   getPost,
   getPostAttachments,
   listArticleReferencesForPost,
+  listPostSummaries,
   searchPublishedPostsForReference,
   syncArticleReferences,
   updatePost,
@@ -87,4 +88,18 @@ test("local article reference search only exposes published posts and bounds res
   const results = searchPublishedPostsForReference("本站搜索", 20);
   assert.deepEqual(results.map((post) => post.title), ["可引用的本站文章"]);
   assert.equal(searchPublishedPostsForReference("不可公开", 20).length, 0);
+});
+
+test("listPostSummaries truncates content in SQL while keeping summary fields intact", () => {
+  const longContent = "长正文".repeat(10_000);
+  const post = createPost({ title: "摘要截断", slug: "summary-truncate", content: longContent, category: "随笔", tags: [], status: "published" });
+  const rows = listPostSummaries({ limit: 50, offset: 0 });
+  const row = rows.find((item) => item.id === post.id);
+  assert.ok(row);
+  assert.equal(row.content.length, 4_096, "正文必须被 substr 截到前缀");
+  assert.equal(row.title, post.title);
+  assert.equal(row.slug, post.slug);
+  assert.equal(row.updated_at, post.updated_at);
+  assert.equal("status" in row, true);
+  deletePost(post.id);
 });

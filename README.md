@@ -98,7 +98,7 @@ Playwright、性能和 standalone 测试均使用独立的临时 SQLite 数据�
 | `NEXT_PUBLIC_SITE_URL` | 站点对外 URL，用于 metadata / sitemap / RSS，末尾不带斜杠 | `http://localhost:3030` |
 | `BLOG_DB_PATH` | 可选的 SQLite 绝对路径，适合容器挂载或隔离测试 | `data/blog.db` |
 | `API_CORS_ORIGIN` | 可选的 App/Web API 跨域来源；不设置时仅允许同源访问 | 空（同源） |
-| `TRUST_PROXY` | 是否信任 Nginx/Cloudflare 覆盖后的 `X-Real-IP`、`X-Forwarded-For`；直连 Node 端口保持关闭 | `false` |
+| `TRUST_PROXY` | 是否信任 Nginx/Cloudflare 覆盖后的 `X-Real-IP`、`X-Forwarded-For`；直连 Node 端口保持关闭。GitHub 同步部署会强制要求反代模式下为 `true`（或显式 `DEPLOY_DIRECT_HTTP=true` 豁免） | `false` |
 | `HOSTNAME` | Node 监听地址；PM2/裸机默认只监听回环，容器内需显式使用 `0.0.0.0` | `127.0.0.1` |
 | `QQ_MUSIC_API_URL` | 自建 QQ Music API 的本机地址；后台扫码登录和 `qqvip` 音乐播放使用 | `http://127.0.0.1:3200` |
 | `QQ_MUSIC_SESSION_PATH` | QQ 扫码会话文件路径；留空时放在数据库同目录，必须持久化且不可公开访问 | `data/qq-music-session.json` |
@@ -361,7 +361,7 @@ pm2 save && pm2 startup         # 开机自启
 
 生产构建命令已固定使用 Next 的 webpack 路径（`npm run build`），适合宝塔/PM2 的非交互部署。PM2 进程的工作目录必须是项目根目录，且建议设置 `DEPLOY_PM2_NAME=yezi-blog`；未设置时程序会按 PM2 的 `pm_cwd` 自动查找同目录进程。
 
-PM2/裸机默认 `HOSTNAME=127.0.0.1`，操作系统防火墙和安全组也应阻断公网 3030。站点放在 Nginx 后面时设置 `TRUST_PROXY=true`，并确认 Nginx覆盖而不是拼接客户端传入的 `X-Real-IP` / `X-Forwarded-For`。若确实直连 Node，则保持 `TRUST_PROXY=false`；容器内部显式监听 `0.0.0.0`，但 Docker 只把宿主端口映射到 `127.0.0.1`。
+PM2/裸机默认 `HOSTNAME=127.0.0.1`，操作系统防火墙和安全组也应阻断公网 3030。站点放在 Nginx 后面时设置 `TRUST_PROXY=true`（后台「同步 GitHub」部署会前置检查该项与 `SESSION_COOKIE_SECURE=true`，直连 HTTP 部署可用 `DEPLOY_DIRECT_HTTP=true` 豁免），并确认 Nginx覆盖而不是拼接客户端传入的 `X-Real-IP` / `X-Forwarded-For`。若确实直连 Node，则保持 `TRUST_PROXY=false`；容器内部显式监听 `0.0.0.0`，但 Docker 只把宿主端口映射到 `127.0.0.1`。
 
 Nginx 反向代理示例见 `deploy/nginx.conf.example`。文件上限为 20 MiB、应用 multipart 请求上限 21 MiB、Next Proxy/Nginx 上限 22 MiB；公开入口必须经过 Nginx，由其在缓冲完整请求前拒绝超限上传。上线后把 `NEXT_PUBLIC_SITE_URL` 改为正式域名并重新 build。
 

@@ -1,5 +1,5 @@
 import { apiJson, apiOptions, paginationMeta, parseCollectionFilter, parsePagination, publicPost, publicPostSummary } from "@/lib/api";
-import { countApprovedCommentsBulk, countPublishedPosts, getContentMetricsBulk, listPosts } from "@/lib/db";
+import { countApprovedCommentsBulk, countPublishedPosts, getContentMetricsBulk, listPostSummaries, listPosts } from "@/lib/db";
 import { getClientIp, hashIp } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 
@@ -21,7 +21,10 @@ export function GET(request: Request) {
   const category = parseCollectionFilter(params, "category");
   const tag = parseCollectionFilter(params, "tag");
   const filters = { category: category || undefined, tag: tag || undefined };
-  const posts = listPosts({ ...filters, limit, offset: (page - 1) * limit });
+  // 摘要模式在 SQL 层就截断正文，不把完整 content 读进进程。
+  const posts = summary
+    ? listPostSummaries({ ...filters, limit, offset: (page - 1) * limit })
+    : listPosts({ ...filters, limit, offset: (page - 1) * limit });
   const ids = posts.map((post) => post.id);
   // 批量查询，避免每个 post 各查一次评论数/统计（N+1）。
   const commentCounts = countApprovedCommentsBulk("post", ids);

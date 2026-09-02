@@ -87,9 +87,15 @@ async function deleteAttachmentRecordAndFile(attachment: { id: number; path: str
       return { ok: false, error: "附件不存在" };
     }
   } catch (error) {
-    if (quarantine && target) await restoreQuarantinedFile(quarantine, target);
+    let restored = true;
+    if (quarantine && target) restored = await restoreQuarantinedFile(quarantine, target);
     console.error("[attachments] 删除附件记录失败", error instanceof Error ? error.message : error);
-    return { ok: false, error: "附件记录删除失败，文件已恢复原位" };
+    return {
+      ok: false,
+      error: restored
+        ? "附件记录删除失败，文件已恢复原位"
+        : `附件记录删除失败，且文件恢复失败；隔离副本在 ${quarantine}，请人工移回 ${attachment.path}`,
+    };
   }
   if (quarantine) await discardQuarantinedFile(quarantine);
   return { ok: true };
@@ -205,8 +211,7 @@ async function compressImageFile(relativePath: string, profile: CompressionProfi
     try {
       await fsPromises.rename(temporaryPath, absolutePath);
     } catch (error) {
-      if (backupPath) {
-        await restoreQuarantinedFile(backupPath, absolutePath);
+      if (backupPath && await restoreQuarantinedFile(backupPath, absolutePath)) {
         backupPath = null;
       }
       throw error;
@@ -218,9 +223,14 @@ async function compressImageFile(relativePath: string, profile: CompressionProfi
         updateAttachmentSize(attachmentId, compressedSize);
       } catch (error) {
         await fsPromises.unlink(absolutePath).catch(() => undefined);
-        if (originalBackup) await restoreQuarantinedFile(originalBackup, absolutePath);
-        console.error("[attachments] 压缩后更新附件大小失败，已恢复原图", error instanceof Error ? error.message : error);
-        return { ok: false, error: "压缩后更新附件记录失败，原图已恢复，请重试" };
+        const restored = originalBackup ? await restoreQuarantinedFile(originalBackup, absolutePath) : false;
+        console.error("[attachments] 压缩后更新附件大小失败", error instanceof Error ? error.message : error);
+        return {
+          ok: false,
+          error: restored
+            ? "压缩后更新附件记录失败，原图已恢复，请重试"
+            : `压缩后更新附件记录失败，且原图恢复失败；备份在 ${originalBackup ?? "（未知）"}，请人工恢复后核对附件大小`,
+        };
       }
     }
     if (originalBackup) await discardQuarantinedFile(originalBackup);
@@ -233,13 +243,13 @@ async function compressImageFile(relativePath: string, profile: CompressionProfi
     };
   } catch (error) {
     await fsPromises.unlink(temporaryPath).catch(() => undefined);
-    if (backupPath) {
-      // 走到这里说明替换/更新阶段抛错且尚未自行恢复，尽力把备份移回。
-      await restoreQuarantinedFile(backupPath, absolutePath);
+    if (backupPath && await restoreQuarantinedFile(backupPath, absolutePath)) {
+      backupPath = null;
     }
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
-    if (code === "EACCES" || code === "EPERM") return { ok: false, error: "图片压缩失败，请检查上传目录写入权限" };
-    return { ok: false, error: backupPath ? "图片压缩失败，原图已从备份恢复" : "图片压缩失败，原图未被修改" };
+    const suffix = backupPath ? `；原图备份在 ${backupPath}，请人工恢复` : "";
+    if (code === "EACCES" || code === "EPERM") return { ok: false, error: `图片压缩失败，请检查上传目录写入权限${suffix}` };
+    return { ok: false, error: backupPath ? "图片压缩失败，且原图恢复失败" : "图片压缩失败，原图未被修改（或已从备份恢复）" };
   }
 }
 

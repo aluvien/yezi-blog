@@ -21,8 +21,17 @@ export function apiHeaders(): Headers {
   return headers;
 }
 
-export function apiJson(data: unknown, status = 200): NextResponse {
-  return NextResponse.json(data, { status, headers: apiHeaders() });
+/**
+ * cache:"short" 只允许用于公共、只读、不含实时计数（views/likes/评论数）的
+ * 参考数据接口：短浏览器缓存 + 共享缓存（CDN）命中，过期后回源。
+ * 默认仍是 no-store；错误响应永远不缓存。
+ */
+const PUBLIC_SHORT_CACHE = "public, max-age=15, s-maxage=60, stale-while-revalidate=600";
+
+export function apiJson(data: unknown, status = 200, options: { cache?: "short" } = {}): NextResponse {
+  const headers = apiHeaders();
+  if (status === 200 && options.cache === "short") headers.set("Cache-Control", PUBLIC_SHORT_CACHE);
+  return NextResponse.json(data, { status, headers });
 }
 
 export function apiOptions(): Response {

@@ -14,6 +14,7 @@ const {
   cleanupExpiredAuthState,
   deleteExpiredSessions,
   deleteSession,
+  enforceAdminPasswordFingerprint,
   getLoginAttempt,
   getSessionByToken,
   recordLoginFailure,
@@ -77,4 +78,25 @@ test("auth-state cleanup removes old login failures along with expired sessions"
   recordLoginFailure(staleKey, { now: now - 25 * 60 * 60 * 1000, windowMs: 60_000, maxAttempts: 5, blockMs: 60_000 });
   cleanupExpiredAuthState(now);
   assert.equal(getLoginAttempt(staleKey), undefined);
+});
+
+test("ADMIN_PASSWORD rotation revokes existing sessions on the next startup check", () => {
+  const previous = process.env.ADMIN_PASSWORD;
+  const token = "f".repeat(64);
+  try {
+    process.env.ADMIN_PASSWORD = "rotation-first-password";
+    assert.deepEqual(enforceAdminPasswordFingerprint(), { recorded: true, revoked: false });
+    createSession(token, Date.now() + 60_000);
+    assert.ok(getSessionByToken(token));
+
+    assert.deepEqual(enforceAdminPasswordFingerprint(), { recorded: false, revoked: false });
+    assert.ok(getSessionByToken(token), "同一密码重复启动不得撤销会话");
+
+    process.env.ADMIN_PASSWORD = "rotation-second-password";
+    assert.deepEqual(enforceAdminPasswordFingerprint(), { recorded: true, revoked: true });
+    assert.equal(getSessionByToken(token), undefined, "改密后的旧 Cookie 会话必须失效");
+  } finally {
+    if (previous === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = previous;
+  }
 });

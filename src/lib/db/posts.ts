@@ -62,6 +62,30 @@ export function listPosts(options: PublishedPostQuery = {}): Post[] {
   return db.prepare(sql).all(...params) as Post[];
 }
 
+/**
+ * 摘要列表专用：SQL 层只取展示字段，正文用 substr 截前缀（180 字摘录远小于
+ * 4096），避免 view=summary 时仍把每篇最多 150 万字符的完整正文读进进程。
+ */
+const SUMMARY_CONTENT_PREFIX = 4_096;
+
+export type PostSummaryRow = Omit<Post, "content"> & { content: string };
+
+export function listPostSummaries(options: PublishedPostQuery = {}): PostSummaryRow[] {
+  const { limit, offset } = options;
+  const query = publishedPostQuery(options);
+  let sql = `SELECT posts.id, posts.title, posts.slug, posts.cover, posts.category, posts.tags, posts.created_at, posts.updated_at, posts.status, substr(posts.content, 1, ${SUMMARY_CONTENT_PREFIX}) AS content ${query.from} WHERE ${query.conditions.join(" AND ")} ORDER BY posts.created_at DESC`;
+  const params = [...query.params];
+  if (Number.isInteger(limit) && (limit as number) > 0) {
+    sql += " LIMIT ?";
+    params.push(limit as number);
+    if (Number.isInteger(offset) && (offset as number) > 0) {
+      sql += " OFFSET ?";
+      params.push(offset as number);
+    }
+  }
+  return db.prepare(sql).all(...params) as PostSummaryRow[];
+}
+
 /** 后台“本站文章引用”搜索专用：只返回公开文章及生成摘要所需正文。 */
 export function searchPublishedPostsForReference(keyword = "", limit = 20): Array<Pick<Post, "slug" | "title" | "content">> {
   const needle = keyword.trim().slice(0, 120);

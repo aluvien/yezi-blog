@@ -96,3 +96,38 @@ test("fault injection: swap failure after backup restores the original image", a
   }
   assert.deepEqual(leftoverQuarantineFiles(), [], "恢复路径不应留下隔离文件");
 });
+
+test("fault injection: DB delete failure plus failed restore must report the quarantine path, not success", async () => {
+  const { absolute, attachment } = await createImageAttachment("double-fail-delete.png");
+  const Database = (await import("better-sqlite3")).default;
+  const locker = new Database(path.join(tempRoot, "data", "blog.db"));
+  locker.pragma("busy_timeout = 0");
+  locker.exec("BEGIN EXCLUSIVE");
+  const originalRename = fs.promises.rename;
+  fs.promises.rename = async (from, to) => {
+    // 放行“原文件→隔离”，让“隔离→原位”的恢复注入失败。
+    if (path.basename(String(to)) === "double-fail-delete.png") {
+      const error = new Error("injected EACCES");
+      error.code = "EACCES";
+      throw error;
+    }
+    return originalRename(from, to);
+  };
+  try {
+    const result = await deleteAttachmentById(attachment.id);
+    assert.equal(result.ok, false);
+    assert.match(String(result.error), /恢复失败/);
+    assert.ok(getAttachment(attachment.id), "数据库锁释放后记录必须仍在（删除被拒绝）");
+    const quarantined = leftoverQuarantineFiles();
+    assert.equal(quarantined.length, 1, "恢复失败时隔离副本必须留在磁盘上");
+    assert.ok(String(result.error).includes(quarantined[0]), "错误信息必须指出隔离文件位置");
+  } finally {
+    fs.promises.rename = originalRename;
+    locker.exec("ROLLBACK");
+    locker.close();
+  }
+  // 清理：手动把隔离文件放回并删除记录，避免影响 leftover 断言之外的状态。
+  const [quarantined] = leftoverQuarantineFiles();
+  if (quarantined) fs.renameSync(path.join(uploadDir, quarantined), absolute);
+  await deleteAttachmentById(attachment.id);
+});

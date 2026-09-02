@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  return apiJson({ data: listReferenceLibraryCategories() });
+  return apiJson({ data: listReferenceLibraryCategories() }, 200, { cache: "short" });
 }
 
 export function OPTIONS() {

@@ -2,12 +2,54 @@
 # 复制到 /etc/nginx/sites-available/yezi-blog 并按需修改 server_name，
 # 然后 ln -s 到 sites-enabled 并 nginx -t && systemctl reload nginx
 
+# 持久限流第一层：应用内的滑动窗口限流是单进程、重启即清零的补充层，
+# 这里按真实客户端 IP 限制高成本入口。速率可按流量调整，先于应用层生效。
+# zone 指令属于 http 上下文；本文件被 http{} include，因此放在 server 之外。
+limit_req_zone $binary_remote_addr zone=yezi_api:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=yezi_login:10m rate=1r/s;
+
 server {
     listen 80;
     server_name example.com;  # TODO: 改成你的域名
 
     # 后台上传图片的大小上限（按需调整）
     client_max_body_size 22m;
+
+    # 登录入口单独收紧：防爆破（应用层还有按 IP + 按账户两层计数）。
+    location = /admin/login {
+        limit_req zone=yezi_login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:3030;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+    }
+
+    location = /api/admin/login {
+        limit_req zone=yezi_login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:3030;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+    }
+
+    # JSON API（公开列表、首页流、互动等）统一限速；uploads 静态资源不限。
+    location /api/ {
+        limit_req zone=yezi_api burst=30 nodelay;
+        proxy_pass http://127.0.0.1:3030;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 60s;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:3030;
@@ -35,5 +77,6 @@ server {
 #     # 强制后续请求走 HTTPS，错误配置可能导致旧 HTTP 子域无法访问。
 #     # add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 #     client_max_body_size 22m;
+#     # 上方 server 中的限流 location 与代理头配置在此块中原样复制一份。
 #     location / { ... 同上 ... }
 # }

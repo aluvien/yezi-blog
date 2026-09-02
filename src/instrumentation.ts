@@ -9,13 +9,18 @@ export async function register(): Promise<void> {
       console.warn("[security] 生产环境请显式设置 TRUST_PROXY=true（仅可信反代）或 false（直连）；未设置会让访客共用 unknown 限频键。");
     }
     const startBackgroundWork = async (): Promise<void> => {
-      const [{ startQQMusicHealthScheduler }, { startTelegramBotScheduler }, { resumeArticleReferenceArchiveJobs }, { startBackupScheduler }, { startMaintenanceScheduler }] = await Promise.all([
+      const [{ enforceAdminPasswordFingerprint }, { startQQMusicHealthScheduler }, { startTelegramBotScheduler }, { resumeArticleReferenceArchiveJobs }, { startBackupScheduler }, { startMaintenanceScheduler }] = await Promise.all([
+        import("./lib/db"),
         import("./lib/qq-music-scheduler"),
         import("./lib/telegram-bot-scheduler"),
         import("./lib/article-reference-archive-jobs"),
         import("./lib/backup-scheduler"),
         import("./lib/maintenance-scheduler"),
       ]);
+      // 密码轮换后旧会话立即失效；放在后台启动同一入口，确保写闸门
+      // （候选版本健康检查）释放后才会执行，回滚时不会留下半生效状态。
+      const rotation = enforceAdminPasswordFingerprint();
+      if (rotation.revoked) console.warn("[security] 检测到 ADMIN_PASSWORD 已变更，已撤销全部既有后台会话。");
       startMaintenanceScheduler();
       startQQMusicHealthScheduler();
       startTelegramBotScheduler();

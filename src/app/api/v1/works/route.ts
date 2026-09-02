@@ -10,7 +10,7 @@ export function GET(request: Request) {
   return apiJson({
     data: works.map(publicWork),
     meta: paginationMeta(page, limit, countWorks()),
-  });
+  }, 200, { cache: "short" });
 }
 
 export function OPTIONS() {

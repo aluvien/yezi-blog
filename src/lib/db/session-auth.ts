@@ -1,4 +1,5 @@
 // 管理员会话 + 登录保护 DAO。
+import crypto from "node:crypto";
 import { db, now } from "./core";
 import { hashIp } from "@/lib/ip-hash";
 import type { Session, LoginAttempt } from "./types";
@@ -102,4 +103,33 @@ export function recordLoginFailure(
 
 export function clearLoginAttempt(key: string): void {
   db.prepare("DELETE FROM login_attempts WHERE ip = ?").run(hashIp(key));
+}
+
+const FINGERPRINT_PATTERN = /^[0-9a-f]{32}\.[0-9a-f]{64}$/;
+
+function fingerprintWith(salt: string, password: string): string {
+  return `${salt}.${crypto.createHash("sha256").update(`${salt}:${password}`, "utf8").digest("hex")}`;
+}
+
+/**
+ * 校验 ADMIN_PASSWORD 是否发生过轮换：库里保存“随机盐.sha256(盐:密码)”指纹，
+ * 指纹变化说明密码已改，立即撤销全部既有会话，旧 Cookie 无法继续登录后台。
+ * 首次运行只记录指纹；环境变量缺失时不改动（登录本身也会拒绝）。
+ */
+export function enforceAdminPasswordFingerprint(): { recorded: boolean; revoked: boolean } {
+  const password = process.env.ADMIN_PASSWORD?.trim();
+  if (!password) return { recorded: false, revoked: false };
+  const row = db.prepare("SELECT password_fingerprint FROM auth_state WHERE singleton = 1").get() as { password_fingerprint: string | null } | undefined;
+  if (!row) return { recorded: false, revoked: false };
+  const stored = row.password_fingerprint;
+  if (stored && FINGERPRINT_PATTERN.test(stored)) {
+    const [salt] = stored.split(".", 1);
+    if (stored === fingerprintWith(salt, password)) return { recorded: false, revoked: false };
+    db.prepare("UPDATE auth_state SET password_fingerprint = ?, updated_at = ? WHERE singleton = 1").run(fingerprintWith(salt, password), now());
+    revokeAllSessions();
+    return { recorded: true, revoked: true };
+  }
+  db.prepare("UPDATE auth_state SET password_fingerprint = ?, updated_at = ? WHERE singleton = 1")
+    .run(fingerprintWith(crypto.randomBytes(16).toString("hex"), password), now());
+  return { recorded: true, revoked: false };
 }

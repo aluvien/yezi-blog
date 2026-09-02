@@ -31,7 +31,7 @@ export function GET() {
       social_links: parseSocialLinks(settings.social_links, 6),
       navigation: getVisibleNavItems(settings).map(({ href, label }) => ({ href, label })),
     },
-  });
+  }, 200, { cache: "short" });
 }
 
 export function OPTIONS() {
