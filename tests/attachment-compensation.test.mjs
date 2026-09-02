@@ -9,8 +9,14 @@ const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-attach-comp-"));
 process.env.BLOG_ROOT = tempRoot;
 process.env.BLOG_DB_PATH = path.join(tempRoot, "data", "blog.db");
 
-const { createAttachment, db, getAttachment } = await import("../src/lib/db.ts");
-const { compressAttachmentById, deleteAttachmentById } = await import("../src/lib/admin/attachments.ts");
+const { createAttachment, db, getAttachment, createPost } = await import("../src/lib/db.ts");
+const {
+  clearUnusedAttachments,
+  compressAttachmentById,
+  compressUntrackedAttachmentByPath,
+  deleteAttachmentById,
+  deleteUntrackedAttachmentByPath,
+} = await import("../src/lib/admin/attachments.ts");
 
 const uploadDir = path.join(tempRoot, "data", "uploads", "202609");
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -22,10 +28,7 @@ test.after(() => {
 
 async function createImageAttachment(name) {
   const absolute = path.join(uploadDir, name);
-  const buffer = await sharp({
-    create: { width: 64, height: 64, channels: 3, background: { r: 240, g: 120, b: 60 } },
-  }).png({ compressionLevel: 1 }).toBuffer();
-  fs.writeFileSync(absolute, buffer);
+  const buffer = await writeImageFile(name);
   const attachment = createAttachment({
     path: `/uploads/202609/${name}`,
     original_name: name,
@@ -33,6 +36,14 @@ async function createImageAttachment(name) {
     size: buffer.length,
   });
   return { absolute, attachment, buffer };
+}
+
+async function writeImageFile(name) {
+  const buffer = await sharp({
+    create: { width: 64, height: 64, channels: 3, background: { r: 240, g: 120, b: 60 } },
+  }).png({ compressionLevel: 1 }).toBuffer();
+  fs.writeFileSync(path.join(uploadDir, name), buffer);
+  return buffer;
 }
 
 function leftoverQuarantineFiles() {
@@ -97,6 +108,38 @@ test("fault injection: swap failure after backup restores the original image", a
   assert.deepEqual(leftoverQuarantineFiles(), [], "恢复路径不应留下隔离文件");
 });
 
+test("fault injection: non-EACCES restore failure still reports the backup path", async () => {
+  const { absolute, attachment } = await createImageAttachment("restore-fail.png");
+  const originalRename = fs.promises.rename;
+  let phase = 0;
+  fs.promises.rename = async (from, to) => {
+    phase += 1;
+    // 1=原图→备份放行；2=替换失败；3/4=两次恢复尝试都失败（非 EACCES）。
+    if (phase >= 2) {
+      const error = new Error("injected EXDEV");
+      error.code = "EXDEV";
+      throw error;
+    }
+    return originalRename(from, to);
+  };
+  try {
+    const result = await compressAttachmentById(attachment.id, "small");
+    assert.equal(result.ok, false);
+    assert.match(String(result.error), /恢复失败/);
+    const backups = leftoverQuarantineFiles();
+    assert.equal(backups.length, 1, "恢复失败时备份必须留在磁盘");
+    assert.ok(String(result.error).includes(backups[0]), "错误信息必须给出备份文件路径");
+    assert.equal(fs.existsSync(absolute), false, "原路径此时为空（原图仍在备份名中）");
+  } finally {
+    fs.promises.rename = originalRename;
+  }
+  // 清理：把备份移回原位并删除，恢复测试目录整洁。
+  const [backup] = leftoverQuarantineFiles();
+  if (backup) fs.renameSync(path.join(uploadDir, backup), absolute);
+  await deleteAttachmentById(attachment.id);
+  assert.deepEqual(leftoverQuarantineFiles(), []);
+});
+
 test("fault injection: DB delete failure plus failed restore must report the quarantine path, not success", async () => {
   const { absolute, attachment } = await createImageAttachment("double-fail-delete.png");
   const Database = (await import("better-sqlite3")).default;
@@ -130,4 +173,42 @@ test("fault injection: DB delete failure plus failed restore must report the qua
   const [quarantined] = leftoverQuarantineFiles();
   if (quarantined) fs.renameSync(path.join(uploadDir, quarantined), absolute);
   await deleteAttachmentById(attachment.id);
+});
+
+test("untracked files and bulk cleanup share the same quarantine discipline", async () => {
+  assert.equal((await deleteUntrackedAttachmentByPath("/uploads/202609/ghost.png")).error, "目录附件不存在");
+  assert.equal((await compressUntrackedAttachmentByPath("/uploads/202609/ghost.png")).error, "目录中的附件不存在");
+
+  // 未入库的磁盘文件：扫描后应作为 untracked 出现并可安全删除。
+  await writeImageFile("stray.png");
+  const strayAbsolute = path.join(uploadDir, "stray.png");
+  assert.equal((await compressUntrackedAttachmentByPath("/uploads/202609/stray.png", "nonsense")).error, "压缩级别无效");
+  assert.equal((await deleteUntrackedAttachmentByPath("/uploads/202609/stray.png")).ok, true);
+  assert.equal(fs.existsSync(strayAbsolute), false);
+  assert.deepEqual(leftoverQuarantineFiles(), []);
+
+  // 被文章引用的 untracked 文件必须拒绝删除。
+  await writeImageFile("used.png");
+  const usedAbsolute = path.join(uploadDir, "used.png");
+  createPost({ title: "引用了目录文件", content: "看图 ![u](/uploads/202609/used.png)", category: "随笔", status: "published" });
+  assert.equal((await deleteUntrackedAttachmentByPath("/uploads/202609/used.png")).error, "附件正在网站中使用，请先移除引用");
+
+  // 批量清理：未引用的入库附件与未入库文件删除，被引用的（含上面这张）保留。
+  const keepAbsolute = path.join(uploadDir, "referenced.png");
+  await writeImageFile("referenced.png");
+  const tracked = createAttachment({ path: "/uploads/202609/referenced.png", original_name: "referenced.png", mime_type: "image/png", size: 1 });
+  createPost({ title: "第二篇引用", content: `![](/uploads/202609/referenced.png)`, category: "随笔", status: "published" });
+  const doomedAbsolute = path.join(uploadDir, "doomed.png");
+  await writeImageFile("doomed.png");
+  const doomed = createAttachment({ path: "/uploads/202609/doomed.png", original_name: "doomed.png", mime_type: "image/png", size: 1 });
+
+  const cleanup = await clearUnusedAttachments();
+  assert.equal(cleanup.ok, true);
+  assert.ok(cleanup.data.deletedCount >= 2);
+  assert.equal(getAttachment(doomed.id), undefined);
+  assert.equal(fs.existsSync(doomedAbsolute), false);
+  assert.ok(getAttachment(tracked.id), "被引用附件不得被清理");
+  assert.equal(fs.existsSync(keepAbsolute), true);
+  assert.equal(fs.existsSync(usedAbsolute), true);
+  assert.deepEqual(leftoverQuarantineFiles(), []);
 });

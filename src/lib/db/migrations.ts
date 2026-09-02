@@ -233,7 +233,7 @@ const MIGRATIONS: readonly Migration[] = [
   },
   {
     // 管理员密码版本指纹：改密后启动时自动撤销全部旧会话，被盗 Cookie 不再
-    // 依赖“记得手动跑 revoke-all”。只存随机盐 + sha256，不存密码本身。
+    // 依赖“记得手动跑 revoke-all”。只存随机盐 + scrypt 派生值，不存密码本身。
     version: 13,
     name: "admin-password-fingerprint",
     up(db) {

@@ -1,6 +1,10 @@
 # Nginx 反向代理示例：将域名流量转发到本机 3030 端口的 Next.js（见 ecosystem.config.js）
 # 复制到 /etc/nginx/sites-available/yezi-blog 并按需修改 server_name，
 # 然后 ln -s 到 sites-enabled 并 nginx -t && systemctl reload nginx
+# 注意：push 到 GitHub 不会改动服务器上的 Nginx！同步后用 `nginx -T | grep limit_req`
+# 验证本文件确实已生效。若前面还有 Cloudflare，需安装 cloudflare-real-ip 模块
+# （或官方 restore_client_ip 方案）把 $remote_addr 还原为真实访客 IP，
+# 否则下面的按 IP 限流会按 Cloudflare 节点折叠。
 
 # 持久限流第一层：应用内的滑动窗口限流是单进程、重启即清零的补充层，
 # 这里按真实客户端 IP 限制高成本入口。速率可按流量调整，先于应用层生效。
@@ -14,6 +18,16 @@ server {
 
     # 后台上传图片的大小上限（按需调整）
     client_max_body_size 22m;
+
+    # 部署健康检查只给本机 deploy worker 用；公网一律 403。
+    # （应用层还有第二道保险：写探针只认部署时注入的一次性 token。）
+    location = /api/health/deploy {
+        allow 127.0.0.1;
+        deny all;
+        proxy_pass http://127.0.0.1:3030;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
 
     # 登录入口单独收紧：防爆破（应用层还有按 IP + 按账户两层计数）。
     location = /admin/login {

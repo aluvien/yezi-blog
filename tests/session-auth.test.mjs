@@ -95,6 +95,45 @@ test("ADMIN_PASSWORD rotation revokes existing sessions on the next startup chec
     process.env.ADMIN_PASSWORD = "rotation-second-password";
     assert.deepEqual(enforceAdminPasswordFingerprint(), { recorded: true, revoked: true });
     assert.equal(getSessionByToken(token), undefined, "改密后的旧 Cookie 会话必须失效");
+
+    // verifyPassword 不 trim；指纹必须同样按原始字节比较，
+    // 否则 "x" → "x " 会被登录当作改密、被指纹当作没改。
+    createSession(token, Date.now() + 60_000);
+    process.env.ADMIN_PASSWORD = "rotation-second-password ";
+    assert.deepEqual(enforceAdminPasswordFingerprint(), { recorded: true, revoked: true });
+    assert.equal(getSessionByToken(token), undefined);
+  } finally {
+    if (previous === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = previous;
+  }
+});
+
+test("fingerprint update and session revocation are atomic: a locked DB leaves neither half-applied", async () => {
+  const Database = (await import("better-sqlite3")).default;
+  const previous = process.env.ADMIN_PASSWORD;
+  try {
+    process.env.ADMIN_PASSWORD = "atomic-rotation-password";
+    // 前一个测试改过密码，这里先让指纹与当前密码对齐（可能顺带撤销旧会话）。
+    enforceAdminPasswordFingerprint();
+    const token = "d".repeat(64);
+    createSession(token, Date.now() + 60_000);
+
+    const locker = new Database(path.join(tmpDir, "test.db"));
+    locker.exec("BEGIN EXCLUSIVE");
+    const originalTimeout = db.pragma("busy_timeout", { simple: true });
+    db.pragma("busy_timeout = 200");
+    try {
+      process.env.ADMIN_PASSWORD = "atomic-rotated-password";
+      assert.throws(() => enforceAdminPasswordFingerprint());
+    } finally {
+      db.pragma(`busy_timeout = ${Number(originalTimeout) || 5000}`);
+      locker.exec("ROLLBACK");
+      locker.close();
+    }
+    // 事务回滚后：指纹仍是旧密码的，会话仍在；下一次成功启动必须完成整套轮换。
+    assert.ok(getSessionByToken(token), "失败的轮换不得留下任何一半效果");
+    assert.deepEqual(enforceAdminPasswordFingerprint(), { recorded: true, revoked: true });
+    assert.equal(getSessionByToken(token), undefined);
   } finally {
     if (previous === undefined) delete process.env.ADMIN_PASSWORD;
     else process.env.ADMIN_PASSWORD = previous;

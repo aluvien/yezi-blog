@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -18,6 +19,9 @@ const statusFile = path.resolve(process.env.DEPLOY_STATUS_FILE || path.join(stat
 const lockFile = path.join(releasesRoot, ".deploy.lock");
 const finalHealthUrl = process.env.DEPLOY_HEALTH_URL?.trim() || "http://127.0.0.1:3030/api/health/deploy";
 const keepReleases = Math.max(2, Math.min(10, Number.parseInt(process.env.DEPLOY_KEEP_RELEASES || "3", 10) || 3));
+// 一次性写探针 token：只有本 worker 拉起的进程环境里有它，健康检查才会
+// 执行 BEGIN IMMEDIATE 深度探针；公网访问该端点只能拿到只读健康面。
+const deployProbeToken = crypto.randomBytes(32).toString("hex");
 
 async function relaunchDetachedWorker() {
   const self = fileURLToPath(import.meta.url);
@@ -136,7 +140,11 @@ async function verifyHttp(baseUrl, commit, attempts = 80, requireCommit = true) 
   let lastError = "尚未监听";
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const health = await fetch(baseUrl, { cache: "no-store", signal: AbortSignal.timeout(1_500) });
+      const health = await fetch(baseUrl, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(1_500),
+        headers: { "x-deploy-probe-token": deployProbeToken },
+      });
       const payload = await health.json();
       if (!health.ok || payload?.status !== "ok" || (requireCommit && payload?.commit !== commit)) {
         const actualCommit = typeof payload?.commit === "string" ? `（实际 ${payload.commit.slice(0, 12)}）` : "";
@@ -164,7 +172,7 @@ async function smokeRelease(release, commit, env) {
   const port = await reservePort();
   const child = (await import("node:child_process")).spawn(process.execPath, [path.join(release, "scripts", "start-standalone.mjs")], {
     cwd: release,
-    env: { ...env, PORT: String(port), HOSTNAME: "127.0.0.1", BLOG_BUILD_READONLY: "true", DEPLOY_BUILD_COMMIT: commit },
+    env: { ...env, PORT: String(port), HOSTNAME: "127.0.0.1", BLOG_BUILD_READONLY: "true", DEPLOY_BUILD_COMMIT: commit, DEPLOY_PROBE_TOKEN: deployProbeToken },
     stdio: "ignore",
   });
   try {
@@ -464,6 +472,7 @@ try {
     BLOG_BUILD_READONLY: "false",
     BLOG_DEPLOY_WRITE_HOLD: "true",
     BLOG_DEPLOY_WRITE_GUARD_FILE: writeGuardPath,
+    DEPLOY_PROBE_TOKEN: deployProbeToken,
   });
   writeStatus("checking", { commit: revision.slice(0, 7) });
   await verifyHttp(finalHealthUrl, revision, 120);
@@ -508,6 +517,7 @@ try {
         BLOG_BUILD_READONLY: "false",
         BLOG_DEPLOY_WRITE_HOLD: "false",
         BLOG_DEPLOY_WRITE_GUARD_FILE: "",
+        DEPLOY_PROBE_TOKEN: deployProbeToken,
       });
       await verifyHttp(finalHealthUrl, "", 120, false);
       rollbackRecovered = true;

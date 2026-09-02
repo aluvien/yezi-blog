@@ -249,7 +249,7 @@ async function compressImageFile(relativePath: string, profile: CompressionProfi
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
     const suffix = backupPath ? `；原图备份在 ${backupPath}，请人工恢复` : "";
     if (code === "EACCES" || code === "EPERM") return { ok: false, error: `图片压缩失败，请检查上传目录写入权限${suffix}` };
-    return { ok: false, error: backupPath ? "图片压缩失败，且原图恢复失败" : "图片压缩失败，原图未被修改（或已从备份恢复）" };
+    return { ok: false, error: backupPath ? `图片压缩失败，且原图恢复失败${suffix}` : "图片压缩失败，原图未被修改（或已从备份恢复）" };
   }
 }
 

@@ -19,8 +19,14 @@ export async function register(): Promise<void> {
       ]);
       // 密码轮换后旧会话立即失效；放在后台启动同一入口，确保写闸门
       // （候选版本健康检查）释放后才会执行，回滚时不会留下半生效状态。
-      const rotation = enforceAdminPasswordFingerprint();
-      if (rotation.revoked) console.warn("[security] 检测到 ADMIN_PASSWORD 已变更，已撤销全部既有后台会话。");
+      // 启动瞬间数据库可能被短暂占用：失败只记录，下一次启动再补，
+      // 不能因此阻断定时任务/Telegram 等后台能力。
+      try {
+        const rotation = enforceAdminPasswordFingerprint();
+        if (rotation.revoked) console.warn("[security] 检测到 ADMIN_PASSWORD 已变更，已撤销全部既有后台会话。");
+      } catch (error) {
+        console.error("[security] 密码轮换指纹检查失败，本次启动跳过；下次启动会重试", error instanceof Error ? error.message : error);
+      }
       startMaintenanceScheduler();
       startQQMusicHealthScheduler();
       startTelegramBotScheduler();

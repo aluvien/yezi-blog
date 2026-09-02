@@ -105,31 +105,51 @@ export function clearLoginAttempt(key: string): void {
   db.prepare("DELETE FROM login_attempts WHERE ip = ?").run(hashIp(key));
 }
 
-const FINGERPRINT_PATTERN = /^[0-9a-f]{32}\.[0-9a-f]{64}$/;
+const FINGERPRINT_PATTERN = /^v1:[0-9a-f]{32}:[0-9a-f]{128}$/;
 
+/**
+ * 指纹必须与 verifyPassword() 使用完全相同的输入：原始 process.env.ADMIN_PASSWORD，
+ * 不 trim——否则 "password" → "password " 会被登录视为改密、被指纹视为未变。
+ * 派生用 scrypt（内存硬化、单次启动开销可忽略），不用裸 SHA-256：
+ * 数据库/备份泄露时不应多出一个可离线高速爆破的管理员口令校验器。
+ */
 function fingerprintWith(salt: string, password: string): string {
-  return `${salt}.${crypto.createHash("sha256").update(`${salt}:${password}`, "utf8").digest("hex")}`;
+  const derived = crypto.scryptSync(password, Buffer.from(salt, "hex"), 64).toString("hex");
+  return `v1:${salt}:${derived}`;
+}
+
+function matchesFingerprint(stored: string, password: string): boolean {
+  const [, salt, key] = stored.split(":");
+  const candidate = crypto.scryptSync(password, Buffer.from(salt, "hex"), 64);
+  const expected = Buffer.from(key, "hex");
+  return expected.length === candidate.length && crypto.timingSafeEqual(expected, candidate);
 }
 
 /**
- * 校验 ADMIN_PASSWORD 是否发生过轮换：库里保存“随机盐.sha256(盐:密码)”指纹，
- * 指纹变化说明密码已改，立即撤销全部既有会话，旧 Cookie 无法继续登录后台。
+ * 校验 ADMIN_PASSWORD 是否发生过轮换：库里保存“v1:盐:scrypt(盐,密码)”，
+ * 指纹变化说明密码已改，撤销全部既有会话，旧 Cookie 无法继续登录后台。
+ * “更新指纹 + 递增 generation + 清空 sessions”在同一事务内完成：
+ * 中途崩溃不会留下“指纹已新、会话未撤”的永久窗口。
  * 首次运行只记录指纹；环境变量缺失时不改动（登录本身也会拒绝）。
  */
 export function enforceAdminPasswordFingerprint(): { recorded: boolean; revoked: boolean } {
-  const password = process.env.ADMIN_PASSWORD?.trim();
+  const password = process.env.ADMIN_PASSWORD;
   if (!password) return { recorded: false, revoked: false };
-  const row = db.prepare("SELECT password_fingerprint FROM auth_state WHERE singleton = 1").get() as { password_fingerprint: string | null } | undefined;
-  if (!row) return { recorded: false, revoked: false };
-  const stored = row.password_fingerprint;
-  if (stored && FINGERPRINT_PATTERN.test(stored)) {
-    const [salt] = stored.split(".", 1);
-    if (stored === fingerprintWith(salt, password)) return { recorded: false, revoked: false };
-    db.prepare("UPDATE auth_state SET password_fingerprint = ?, updated_at = ? WHERE singleton = 1").run(fingerprintWith(salt, password), now());
-    revokeAllSessions();
-    return { recorded: true, revoked: true };
-  }
-  db.prepare("UPDATE auth_state SET password_fingerprint = ?, updated_at = ? WHERE singleton = 1")
-    .run(fingerprintWith(crypto.randomBytes(16).toString("hex"), password), now());
-  return { recorded: true, revoked: false };
+  return db.transaction(() => {
+    const row = db.prepare("SELECT password_fingerprint FROM auth_state WHERE singleton = 1").get() as { password_fingerprint: string | null } | undefined;
+    if (!row) return { recorded: false, revoked: false };
+    const stored = row.password_fingerprint;
+    if (stored && FINGERPRINT_PATTERN.test(stored)) {
+      if (matchesFingerprint(stored, password)) return { recorded: false, revoked: false };
+      const [version, salt] = stored.split(":");
+      db.prepare("UPDATE auth_state SET password_fingerprint = ?, updated_at = ? WHERE singleton = 1")
+        .run(`${version}:${salt}:${crypto.scryptSync(password, Buffer.from(salt, "hex"), 64).toString("hex")}`, now());
+      revokeAllSessions();
+      return { recorded: true, revoked: true };
+    }
+    const salt = crypto.randomBytes(16).toString("hex");
+    db.prepare("UPDATE auth_state SET password_fingerprint = ?, updated_at = ? WHERE singleton = 1")
+      .run(fingerprintWith(salt, password), now());
+    return { recorded: true, revoked: false };
+  })();
 }
