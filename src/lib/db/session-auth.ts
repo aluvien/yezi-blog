@@ -130,7 +130,8 @@ function matchesFingerprint(stored: string, password: string): boolean {
  * 指纹变化说明密码已改，撤销全部既有会话，旧 Cookie 无法继续登录后台。
  * “更新指纹 + 递增 generation + 清空 sessions”在同一事务内完成：
  * 中途崩溃不会留下“指纹已新、会话未撤”的永久窗口。
- * 首次运行只记录指纹；环境变量缺失时不改动（登录本身也会拒绝）。
+ * 首次运行只记录指纹；旧格式（非 v1:）指纹无法验证当前密码是否未变，
+ * 迁移为 scrypt 时按最保守路径先撤销一次；环境变量缺失时不改动。
  */
 export function enforceAdminPasswordFingerprint(): { recorded: boolean; revoked: boolean } {
   const password = process.env.ADMIN_PASSWORD;
@@ -139,7 +140,15 @@ export function enforceAdminPasswordFingerprint(): { recorded: boolean; revoked:
     const row = db.prepare("SELECT password_fingerprint FROM auth_state WHERE singleton = 1").get() as { password_fingerprint: string | null } | undefined;
     if (!row) return { recorded: false, revoked: false };
     const stored = row.password_fingerprint;
-    if (stored && FINGERPRINT_PATTERN.test(stored)) {
+    if (stored && !FINGERPRINT_PATTERN.test(stored)) {
+      // 旧格式指纹（上一版为 salt.sha256）：无法证明旧指纹对应的就是当前密码，
+      // 升级迁移时一律撤销一次；代价只是管理员重新登录一次。
+      db.prepare("UPDATE auth_state SET password_fingerprint = ?, updated_at = ? WHERE singleton = 1")
+        .run(fingerprintWith(crypto.randomBytes(16).toString("hex"), password), now());
+      revokeAllSessions();
+      return { recorded: true, revoked: true };
+    }
+    if (stored) {
       if (matchesFingerprint(stored, password)) return { recorded: false, revoked: false };
       const [version, salt] = stored.split(":");
       db.prepare("UPDATE auth_state SET password_fingerprint = ?, updated_at = ? WHERE singleton = 1")

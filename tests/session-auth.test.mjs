@@ -139,3 +139,22 @@ test("fingerprint update and session revocation are atomic: a locked DB leaves n
     else process.env.ADMIN_PASSWORD = previous;
   }
 });
+
+test("a legacy non-v1 stored fingerprint migrates with a one-time revocation", () => {
+  const previous = process.env.ADMIN_PASSWORD;
+  try {
+    process.env.ADMIN_PASSWORD = "legacy-format-password";
+    db.prepare("UPDATE auth_state SET password_fingerprint = ? WHERE singleton = 1")
+      .run(`${"a".repeat(32)}.${"b".repeat(64)}`);
+    const token = "c".repeat(64);
+    createSession(token, Date.now() + 60_000);
+    assert.deepEqual(enforceAdminPasswordFingerprint(), { recorded: true, revoked: true });
+    assert.equal(getSessionByToken(token), undefined, "旧格式无法证明密码未变，升级窗口必须保守撤销");
+    const stored = db.prepare("SELECT password_fingerprint FROM auth_state WHERE singleton = 1").get().password_fingerprint;
+    assert.match(String(stored), /^v1:[0-9a-f]{32}:[0-9a-f]{128}$/);
+    assert.deepEqual(enforceAdminPasswordFingerprint(), { recorded: false, revoked: false });
+  } finally {
+    if (previous === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = previous;
+  }
+});
