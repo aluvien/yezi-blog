@@ -109,7 +109,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">站点副标题</label>
-          <input value={values.site_subtitle} onChange={(event) => update("site_subtitle", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="文章 · 想法 · 作品" />
+          <input value={values.site_subtitle} onChange={(event) => update("site_subtitle", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="文章 · 絮语 · 作品" />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">页脚文案</label>
@@ -121,14 +121,14 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
       <section className="admin-card rounded-2xl bg-white p-5 shadow-sm xl:col-span-7 xl:row-span-2 sm:p-6">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-neutral-800">个人资料与品牌</h2>
-          <p className="mt-1 text-xs text-neutral-500">这些内容会显示在前台页头、想法、文章和作者卡片中。</p>
+          <p className="mt-1 text-xs text-neutral-500">这些内容会显示在前台页头、絮语、文章和作者卡片中。</p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-4">
         <div className="admin-settings-highlight rounded-xl border-2 border-accent/25 bg-accent/5 p-4">
           <label className="mb-1 block text-sm font-semibold text-neutral-800">前台作者名称</label>
           <input value={values.author_name} onChange={(event) => update("author_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2" placeholder="例如：Yezi" />
-          <p className="mt-1.5 text-xs text-neutral-500">会显示在首页、想法、文章页、评论和作者卡片中；留空时使用默认名称 Yezi。</p>
+          <p className="mt-1.5 text-xs text-neutral-500">会显示在首页、絮语、文章页、评论和作者卡片中；留空时使用默认名称 Yezi。</p>
         </div>
         <div>
           <ImageUpload value={values.site_logo || null} onChange={(path) => update("site_logo", path ?? "")} label="站点 Logo（可选）" contain />
@@ -336,7 +336,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs text-neutral-600">首页引导文字（支持 Markdown）</label>
-                <textarea value={values.classic_home_intro} onChange={(event) => update("classic_home_intro", event.target.value)} rows={3} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="个人博客：记录文章、想法与作品。" />
+                <textarea value={values.classic_home_intro} onChange={(event) => update("classic_home_intro", event.target.value)} rows={3} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" placeholder="个人博客：记录文章、絮语与作品。" />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-neutral-600">首页补充文字（支持 Markdown）</label>
@@ -383,7 +383,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
             <legend className="px-1 text-sm font-medium text-neutral-700">页面展示</legend>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_home_page !== "0"} onChange={(event) => update("show_home_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“首页”</label>
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_moments_page !== "0"} onChange={(event) => update("show_moments_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“想法”</label>
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_moments_page !== "0"} onChange={(event) => update("show_moments_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“絮语”</label>
               <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_posts_page !== "0"} onChange={(event) => update("show_posts_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“文章”</label>
               <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_references_page !== "0"} onChange={(event) => update("show_references_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“引用”</label>
               <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_works_page !== "0"} onChange={(event) => update("show_works_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“作品”</label>

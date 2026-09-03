@@ -186,3 +186,835 @@ body.memo-page[data-reading="immersive"] .prose p {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* /life 的经典版聚合页：保留小记数据分栏，但视觉回到参考站的
+ * 「年份目录 + 正文条目」结构，不把生活记录包装成现代卡片。 */
+.memo-page .classic-life-page {
+  width: 100%;
+  color: var(--text);
+}
+
+.memo-page .classic-life-intro {
+  max-width: 780px;
+  margin-top: 28px;
+  margin-bottom: 28px;
+  font-family: var(--font-copy);
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+.memo-page .classic-life-intro p {
+  margin: 0;
+}
+
+.life-tabs--classic {
+  margin: 0 0 28px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.life-tabs--classic ul {
+  display: flex;
+  align-items: center;
+  gap: 14px 20px;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.life-tabs--classic ul::-webkit-scrollbar {
+  display: none;
+}
+
+.life-tabs--classic a {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: nowrap;
+  border-bottom: 1px solid transparent;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.life-tabs--classic a:hover,
+.life-tabs--classic a:focus-visible,
+.life-tabs--classic a.is-active {
+  color: var(--text);
+  border-bottom-color: currentColor;
+}
+
+.life-tabs--classic a.is-active {
+  font-weight: 600;
+}
+
+.life-tabs--classic .life-tabs__count {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.memo-page .classic-life-toc {
+  margin-top: 8px;
+  margin-bottom: 42px;
+}
+
+.classic-life-toc .toc-items {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.classic-life-toc .toc-items > li,
+.classic-life-toc .toc-items a {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.classic-life-toc details + details {
+  margin-top: 16px;
+}
+
+.classic-life-toc__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-page .classic-life-content {
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+.classic-life-content .classic-life-year > h2:first-child {
+  margin-top: 56px;
+}
+
+.classic-life-content .classic-life-year:first-child > h2:first-child {
+  margin-top: 0;
+}
+
+.classic-life-content .classic-life-entry {
+  margin-top: 28px;
+}
+
+.classic-life-content .classic-life-entry h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.classic-life-content .classic-life-entry h3 a {
+  color: inherit;
+}
+
+.classic-life-content .classic-life-entry h3 a:hover {
+  color: var(--accent);
+}
+
+/* “全部”是跨类型时间流：用一条细竖线连接每个时间点，日期放在左侧，
+ * 内容放在右侧，避免不同类型的卡片把阅读节奏切碎。 */
+.memo-page .classic-life-content--flat {
+  font-family: var(--font-readable);
+}
+
+.memo-page .classic-life-timeline {
+  --classic-life-timeline-rail-x: 98px;
+  --classic-life-timeline-item-offset: 0px;
+  position: relative;
+  margin-top: 6px;
+  padding: 8px 0 4px;
+}
+
+.memo-page .classic-life-timeline::before {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: var(--classic-life-timeline-rail-x);
+  width: 1px;
+  background: var(--border);
+  content: "";
+}
+
+.classic-life-timeline__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 84px) minmax(0, 1fr);
+  column-gap: 28px;
+  padding: 0 0 32px;
+}
+
+.classic-life-timeline__item:last-child {
+  padding-bottom: 0;
+}
+
+.classic-life-timeline__item::before {
+  position: absolute;
+  top: calc(50% - 16px);
+  left: calc(var(--classic-life-timeline-rail-x) - var(--classic-life-timeline-item-offset) - 5px);
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.classic-life-timeline__item:last-child::before {
+  top: 50%;
+}
+
+.classic-life-timeline__date {
+  align-self: center;
+  padding-top: 0;
+  color: var(--faint);
+  font-family: var(--font-copy);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.classic-life-timeline__content {
+  min-width: 0;
+}
+
+.memo-page .classic-life-content--flat .classic-life-timeline__content > h3 {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  overflow: hidden;
+  padding-left: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.memo-page .classic-life-content--flat .classic-life-timeline__content > h3::before {
+  display: none;
+}
+
+.memo-page .classic-life-content--flat .classic-life-timeline__content > h3 a {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: inherit;
+  border-bottom: 0;
+  text-decoration: none;
+}
+
+.memo-page .classic-life-content--flat .classic-life-timeline__content > h3 a:hover {
+  color: var(--accent);
+}
+
+.classic-life-timeline__kind,
+.classic-life-timeline__separator {
+  flex: 0 0 auto;
+}
+
+.classic-life-timeline__kind {
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 0.72em;
+  font-weight: 400;
+}
+
+.classic-life-timeline__separator {
+  color: var(--border);
+  font-size: 0.82em;
+}
+
+.classic-life-timeline__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classic-life-timeline__content > .classic-life-entry__markdown,
+.classic-life-timeline__content > p {
+  margin: 8px 0 0;
+}
+
+.classic-life-timeline__content .classic-life-entry__meta {
+  margin-top: 10px;
+}
+
+.classic-life-entry__external {
+  color: var(--muted);
+  font-size: 0.8em;
+  font-weight: 400;
+}
+
+/* 全部时间轴中的收藏只保留一行标签和链接标题，摘要通过标题附近的
+ * 气泡提示展示，桌面 hover 与移动端的短按都复用同一套交互。 */
+.classic-life-reference-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px 12px;
+  overflow: visible;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.classic-life-reference-line__kind,
+.classic-life-reference-line__separator {
+  flex: 0 0 auto;
+}
+
+.classic-life-reference-line__kind {
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 12px;
+}
+
+.classic-life-reference-line__separator {
+  color: var(--border);
+  font-size: 13px;
+}
+
+.classic-life-reference-line__link-shell {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.classic-life-reference-line__link {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-family: var(--font-readable);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.6;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+
+.classic-life-reference-line__link:hover,
+.classic-life-reference-line__link:focus-visible {
+  color: var(--accent);
+}
+
+.classic-life-reference-line__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classic-life-reference-line__external {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--faint);
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.classic-life-reference-line__link:hover .classic-life-reference-line__external,
+.classic-life-reference-line__link:focus-visible .classic-life-reference-line__external {
+  color: currentColor;
+  transform: translate(1px, -1px);
+}
+
+.classic-life-reference-line__tooltip {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 11px);
+  left: var(--site-reference-tooltip-left, 0);
+  display: flex;
+  width: min(32rem, calc(100vw - 4rem));
+  max-width: var(--site-reference-tooltip-max-width, calc(100vw - 4rem));
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 12%);
+  padding: 10px 13px;
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.7;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(var(--site-reference-tooltip-translate-x, 0), 5px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s linear 160ms;
+  visibility: hidden;
+  white-space: normal;
+}
+
+.classic-life-reference-line__tooltip::after {
+  position: absolute;
+  top: 100%;
+  left: var(--site-reference-tooltip-arrow-left, 18px);
+  width: 9px;
+  height: 9px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  content: "";
+  transform: translateY(-5px) rotate(45deg);
+}
+
+.classic-life-reference-line .site-article-reference:is(:hover, :focus-within, .is-tooltip-open) .classic-life-reference-line__tooltip {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(var(--site-reference-tooltip-translate-x, 0), 0);
+  transition: opacity 160ms ease, transform 160ms ease;
+  visibility: visible;
+}
+
+.classic-life-reference-line__tooltip-label {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+}
+
+.classic-life-entry__markdown,
+.classic-life-entry > p {
+  margin: 12px 0;
+}
+
+.classic-life-entry__markdown > :first-child {
+  margin-top: 0;
+}
+
+.classic-life-entry__markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.classic-life-entry__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin-top: 14px;
+  color: var(--faint);
+  font-family: var(--font-copy);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.classic-life-entry__meta > span + span::before,
+.classic-life-entry__meta > time + span::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--border);
+}
+
+.classic-life-entry__location {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.classic-life-entry__media {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0 0;
+}
+
+.classic-life-entry__media-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.classic-life-entry__media-item {
+  position: relative;
+  min-width: 0;
+  min-height: 150px;
+  flex: 1 1 0;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.classic-life-entry__media-item .site-image-media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.classic-life-entry__media-row:only-child .classic-life-entry__media-item:only-child {
+  max-width: 760px;
+  aspect-ratio: 16 / 9;
+}
+
+.classic-life-empty {
+  color: var(--muted);
+}
+
+.classic-life-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 42px;
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 13px;
+}
+
+.classic-life-pager a {
+  color: var(--muted);
+  border-bottom: 1px solid transparent;
+}
+
+.classic-life-pager a:hover {
+  color: var(--text);
+  border-bottom-color: currentColor;
+}
+
+.classic-life-pager > span:not(.classic-life-pager__current) {
+  color: var(--faint);
+}
+
+.classic-life-pager__current {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 收藏引用是资料索引，不沿用生活节点的「年份目录 + 编号正文」结构。
+ * 这里保持经典版的留白和细线，只把分类、标题与 AI 摘要放在同一条阅读路径上。 */
+.memo-page .classic-reference-list {
+  width: 100%;
+  margin-top: 8px;
+  color: var(--text);
+}
+
+.memo-page .classic-reference-taxonomy {
+  display: flex;
+  align-items: baseline;
+  gap: 12px 18px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 11px 0;
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.memo-page .classic-reference-taxonomy__label {
+  flex: 0 0 auto;
+  color: var(--faint);
+  letter-spacing: 0.08em;
+}
+
+.memo-page .classic-reference-taxonomy__items {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px 15px;
+}
+
+.memo-page .classic-reference-taxonomy__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.memo-page .classic-reference-taxonomy__item--category {
+  color: var(--accent);
+}
+
+.memo-page .classic-reference-taxonomy__item small {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.memo-page .classic-reference-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memo-page .classic-reference-item {
+  position: relative;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 0 17px;
+}
+
+.memo-page .classic-reference-item__labels {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 11px;
+  margin-bottom: 6px;
+  color: var(--faint);
+  font-family: var(--font-copy);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.memo-page .classic-reference-item__category {
+  color: var(--accent);
+}
+
+.memo-page .classic-reference-item__tag {
+  color: var(--muted);
+}
+
+.memo-page .classic-reference-item__tag::before {
+  margin-right: 11px;
+  color: var(--border);
+  content: "·";
+}
+
+.memo-page .classic-reference-item__link-shell {
+  position: relative;
+  display: inline;
+}
+
+.memo-page .classic-reference-item__link {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--text);
+  font-family: var(--font-readable);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.55;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+
+.memo-page .classic-reference-item__link:hover,
+.memo-page .classic-reference-item__link:focus-visible {
+  color: var(--accent);
+}
+
+.memo-page .classic-reference-item__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memo-page .classic-reference-item__external {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--faint);
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.memo-page .classic-reference-item__link:hover .classic-reference-item__external,
+.memo-page .classic-reference-item__link:focus-visible .classic-reference-item__external {
+  color: currentColor;
+  transform: translate(1px, -1px);
+}
+
+.memo-page .classic-reference-item__tooltip {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 11px);
+  left: var(--site-reference-tooltip-left, 0);
+  display: flex;
+  width: min(32rem, calc(100vw - 2rem));
+  max-width: var(--site-reference-tooltip-max-width, calc(100vw - 2rem));
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, var(--accent));
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 12%);
+  padding: 10px 13px;
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.7;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(var(--site-reference-tooltip-translate-x, 0), 5px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s linear 160ms;
+  visibility: hidden;
+}
+
+.memo-page .classic-reference-item__tooltip::after {
+  position: absolute;
+  top: 100%;
+  left: var(--site-reference-tooltip-arrow-left, 24px);
+  width: 9px;
+  height: 9px;
+  border-right: 1px solid color-mix(in srgb, var(--border) 84%, var(--accent));
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, var(--accent));
+  background: var(--bg);
+  content: "";
+  transform: translateY(-5px) rotate(45deg);
+}
+
+.memo-page .classic-reference-item__tooltip-label {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+}
+
+.memo-page .classic-reference-item .site-article-reference:is(:hover, :focus-within, .is-tooltip-open) .classic-reference-item__tooltip {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(var(--site-reference-tooltip-translate-x, 0), 0);
+  transition: opacity 160ms ease, transform 160ms ease;
+  visibility: visible;
+}
+
+.memo-page .classic-reference-empty {
+  margin: 28px 0 0;
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 15px;
+}
+
+@media (max-width: 900px) {
+  .memo-page .classic-life-intro {
+    margin-top: 18px;
+    margin-bottom: 24px;
+  }
+
+  .memo-page .classic-life-toc {
+    margin-bottom: 28px;
+  }
+
+  .classic-life-content .classic-life-year > h2:first-child {
+    margin-top: 42px;
+  }
+}
+
+@media (max-width: 640px) {
+  .classic-life-toc .toc-items {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .life-tabs--classic {
+    margin-bottom: 24px;
+  }
+
+  .life-tabs--classic ul {
+    gap: 10px 16px;
+  }
+
+  .memo-page .classic-life-content {
+    font-size: 16px;
+  }
+
+  .classic-life-content .classic-life-entry {
+    margin-top: 24px;
+  }
+
+  .memo-page .classic-life-timeline {
+    --classic-life-timeline-rail-x: 7px;
+    --classic-life-timeline-item-offset: 24px;
+    margin-top: 2px;
+    padding: 6px 0 4px 24px;
+  }
+
+  .memo-page .classic-life-timeline::before {
+    top: 13px;
+    bottom: 12px;
+    left: var(--classic-life-timeline-rail-x);
+  }
+
+  .classic-life-timeline__item {
+    display: block;
+    padding-bottom: 26px;
+  }
+
+  .classic-life-timeline__item::before {
+    top: 4px;
+    left: calc(var(--classic-life-timeline-rail-x) - var(--classic-life-timeline-item-offset) - 5px);
+    width: 10px;
+    height: 10px;
+    transform: none;
+  }
+
+  .classic-life-timeline__item:last-child::before {
+    top: 4px;
+  }
+
+  .classic-life-timeline__date {
+    display: block;
+    margin-bottom: 4px;
+    padding-top: 0;
+    text-align: left;
+  }
+
+  .memo-page .classic-life-content--flat .classic-life-timeline__content > h3 {
+    font-size: 15px;
+  }
+
+  .classic-life-reference-line {
+    gap: 4px 8px;
+  }
+
+  .classic-life-reference-line__link {
+    font-size: 15px;
+  }
+
+  .classic-life-reference-line__tooltip {
+    width: min(32rem, calc(100vw - 3.5rem));
+  }
+
+  .classic-life-entry__media-item {
+    min-height: 110px;
+  }
+
+  .classic-life-pager {
+    margin-top: 32px;
+  }
+
+  .memo-page .classic-reference-taxonomy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .memo-page .classic-reference-item {
+    padding: 14px 0 15px;
+  }
+
+  .memo-page .classic-reference-item__link {
+    font-size: 16px;
+  }
+
+  .memo-page .classic-reference-item__tooltip {
+    width: min(32rem, calc(100vw - 2rem));
+  }
+}

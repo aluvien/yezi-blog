@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "搜索",
-  description: "搜索文章与想法。",
+  description: "搜索文章与絮语。",
   alternates: { canonical: PUBLIC_ROUTES.search },
 };
 
@@ -22,7 +22,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   if (!query) {
     return (
       <div className="mx-auto max-w-[760px] py-8 md:py-12">
-        <PageHeader eyebrow="站内搜索" title="搜索" description="输入关键词，查找文章与想法。" />
+        <PageHeader eyebrow="站内搜索" title="搜索" description="输入关键词，查找文章与絮语。" />
         <p className="py-16 text-center text-[14px] text-muted">请从页头搜索按钮输入关键词。</p>
       </div>
     );

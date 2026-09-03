@@ -7,18 +7,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const NAV: Array<{ href: string; label: string; exact?: boolean }> = [
   { href: "/admin", label: "仪表盘", exact: true },
   { href: "/admin/posts", label: "文章" },
-  { href: "/admin/moments", label: "想法" },
+  { href: "/admin/moments", label: "絮语" },
+];
+
+const LIFE_NAV = [
+  { href: "/admin/life/milestones", label: "生活节点" },
+  { href: "/admin/works", label: "作品" },
+  { href: "/admin/life/github", label: "GitHub" },
+  { href: "/admin/references", label: "收藏引用" },
 ];
 
 const DATA_NAV = [
   { href: "/admin/comments", label: "评论管理", pending: true },
   { href: "/admin/attachments", label: "附件管理" },
-];
-
-const PAGE_NAV = [
-  { href: "/admin/pages/about", label: "关于我" },
-  { href: "/admin/works", label: "作品管理" },
-  { href: "/admin/references", label: "引用管理" },
+  { href: "/admin/pages/about", label: "关于页面" },
 ];
 
 const SETTINGS_NAV = [
@@ -27,7 +29,7 @@ const SETTINGS_NAV = [
   { href: "/admin/settings/appearance", label: "外观主题" },
 ];
 
-type MenuKey = "data" | "pages" | "settings";
+type MenuKey = "life" | "data" | "settings";
 
 function isActive(pathname: string, href: string, exact?: boolean): boolean {
   if (exact) return pathname === href;
@@ -116,8 +118,8 @@ export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
         const active = isActive(pathname, item.href, item.exact);
         return <Link key={item.href} href={item.href} onClick={() => setOpenMenu(null)} className={`admin-nav-link relative shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${active ? "is-active bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"}`}>{item.label}</Link>;
       })}
+      {renderMenu("life", "小记", LIFE_NAV)}
       {renderMenu("data", "数据", DATA_NAV)}
-      {renderMenu("pages", "页面", PAGE_NAV)}
       {renderMenu("settings", "设置", SETTINGS_NAV)}
     </nav>
   );

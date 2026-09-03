@@ -7,7 +7,7 @@ import { normalizeMomentLocation } from "@/lib/moment-location";
 import { normalizePostTags } from "@/lib/post-tags";
 
 /**
- * 想法（Moment）的业务核心。鉴权由调用方（Server Action 或已鉴权 Route Handler）负责。
+ * 絮语（Moment）的业务核心。鉴权由调用方（Server Action 或已鉴权 Route Handler）负责。
  */
 
 const MAX_MOMENT_CONTENT_LENGTH = 20_000;
@@ -29,9 +29,9 @@ function normalizeMomentImages(value: unknown): string[] | null {
 }
 
 export async function createMomentEntry(data: { content: string; images: string[]; tags?: string[]; location?: string }): Promise<ActionResult> {
-  if (!data || typeof data.content !== "string") return { ok: false, error: "想法数据格式无效" };
+  if (!data || typeof data.content !== "string") return { ok: false, error: "絮语数据格式无效" };
   const content = normalizeMediaShortcodes(data.content.trim());
-  if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "想法内容不能超过 2 万个字符" };
+  if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "絮语内容不能超过 2 万个字符" };
   const images = normalizeMomentImages(data.images);
   if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
   const location = normalizeMomentLocation(data.location);
@@ -49,10 +49,10 @@ export async function updateMomentEntry(
   id: number,
   data: { content: string; images: string[]; tags?: string[]; location?: string },
 ): Promise<ActionResult> {
-  if (!Number.isInteger(id) || id < 1 || !data || typeof data.content !== "string") return { ok: false, error: "想法数据格式无效" };
-  if (!getMoment(id)) return { ok: false, error: "想法不存在" };
+  if (!Number.isInteger(id) || id < 1 || !data || typeof data.content !== "string") return { ok: false, error: "絮语数据格式无效" };
+  if (!getMoment(id)) return { ok: false, error: "絮语不存在" };
   const content = normalizeMediaShortcodes(data.content.trim());
-  if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "想法内容不能超过 2 万个字符" };
+  if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "絮语内容不能超过 2 万个字符" };
   const images = normalizeMomentImages(data.images);
   if (!images) return { ok: false, error: "图片地址无效或数量超过 9 张" };
   const location = data.location === undefined ? undefined : normalizeMomentLocation(data.location);
@@ -68,7 +68,7 @@ export async function updateMomentEntry(
 }
 
 export async function deleteMomentEntry(id: number): Promise<ActionResult> {
-  if (!getMoment(id)) return { ok: false, error: "想法不存在" };
+  if (!getMoment(id)) return { ok: false, error: "絮语不存在" };
   deleteMoment(id);
   revalidatePath("/admin/moments");
   revalidatePath("/moments");

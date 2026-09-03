@@ -1,11 +1,16 @@
 import { revalidatePath } from "next/cache";
-import { createWork, deleteWork, getWork, updateWork } from "@/lib/db";
+import { createWork, deleteWork, getWork, setWorkRepositories, updateWork } from "@/lib/db";
 import type { ActionResult } from "@/lib/actions/posts";
 import type { WorkInput } from "@/lib/actions/works";
 
 /**
  * 作品展示的业务核心。鉴权由调用方（Server Action 或已鉴权 Route Handler）负责。
  */
+
+function sanitizeRepositoryIds(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((id): id is number => Number.isInteger(id) && (id as number) > 0).slice(0, 50);
+}
 
 function validOptionalUrl(value: string): boolean {
   if (!value.trim()) return true;
@@ -42,8 +47,12 @@ export async function createWorkEntry(data: WorkInput): Promise<ActionResult> {
     link: data.link.trim() || null,
     sort_order: Math.trunc(data.sort_order),
   });
+  const repoIds = sanitizeRepositoryIds(data.repository_ids);
+  if (repoIds) setWorkRepositories(work.id, repoIds);
   revalidatePath("/admin/works");
+  revalidatePath("/admin/life");
   revalidatePath("/works");
+  revalidatePath("/life");
   revalidatePath("/");
   return { ok: true, data: work };
 }
@@ -59,8 +68,12 @@ export async function updateWorkEntry(id: number, data: WorkInput): Promise<Acti
     link: data.link.trim() || null,
     sort_order: Math.trunc(data.sort_order),
   });
+  const repoIds = sanitizeRepositoryIds(data.repository_ids);
+  if (repoIds) setWorkRepositories(id, repoIds);
   revalidatePath("/admin/works");
+  revalidatePath("/admin/life");
   revalidatePath("/works");
+  revalidatePath("/life");
   revalidatePath("/");
   return { ok: true, data: work };
 }
@@ -69,7 +82,9 @@ export async function deleteWorkEntry(id: number): Promise<ActionResult> {
   if (!getWork(id)) return { ok: false, error: "作品不存在" };
   deleteWork(id);
   revalidatePath("/admin/works");
+  revalidatePath("/admin/life");
   revalidatePath("/works");
+  revalidatePath("/life");
   revalidatePath("/");
   return { ok: true, data: { id } };
 }

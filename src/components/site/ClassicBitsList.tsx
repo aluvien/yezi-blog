@@ -63,7 +63,7 @@ function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentC
       <div className="bit-meta">
         <MomentLocation location={moment.location} />
         {tags.length > 0 ? (
-          <div className="bit-tags" aria-label="想法标签">
+          <div className="bit-tags" aria-label="絮语标签">
             <span className="bit-tag bit-tag--normal">
               <span className="bit-tag-icon" aria-hidden="true">❤</span>
               <span className="bit-tag-list">{tags.map((tag) => <span className="bit-tag-token" key={tag}>#{tag}</span>)}</span>

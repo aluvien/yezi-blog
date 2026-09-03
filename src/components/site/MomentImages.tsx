@@ -5,7 +5,7 @@ import { LightboxOverlay } from "@/components/site/ImageLightbox";
 import { SiteImage } from "@/components/site/SiteImage";
 import { groupMomentImages } from "@/lib/moments";
 
-/** 想法配图：社交九宫格排列 + 点击灯箱预览。 */
+/** 絮语配图：社交九宫格排列 + 点击灯箱预览。 */
 export function MomentImages({ images }: { images: string[] }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   if (images.length === 0) return null;

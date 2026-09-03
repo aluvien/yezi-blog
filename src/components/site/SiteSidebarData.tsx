@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { countMoments, countPublishedPosts, countWorks, listLatestApprovedComments } from "@/lib/db";
+import { countLifeFeedItems, countMoments, countPublishedPosts, listLatestApprovedComments } from "@/lib/db";
 import { getCachedCategories, getCachedPublishedTags } from "@/lib/server-data";
 import { formatDateOnly } from "@/lib/format";
 import { parseSocialLinks } from "@/lib/site";
@@ -38,7 +38,7 @@ function Label({ icon, children }: { icon: CardIconName; children: React.ReactNo
 export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string, string> }) {
   const postCount = countPublishedPosts();
   const momentCount = countMoments();
-  const workCount = countWorks();
+  const lifeCount = countLifeFeedItems();
   const categories = getCachedCategories();
   const latestInteractions = listLatestApprovedComments(8);
   const tags = getCachedPublishedTags(12);
@@ -50,7 +50,7 @@ export function SiteSidebarData({ siteSettings }: { siteSettings: Record<string,
         <div className="site-sidebar-stat-grid mt-3">
           <Link href={PUBLIC_ROUTES.posts} className="site-sidebar-stat"><strong>{postCount}</strong><span>随笔</span></Link>
           <Link href={PUBLIC_ROUTES.moments} className="site-sidebar-stat"><strong>{momentCount}</strong><span>絮语</span></Link>
-          <Link href={PUBLIC_ROUTES.works} className="site-sidebar-stat"><strong>{workCount}</strong><span>小记</span></Link>
+          <Link href={PUBLIC_ROUTES.life} className="site-sidebar-stat"><strong>{lifeCount}</strong><span>小记</span></Link>
         </div>
       </div>
 

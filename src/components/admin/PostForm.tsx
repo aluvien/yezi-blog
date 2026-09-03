@@ -49,7 +49,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   const [status, setStatus] = useState<"draft" | "published">(post?.status ?? "draft");
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState("");
-  const [markdownDialog, setMarkdownDialog] = useState<"link" | "image" | null>(null);
+  const [markdownDialog, setMarkdownDialog] = useState<"link" | "image" | "gallery" | null>(null);
   const [musicDialog, setMusicDialog] = useState(false);
   const [videoDialog, setVideoDialog] = useState(false);
   const [referenceDialog, setReferenceDialog] = useState(openReferenceDialog);
@@ -57,7 +57,8 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   const [dialogUrl, setDialogUrl] = useState("");
   const [dialogError, setDialogError] = useState("");
   const [dialogUploading, setDialogUploading] = useState(false);
-  const [dialogAttachment, setDialogAttachment] = useState<Attachment | null>(null);
+  const [dialogAttachments, setDialogAttachments] = useState<Attachment[]>([]);
+  const [dialogGalleryColumns, setDialogGalleryColumns] = useState<"auto" | "2" | "3">("auto");
   const [pending, startTransition] = useTransition();
   const [attachmentOriginal, setAttachmentOriginal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -172,38 +173,42 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     replaceTextAtRange(`\n${marker}\n`, range);
   }
 
-  function openMarkdownDialog(kind: "link" | "image") {
+  function openMarkdownDialog(kind: "link" | "image" | "gallery") {
     const range = getEditingRange();
     dialogRangeRef.current = range;
     setMarkdownDialog(kind);
     setDialogText(content.slice(range.start, range.end));
     setDialogUrl("");
     setDialogError("");
-    setDialogAttachment(null);
+    setDialogAttachments([]);
+    setDialogGalleryColumns("auto");
   }
 
   // 取消或改用别的网址时，删除已上传但未插入正文的图片附件，避免孤儿。
-  async function discardDialogAttachment() {
-    const orphan = dialogAttachment;
-    if (!orphan) return;
-    try {
-      await deleteAttachmentAction(orphan.id);
-    } catch {
-      // 附件可能已被删除或已引用，忽略；未引用孤儿也可由附件管理页兜底清理。
-    }
+  async function discardDialogAttachments() {
+    const orphans = dialogAttachments;
+    if (orphans.length === 0) return;
+    await Promise.all(orphans.map(async (orphan) => {
+      try {
+        await deleteAttachmentAction(orphan.id);
+      } catch {
+        // 附件可能已被删除或已引用，忽略；未引用孤儿也可由附件管理页兜底清理。
+      }
+    }));
   }
 
-  function closeMarkdownDialog(discardAttachment = true) {
-    if (discardAttachment) void discardDialogAttachment();
+  function closeMarkdownDialog(discardAttachments = true) {
+    if (discardAttachments) void discardDialogAttachments();
     setMarkdownDialog(null);
     setDialogError("");
-    setDialogAttachment(null);
+    setDialogAttachments([]);
+    setDialogGalleryColumns("auto");
     dialogRangeRef.current = null;
     if (markdownImageInputRef.current) markdownImageInputRef.current.value = "";
   }
 
   function runMarkdownTool(tool: MarkdownTool) {
-    if (tool.kind === "link" || tool.kind === "image") {
+    if (tool.kind === "link" || tool.kind === "image" || tool.kind === "gallery") {
       openMarkdownDialog(tool.kind);
     } else if (tool.kind === "music") {
       dialogRangeRef.current = getEditingRange();
@@ -237,20 +242,23 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     }
   }
 
-  async function handleMarkdownImageFile(file: File | undefined) {
-    if (!file) return;
+  async function handleMarkdownImageFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
     setDialogUploading(true);
     setDialogError("");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("original", String(attachmentOriginal));
-      // 先不绑定文章，只有点击“插入图片”后才将附件加入当前文章。
-      const response = await fetch("/api/admin/upload", { method: "POST", headers: ADMIN_CSRF_HEADER, body: form });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.attachment) throw new Error(data.error || "图片上传失败");
-      setDialogAttachment(data.attachment as Attachment);
-      setDialogUrl((data.attachment as Attachment).path);
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("original", String(attachmentOriginal));
+        // 先不绑定文章，只有点击“插入图片”后才将附件加入当前文章。
+        const response = await fetch("/api/admin/upload", { method: "POST", headers: ADMIN_CSRF_HEADER, body: form });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.attachment) throw new Error(data.error || `${file.name} 上传失败`);
+        const attachment = data.attachment as Attachment;
+        setDialogAttachments((current) => [...current, attachment]);
+        if (markdownDialog === "image") setDialogUrl(attachment.path);
+      }
     } catch (error) {
       setDialogError(error instanceof Error ? error.message : "图片上传失败");
     } finally {
@@ -260,6 +268,42 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   }
 
   function confirmMarkdownDialog() {
+    if (markdownDialog === "gallery") {
+      const directUrls = dialogUrl
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const invalidUrl = directUrls.find((value) => !isSafeMarkdownUrl(value));
+      if (invalidUrl) {
+        setDialogError(`图片网址无效：${invalidUrl}`);
+        return;
+      }
+      const entries = [
+        ...dialogAttachments.map((attachment) => ({ label: attachment.original_name, url: attachment.path })),
+        ...directUrls.map((url, index) => ({ label: `图片 ${index + 1}`, url })),
+      ];
+      const uniqueEntries = entries.filter((entry, index, all) => all.findIndex((item) => item.url === entry.url) === index);
+      if (uniqueEntries.length === 0) {
+        setDialogError("请至少上传一张图片，或每行填写一个图片网址。");
+        return;
+      }
+      const columns = dialogGalleryColumns === "auto" ? "" : ` cols-${dialogGalleryColumns}`;
+      const markdown = `\n\n!gallery${columns}\n${uniqueEntries.map((entry) => `- ![${escapeMarkdownLabel(entry.label) || "图片"}](${escapeMarkdownUrl(entry.url)})`).join("\n")}\n!endgallery\n\n`;
+      if (dialogAttachments.length > 0) {
+        setAttachments((current) => {
+          const next = [...current];
+          for (const attachment of dialogAttachments) {
+            if (!next.some((item) => item.id === attachment.id)) next.unshift(attachment);
+          }
+          return next;
+        });
+      }
+      const range = dialogRangeRef.current ?? getEditingRange();
+      replaceTextAtRange(markdown, range);
+      closeMarkdownDialog(false);
+      return;
+    }
+
     const url = dialogUrl.trim();
     if (!url) {
       setDialogError(markdownDialog === "image" ? "请输入图片网址，或先上传图片。" : "请输入链接网址。");
@@ -274,10 +318,11 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     const markdown = markdownDialog === "image"
       ? `![${text}](${escapeMarkdownUrl(url)})`
       : `[${text}](${escapeMarkdownUrl(url)})`;
-    let usedAttachment = false;
-    if (markdownDialog === "image" && dialogAttachment && url === dialogAttachment.path) {
-      setAttachments((current) => current.some((item) => item.id === dialogAttachment.id) ? current : [dialogAttachment, ...current]);
-      usedAttachment = true;
+    const usedAttachment = markdownDialog === "image"
+      ? dialogAttachments.find((attachment) => url === attachment.path)
+      : undefined;
+    if (usedAttachment) {
+      setAttachments((current) => current.some((item) => item.id === usedAttachment.id) ? current : [usedAttachment, ...current]);
     }
     replaceTextAtRange(markdown, range);
     // 已纳入文章附件则保留；否则关闭时丢弃未使用的上传附件。
@@ -523,7 +568,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           >
             <div className="flex items-center justify-between gap-4">
               <h2 id="markdown-dialog-title" className="text-base font-semibold text-neutral-900">
-                {markdownDialog === "image" ? "插入图片" : "插入链接"}
+                {markdownDialog === "image" ? "插入图片" : markdownDialog === "gallery" ? "插入图片合集" : "插入链接"}
               </h2>
               <button
                 type="button"
@@ -536,37 +581,68 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
             </div>
 
             <div className="mt-4 flex flex-col gap-3">
-              <label className="text-sm text-neutral-700">
-                {markdownDialog === "image" ? "替代文字（可选）" : "链接文字"}
-                <input
-                  value={dialogText}
-                  onChange={(event) => setDialogText(event.target.value)}
-                  placeholder={markdownDialog === "image" ? "图片说明" : "链接文字"}
-                  className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
-                />
-              </label>
+              {markdownDialog !== "gallery" && (
+                <label className="text-sm text-neutral-700">
+                  {markdownDialog === "image" ? "替代文字（可选）" : "链接文字"}
+                  <input
+                    value={dialogText}
+                    onChange={(event) => setDialogText(event.target.value)}
+                    placeholder={markdownDialog === "image" ? "图片说明" : "链接文字"}
+                    className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                  />
+                </label>
+              )}
+
+              {markdownDialog === "gallery" && (
+                <label className="text-sm text-neutral-700">
+                  图片列数
+                  <select
+                    value={dialogGalleryColumns}
+                    onChange={(event) => setDialogGalleryColumns(event.target.value as "auto" | "2" | "3")}
+                    className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                  >
+                    <option value="auto">自适应</option>
+                    <option value="2">固定 2 列</option>
+                    <option value="3">固定 3 列</option>
+                  </select>
+                </label>
+              )}
 
               <label className="text-sm text-neutral-700">
-                {markdownDialog === "image" ? "图片网址" : "链接网址"}
-                <input
-                  value={dialogUrl}
-                  onChange={(event) => {
-                    setDialogUrl(event.target.value);
-                    setDialogError("");
-                  }}
-                  placeholder={markdownDialog === "image" ? "https://example.com/image.jpg 或 /uploads/..." : "https://example.com"}
-                  className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
-                />
+                {markdownDialog === "image" ? "图片网址" : markdownDialog === "gallery" ? "图片网址（可选，每行一个）" : "链接网址"}
+                {markdownDialog === "gallery" ? (
+                  <textarea
+                    value={dialogUrl}
+                    onChange={(event) => {
+                      setDialogUrl(event.target.value);
+                      setDialogError("");
+                    }}
+                    rows={3}
+                    placeholder="https://example.com/one.jpg\nhttps://example.com/two.jpg"
+                    className="mt-1.5 w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                  />
+                ) : (
+                  <input
+                    value={dialogUrl}
+                    onChange={(event) => {
+                      setDialogUrl(event.target.value);
+                      setDialogError("");
+                    }}
+                    placeholder={markdownDialog === "image" ? "https://example.com/image.jpg 或 /uploads/..." : "https://example.com"}
+                    className="mt-1.5 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                  />
+                )}
               </label>
 
-              {markdownDialog === "image" && (
+              {(markdownDialog === "image" || markdownDialog === "gallery") && (
                 <div className="flex items-center gap-3 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2.5">
                   <input
                     ref={markdownImageInputRef}
                     type="file"
+                    multiple={markdownDialog === "gallery"}
                     accept="image/jpeg,image/png,image/webp,image/gif"
                     className="hidden"
-                    onChange={(event) => handleMarkdownImageFile(event.target.files?.[0])}
+                    onChange={(event) => void handleMarkdownImageFiles(event.target.files)}
                   />
                   <button
                     type="button"
@@ -577,7 +653,9 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
                     {dialogUploading ? "上传中…" : "上传图片"}
                   </button>
                   <span className="min-w-0 truncate text-xs text-neutral-500">
-                    {dialogAttachment ? `已选择：${dialogAttachment.original_name}` : "也可以直接粘贴图片网址"}
+                    {dialogAttachments.length > 0
+                      ? markdownDialog === "gallery" ? `已选择 ${dialogAttachments.length} 张图片` : `已选择：${dialogAttachments[0].original_name}`
+                      : markdownDialog === "gallery" ? "可一次选择多张图片" : "也可以直接粘贴图片网址"}
                   </span>
                 </div>
               )}
@@ -598,7 +676,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
                 onClick={confirmMarkdownDialog}
                 className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
               >
-                插入{markdownDialog === "image" ? "图片" : "链接"}
+                插入{markdownDialog === "image" ? "图片" : markdownDialog === "gallery" ? "图片合集" : "链接"}
               </button>
             </div>
           </div>

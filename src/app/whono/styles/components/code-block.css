@@ -46,6 +46,57 @@
   background: var(--code-content-bg);
 }
 
+/* 代码较长时只展示前约 12 行，完整内容仍留在 DOM 中供复制；点击底部
+ * 操作条后切换 data-collapsed，展开和收起都不影响横向滚动长行。 */
+:is(.prose, .article-body) .code-block--collapsible[data-collapsed="true"] pre {
+  max-height: 320px;
+  overflow-y: hidden;
+}
+
+:is(.prose, .article-body) .code-block--collapsible[data-collapsed="false"] pre {
+  max-height: none;
+  overflow-y: hidden;
+}
+
+:is(.prose, .article-body) .code-block .code-expand-toggle {
+  width: 100%;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 0;
+  border-top: 1px solid var(--code-border);
+  background: var(--code-header-bg);
+  background: color-mix(in srgb, var(--code-header-bg) 74%, var(--code-content-bg));
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+:is(.prose, .article-body) .code-block .code-expand-toggle:hover {
+  background: var(--code-action-hover-bg);
+  color: var(--text);
+}
+
+:is(.prose, .article-body) .code-block .code-expand-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+:is(.prose, .article-body) .code-block .code-expand-toggle__icon {
+  flex: 0 0 auto;
+  transition: transform 0.2s ease;
+}
+
+:is(.prose, .article-body) .code-block--collapsible[data-collapsed="false"] .code-expand-toggle__icon {
+  transform: rotate(180deg);
+}
+
 /* 行号（仅正文 .prose，默认开启，可通过 body[data-code-line-numbers="off"] 关闭） */
 .prose pre:is(.astro-code, .shiki) {
   counter-reset: line;

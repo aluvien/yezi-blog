@@ -57,3 +57,14 @@ export function deleteWork(id: number): void {
 export function countWorks(): number {
   return (db.prepare("SELECT COUNT(*) AS c FROM works").get() as { c: number }).c;
 }
+
+/** 批量按 id 取回作品（轻量、无 JOIN），供小记时间流水合本页条目。 */
+export function getWorksByIds(ids: number[]): Map<number, Work> {
+  const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  const map = new Map<number, Work>();
+  if (unique.length === 0) return map;
+  const placeholders = unique.map(() => "?").join(",");
+  const rows = db.prepare(`SELECT * FROM works WHERE id IN (${placeholders})`).all(...unique) as Work[];
+  for (const row of rows) map.set(row.id, row);
+  return map;
+}

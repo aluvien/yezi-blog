@@ -16,8 +16,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "想法",
-  description: "随手记录的短想法。",
+  title: "絮语",
+  description: "随手记录的短絮语。",
   alternates: { canonical: PUBLIC_ROUTES.moments },
 };
 
@@ -60,7 +60,7 @@ export default async function MomentsPage() {
       <MomentWriter count={moments.length} isAuthorized={isAuthorized} classic={siteSettings.layout_theme === "classic"} />
 
       <section className="moments-feed">
-        {moments.length === 0 && <p className="py-20 text-center text-[14px] text-muted">还没有想法。</p>}
+        {moments.length === 0 && <p className="py-20 text-center text-[14px] text-muted">还没有絮语。</p>}
         <div>
           {moments.map((moment) => {
             return (

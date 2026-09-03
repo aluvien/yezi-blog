@@ -364,7 +364,7 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-neutral-800">歌曲与歌单信息缓存</p>
-            <p className="mt-1 text-xs leading-5 text-neutral-500">仅删除未被文章（含草稿）、想法、关于页或默认音乐引用的本地歌名、歌手、封面及歌单顺序快照；不影响 QQ 登录或正文内容。</p>
+            <p className="mt-1 text-xs leading-5 text-neutral-500">仅删除未被文章（含草稿）、絮语、关于页或默认音乐引用的本地歌名、歌手、封面及歌单顺序快照；不影响 QQ 登录或正文内容。</p>
           </div>
           <button type="button" disabled={cacheBusy} onClick={() => void cleanupMetadataCache()} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50">
             {cacheBusy ? "清理中…" : "清理未引用缓存"}

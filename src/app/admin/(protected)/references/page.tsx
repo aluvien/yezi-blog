@@ -1,5 +1,5 @@
 import { articleReferenceCoverSrc, formatArticleReferenceDate } from "@/lib/article-reference";
-import { listCategories, listReferenceLibrary, listReferenceLibraryCategories, listReferenceLibraryTags } from "@/lib/db";
+import { listCategories, listReferenceLibrary, listReferenceLibraryCategories, listReferenceLibraryTags, listReferenceRelationCountsBulk } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import AdminPageHeader from "@/components/admin/AdminPageHeader";
 import AdminReferenceSummary from "@/components/admin/AdminReferenceSummary";
@@ -9,6 +9,8 @@ import { parseArchiveReport } from "@/lib/article-reference-archive";
 import DeleteButton from "@/components/admin/DeleteButton";
 import { deleteReferenceLibraryAction, updateReferenceLibraryMetadataAction } from "@/lib/actions/references";
 import { ReferenceSelectionCheckbox, ReferenceSelectionProvider } from "@/components/admin/ReferenceSelectionControls";
+import ReferenceCollectionEditor from "@/components/admin/ReferenceCollectionEditor";
+import LifeAdminTabs from "@/components/admin/LifeAdminTabs";
 import { parsePostTags } from "@/lib/post-tags";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +36,7 @@ function shortUrl(value: string): string {
 
 export default function AdminReferencesPage() {
   const references = listReferenceLibrary();
+  const relationCounts = listReferenceRelationCountsBulk(references.map((reference) => reference.id));
   const categoryOptions = [...new Set([
     ...listCategories().map((item) => item.name),
     ...listReferenceLibraryCategories().map((item) => item.category),
@@ -42,10 +45,11 @@ export default function AdminReferencesPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <LifeAdminTabs />
       <AdminPageHeader
-        eyebrow="ARTICLE REFERENCES"
-        title={`引用管理（${references.length}）`}
-        description="独立保存站外文章的来源、封面和摘要；关联本地文章是可选的，阅读缓存仅管理员可见。"
+        eyebrow="LIFE · REFERENCES"
+        title={`收藏引用（${references.length}）`}
+        description="独立保存站外资料的来源、封面与备注；关联本地内容可选，阅读缓存仅管理员可见。"
         actions={<AdminReferenceAddButton categoryOptions={categoryOptions} tagOptions={tagOptions} />}
       />
 
@@ -118,6 +122,14 @@ export default function AdminReferencesPage() {
                       </label>
                       <button type="submit" className="shrink-0 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 transition-colors hover:border-accent/40 hover:text-accent">保存</button>
                     </form>
+                    <ReferenceCollectionEditor
+                      referenceId={reference.id}
+                      initialNote={reference.note}
+                      initialStatus={reference.status}
+                      initialFavorite={reference.favorite === 1}
+                      savedAt={reference.saved_at}
+                      relationCounts={relationCounts.get(reference.id) ?? { post: 0, life_event: 0, work: 0, github_repository: 0 }}
+                    />
                   </div>
                 </div>
 

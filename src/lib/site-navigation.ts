@@ -6,6 +6,7 @@ export const PUBLIC_ROUTES = {
   home: "/",
   posts: "/posts",
   moments: "/moments",
+  life: "/life",
   works: "/works",
   archives: "/archives",
   references: "/references",
@@ -19,7 +20,7 @@ export const PUBLIC_ROUTES = {
   tag: (tag: string) => `/tags/${encodeURIComponent(tag)}`,
 } as const;
 
-export type PublicSection = "home" | "posts" | "moments" | "works" | "archives" | "references" | "about";
+export type PublicSection = "home" | "posts" | "moments" | "life" | "works" | "archives" | "references" | "about";
 
 type PublicNavItem = {
   href: string;
@@ -31,18 +32,21 @@ type PublicNavItem = {
 /** Public site navigation shared by the web shell and native API discovery. */
 export const NAV_ITEMS = [
   { href: PUBLIC_ROUTES.home, label: "首页", section: "home", settingKey: "show_home_page" },
-  { href: PUBLIC_ROUTES.moments, label: "想法", section: "moments", settingKey: "show_moments_page" },
+  { href: PUBLIC_ROUTES.moments, label: "絮语", section: "moments", settingKey: "show_moments_page" },
   { href: PUBLIC_ROUTES.posts, label: "文章", section: "posts", settingKey: "show_posts_page" },
   { href: PUBLIC_ROUTES.references, label: "引用", section: "references", settingKey: "show_references_page" },
   { href: PUBLIC_ROUTES.works, label: "作品", section: "works", settingKey: "show_works_page" },
   { href: PUBLIC_ROUTES.about, label: "关于", section: "about", settingKey: "show_about_page" },
 ] as const satisfies readonly PublicNavItem[];
 
-/** 经典版只替换名称，仍指向与编辑版相同的规范页面。 */
+/**
+ * 经典版只替换名称，仍指向与编辑版相同的规范页面。历史上「小记」指向 works；
+ * 升级后「小记」是聚合栏目 /life，作品成为其下的一个内容类型。
+ */
 export const CLASSIC_NAV_ITEMS = [
   { href: PUBLIC_ROUTES.posts, label: "随笔", section: "posts" },
   { href: PUBLIC_ROUTES.moments, label: "絮语", section: "moments" },
-  { href: PUBLIC_ROUTES.works, label: "小记", section: "works" },
+  { href: PUBLIC_ROUTES.life, label: "小记", section: "life" },
   { href: PUBLIC_ROUTES.archives, label: "归档", section: "archives" },
   { href: PUBLIC_ROUTES.about, label: "关于", section: "about" },
 ] as const satisfies readonly PublicNavItem[];
@@ -64,6 +68,7 @@ export function getPublicSection(pathname: string): PublicSection | null {
   if (path === "/about" || path.startsWith("/about/")) return "about";
   if (path === "/references" || path.startsWith("/references/")) return "references";
   if (path === "/moments" || path.startsWith("/moments/") || path === "/bits" || path.startsWith("/bits/")) return "moments";
+  if (path === "/life" || path.startsWith("/life/")) return "life";
   if (path === "/works" || path.startsWith("/works/") || path === "/memo" || path.startsWith("/memo/")) return "works";
   if (path === "/archives" || path.startsWith("/archives/") || path === "/archive" || path === "/archive/rss.xml") return "archives";
   if (

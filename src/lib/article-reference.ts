@@ -75,6 +75,13 @@ function encodeBase64Url(value: string): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+// 只做分享/追踪用途、不影响页面实际内容的查询参数。保守白名单：只删这些，
+// 绝不做「删除所有 query」的激进归一化，也保留 spm / from / ref 等可能定位内容的参数。
+const TRACKING_QUERY_PARAMS = new Set([
+  "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+  "fbclid", "gclid", "mc_cid", "mc_eid",
+]);
+
 function normalizeUrl(value: unknown): string {
   const raw = String(value ?? "").trim();
   if (!raw || raw.length > 2_000) return "";
@@ -82,7 +89,21 @@ function normalizeUrl(value: unknown): string {
     const url = new URL(raw);
     if (url.protocol !== "http:" && url.protocol !== "https:") return "";
     url.hash = "";
-    return url.toString();
+    // 移除纯追踪参数，让同一篇文章的不同分享链接折叠到同一 canonical，
+    // 同时保留内容型查询参数（如 ?id=、?page=）。
+    let removed = false;
+    for (const key of [...url.searchParams.keys()]) {
+      if (TRACKING_QUERY_PARAMS.has(key.toLowerCase())) {
+        url.searchParams.delete(key);
+        removed = true;
+      }
+    }
+    const normalized = url.toString();
+    if (removed) {
+      // URL 在无参数时会保留尾部 "?"，去掉它得到干净的 canonical。
+      return normalized.endsWith("?") ? normalized.slice(0, -1) : normalized;
+    }
+    return normalized;
   } catch {
     return "";
   }

@@ -1,20 +1,23 @@
 import Link from "next/link";
-import { listWorks } from "@/lib/db";
+import { listRepositoryIdsForWorks, listWorks } from "@/lib/db";
 import { deleteWorkAction } from "@/lib/actions/works";
 import DeleteButton from "@/components/admin/DeleteButton";
 import AdminPageHeader from "@/components/admin/AdminPageHeader";
+import LifeAdminTabs from "@/components/admin/LifeAdminTabs";
 
 export const dynamic = "force-dynamic";
 
 export default function AdminWorksPage() {
   const works = listWorks();
+  const repoIds = listRepositoryIdsForWorks(works.map((work) => work.id));
 
   return (
     <div className="flex flex-col gap-4">
+      <LifeAdminTabs />
       <AdminPageHeader
-        eyebrow="WORKS"
+        eyebrow="LIFE · WORKS"
         title={`作品（${works.length}）`}
-        description="管理作品展示内容、封面、链接和排序。"
+        description="小记里的「作品」栏目：管理作品展示内容、封面、链接、排序与关联的 GitHub 仓库。"
         actions={(
           <Link
             href="/admin/works/new"
@@ -26,7 +29,9 @@ export default function AdminWorksPage() {
       />
       {works.length === 0 && <p className="py-10 text-center text-sm text-neutral-400">还没有作品</p>}
       <ul className="flex flex-col gap-2">
-        {works.map((work) => (
+        {works.map((work) => {
+          const repos = repoIds.get(work.id) ?? [];
+          return (
           <li key={work.id} className="admin-card admin-content-card flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-sm sm:p-5">
             {work.cover ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -41,6 +46,7 @@ export default function AdminWorksPage() {
               <p className="mt-0.5 truncate text-xs text-neutral-400">
                 排序 {work.sort_order}
                 {work.link && ` · ${work.link}`}
+                {repos.length > 0 && ` · ${repos.length} 个仓库`}
               </p>
             </div>
             <div className="basis-full flex shrink-0 flex-wrap gap-x-4 gap-y-2 border-t border-neutral-100 pl-[4.25rem] pt-3">
@@ -51,7 +57,8 @@ export default function AdminWorksPage() {
               <DeleteButton action={deleteWorkAction.bind(null, work.id)} />
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

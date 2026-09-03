@@ -71,7 +71,7 @@ export default function AdminAttachmentsPage() {
                       {ref.type === "post"
                         ? `${ref.usage === "cover" ? "封面：" : ref.usage === "content+cover" ? "正文+封面：" : "文章："}${ref.label}`
                         : ref.type === "moment"
-                          ? `想法：${ref.label}`
+                          ? `絮语：${ref.label}`
                           : `站点设置：${ref.label}`}
                     </Link>
                   ))}

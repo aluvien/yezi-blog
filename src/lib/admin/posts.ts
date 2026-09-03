@@ -20,6 +20,7 @@ import {
 } from "@/lib/article-reference";
 import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
 import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
+import { translateTitleToEnglishSlug } from "@/lib/slug-translation";
 import type { ActionResult, PostInput } from "@/lib/actions/posts";
 
 /**
@@ -80,12 +81,13 @@ export async function createPostEntry(data: PostInput): Promise<ActionResult> {
   if (validationError) return { ok: false, error: validationError };
   const referenceSnapshots = data.referenceSnapshots ?? [];
   const content = normalizeMediaShortcodes(compactArticleReferenceMarkers(data.content, referenceSnapshots));
+  const generatedSlug = data.slug.trim() || await translateTitleToEnglishSlug(data.title);
   let createdPost: ReturnType<typeof getPost>;
   try {
     db.transaction(() => {
       const created = createPost({
         title: data.title.trim(),
-        slug: data.slug,
+        slug: generatedSlug || undefined,
         content,
         cover: data.cover,
         category: data.category,
@@ -118,13 +120,14 @@ export async function updatePostEntry(id: number, data: PostInput): Promise<Acti
   if (validationError) return { ok: false, error: validationError };
   const referenceSnapshots = data.referenceSnapshots ?? [];
   const content = normalizeMediaShortcodes(compactArticleReferenceMarkers(data.content, referenceSnapshots));
+  const generatedSlug = data.slug.trim() || await translateTitleToEnglishSlug(data.title);
   let updatedSlug = existing.slug;
   let updatedPost: ReturnType<typeof getPost>;
   try {
     db.transaction(() => {
       const updated = updatePost(id, {
         title: data.title.trim(),
-        slug: data.slug,
+        slug: generatedSlug || undefined,
         content,
         cover: data.cover,
         category: data.category,

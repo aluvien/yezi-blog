@@ -220,7 +220,7 @@ export async function registerTelegramBotCommands(): Promise<void> {
 
 /** New comments are always pending first, so the message leads to moderation. */
 export async function notifyNewComment(input: TelegramCommentNotification): Promise<TelegramNotificationResult> {
-  const targetType = input.targetType === "post" ? "文章" : "想法";
+  const targetType = input.targetType === "post" ? "文章" : "絮语";
   return sendTelegramMessage([
     "<b>💬 新评论待审核</b>",
     "",

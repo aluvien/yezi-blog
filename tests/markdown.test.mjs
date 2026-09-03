@@ -76,6 +76,44 @@ test("renders target-style Markdown lists, links, divider and code metadata", ()
   assert.ok(html.includes('data-lang="ts"'));
   assert.ok(html.includes('data-code-copy="true"'));
   assert.ok(html.includes('class="line"'));
+  assert.ok(!html.includes('data-code-expand="true"'));
+});
+
+test("long code blocks collapse by default and expose an accessible expand control", () => {
+  const source = Array.from({ length: 17 }, (_, index) => `const line${index + 1} = ${index + 1};`).join("\n");
+  const html = renderMarkdown(`\`\`\`ts\n${source}\n\`\`\``);
+  assert.ok(html.includes('class="code-block code-block--collapsible"'));
+  assert.ok(html.includes('data-code-collapsible="true"'));
+  assert.ok(html.includes('data-collapsed="true"'));
+  assert.ok(html.includes('data-code-expand="true"'));
+  assert.ok(html.includes('aria-expanded="false"'));
+  assert.ok(html.includes("展开全部代码（17 行）"));
+});
+
+test("wraps Markdown tables in a horizontal-scroll container", () => {
+  const html = renderMarkdown("| 名称 | 说明 | 状态 |\n| --- | --- | --- |\n| A | 一段内容 | 已发布 |");
+  assert.ok(html.includes('<div class="markdown-table-scroll">'));
+  assert.ok(html.includes('<table>'));
+  assert.match(html, /<\/table>\s*<\/div>/);
+});
+
+test("renders image gallery shortcodes with a selectable column class", () => {
+  const html = renderMarkdown([
+    "!gallery cols-3",
+    "- ![第一张](/uploads/202609/one.jpg)",
+    "- ![第二张](https://example.com/two.jpg)",
+    "!endgallery",
+  ].join("\n"));
+  assert.ok(html.includes('<ul class="gallery cols-3">'));
+  assert.equal((html.match(/<figure>/g) || []).length, 2);
+  assert.ok(html.includes("第一张"));
+  assert.ok(html.includes("https://example.com/two.jpg"));
+});
+
+test("does not expand image gallery markers inside fenced code", () => {
+  const html = renderMarkdown(["```md", "!gallery cols-3", "- ![图片](/uploads/one.jpg)", "!endgallery", "```"].join("\n"));
+  assert.ok(!html.includes('<ul class="gallery'));
+  assert.ok(html.includes("!gallery cols-3"));
 });
 
 test("music block renders a container card", () => {

@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export function GET() {
   const settings = getSiteSettings();
   const name = settings.site_name?.trim() || site.name;
-  const subtitle = settings.site_subtitle?.trim() || "文章 · 想法 · 作品";
+  const subtitle = settings.site_subtitle?.trim() || "文章 · 絮语 · 作品";
   return apiJson({
     data: {
       name,

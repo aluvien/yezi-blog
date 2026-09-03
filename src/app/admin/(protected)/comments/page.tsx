@@ -62,7 +62,7 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
                 </div>
               )}
               <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500">
-                <span>{comment.target_type === "post" ? "文章" : "想法"}：</span>
+                <span>{comment.target_type === "post" ? "文章" : "絮语"}：</span>
                 {targetHref ? <Link href={targetHref} target="_blank" className="admin-link max-w-full truncate text-blue-700 hover:text-blue-900">{comment.target_label ?? "查看内容"}</Link> : <span>{comment.target_label ?? "目标已删除"}</span>}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400">

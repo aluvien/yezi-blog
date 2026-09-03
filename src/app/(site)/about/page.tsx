@@ -32,7 +32,7 @@ export default function AboutPage() {
             <div dangerouslySetInnerHTML={{ __html: renderMarkdown(aboutContent) }} />
           ) : (
             <>
-              <p>这里是我的个人数字花园。长文章记录完整的思考，想法页保存尚未长大的念头，作品页则收纳那些真正动手做出来的东西。</p>
+              <p>这里是我的个人数字花园。长文章记录完整的思考，絮语页保存尚未长大的念头，作品页则收纳那些真正动手做出来的东西。</p>
               <p>我不追求每天更新，只希望每一篇内容都经得起重读。比起快速给出答案，我更在意问题为什么值得被问，以及一件事能不能讲得足够清楚。</p>
               <blockquote className="border-l-3 border-accent bg-soft px-5 py-4 text-[15px] leading-7 text-foreground/70">把经验写下来，是给未来的自己留一条回来的路。</blockquote>
             </>
@@ -56,7 +56,7 @@ export default function AboutPage() {
             <div className="article-body max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdown(aboutContent) }} />
           ) : (
             <div className="space-y-6 text-[16px] leading-8 text-foreground/80">
-            <p>这里是我的个人数字花园。长文章记录完整的思考，想法页保存尚未长大的念头，作品页则收纳那些真正动手做出来的东西。</p>
+            <p>这里是我的个人数字花园。长文章记录完整的思考，絮语页保存尚未长大的念头，作品页则收纳那些真正动手做出来的东西。</p>
             <p>我不追求每天更新，只希望每一篇内容都经得起重读。比起快速给出答案，我更在意问题为什么值得被问，以及一件事能不能讲得足够清楚。</p>
             <blockquote className="border-l-3 border-accent bg-soft px-5 py-4 text-[15px] leading-7 text-foreground/70">把经验写下来，是给未来的自己留一条回来的路。</blockquote>
             </div>

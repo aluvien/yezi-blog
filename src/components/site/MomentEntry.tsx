@@ -18,10 +18,10 @@ import { SiteImage } from "@/components/site/SiteImage";
 const MomentForm = dynamic(() => import("@/components/admin/MomentForm"), { ssr: false });
 
 /**
- * 想法条目（朋友圈样式）。
+ * 絮语条目（朋友圈样式）。
  * 评论区由父级传入 children，避免在不需要评论区的列表场景重复加载。
  *
- * canEdit（管理员已登录）时头部右上角显示"编辑"按钮，点击切换到与"写想法"
+ * canEdit（管理员已登录）时头部右上角显示"编辑"按钮，点击切换到与"写絮语"
  * 一致的就地编辑表单（MomentForm compact），保存后回到查看态。
  */
 export function MomentEntry({
@@ -64,7 +64,7 @@ export function MomentEntry({
     return () => document.removeEventListener("touchstart", handleOutsideTouch);
   }, [targetRef, touchActive]);
 
-  // 编辑态：与"写想法"一致的表单，预填该条内容与图片
+  // 编辑态：与"写絮语"一致的表单，预填该条内容与图片
   if (editing) {
     return (
       <article id={`moment-${moment.id}`} className="moment-entry min-w-0">
@@ -101,8 +101,8 @@ export function MomentEntry({
             type="button"
             className="moment-edit-btn"
             onClick={() => setEditing(true)}
-            title="编辑想法"
-            aria-label="编辑想法"
+            title="编辑絮语"
+            aria-label="编辑絮语"
           >
             <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 20h9" />

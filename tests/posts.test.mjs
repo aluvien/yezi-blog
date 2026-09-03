@@ -16,6 +16,9 @@ const {
   deletePost,
   getPost,
   getPostAttachments,
+  getOrCreatePostShortLink,
+  getPublishedPostByShortCode,
+  generatePostShortCode,
   listArticleReferencesForPost,
   listPostSummaries,
   searchPublishedPostsForReference,
@@ -102,4 +105,19 @@ test("listPostSummaries truncates content in SQL while keeping summary fields in
   assert.equal(row.updated_at, post.updated_at);
   assert.equal("status" in row, true);
   deletePost(post.id);
+});
+
+test("post short links keep a stable mixed-case code and resolve published posts", () => {
+  const post = createPost({ title: "短链接文章", content: "正文", status: "published" });
+  const first = getOrCreatePostShortLink(post.id);
+  const second = getOrCreatePostShortLink(post.id);
+  assert.match(first.code, /^[A-Za-z0-9]{8}$/);
+  assert.match(first.code, /[A-Z]/);
+  assert.match(first.code, /[a-z]/);
+  assert.match(first.code, /[0-9]/);
+  assert.deepEqual(second, first);
+  assert.equal(getPublishedPostByShortCode(first.code)?.id, post.id);
+  deletePost(post.id);
+  assert.equal(getPublishedPostByShortCode(first.code), undefined);
+  assert.match(generatePostShortCode(), /^[A-Za-z0-9]{8}$/);
 });

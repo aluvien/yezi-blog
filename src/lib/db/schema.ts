@@ -13,6 +13,12 @@ export const BASE_SCHEMA_SQL = `
     updated_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('draft','published'))
   );
+  CREATE TABLE IF NOT EXISTS post_short_links (
+    code TEXT PRIMARY KEY,
+    post_id INTEGER NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+  );
   CREATE TABLE IF NOT EXISTS post_tags (
     post_id INTEGER NOT NULL,
     tag TEXT NOT NULL,
@@ -80,8 +86,77 @@ export const BASE_SCHEMA_SQL = `
     key_points TEXT NOT NULL DEFAULT '[]',
     category TEXT NOT NULL DEFAULT '',
     tags TEXT NOT NULL DEFAULT '[]',
+    note TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'inbox' CHECK (status IN ('inbox','read','archived')),
+    favorite INTEGER NOT NULL DEFAULT 0,
+    saved_at TEXT,
+    last_checked_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS life_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    occurred_at TEXT NOT NULL,
+    date_precision TEXT NOT NULL DEFAULT 'day' CHECK (date_precision IN ('day','month','year')),
+    cover TEXT,
+    images TEXT NOT NULL DEFAULT '[]',
+    tags TEXT NOT NULL DEFAULT '[]',
+    location TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual' CHECK (source_type IN ('manual','moment')),
+    source_moment_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (source_moment_id) REFERENCES moments(id) ON DELETE SET NULL
+  );
+  CREATE TABLE IF NOT EXISTS github_repositories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner TEXT NOT NULL,
+    name TEXT NOT NULL,
+    full_name TEXT NOT NULL UNIQUE,
+    repo_url TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    homepage TEXT NOT NULL DEFAULT '',
+    primary_language TEXT NOT NULL DEFAULT '',
+    topics TEXT NOT NULL DEFAULT '[]',
+    stars INTEGER NOT NULL DEFAULT 0,
+    forks INTEGER NOT NULL DEFAULT 0,
+    license TEXT NOT NULL DEFAULT '',
+    default_branch TEXT NOT NULL DEFAULT '',
+    archived INTEGER NOT NULL DEFAULT 0,
+    visibility TEXT NOT NULL DEFAULT 'public',
+    github_created_at TEXT NOT NULL DEFAULT '',
+    github_updated_at TEXT NOT NULL DEFAULT '',
+    pushed_at TEXT NOT NULL DEFAULT '',
+    custom_title TEXT NOT NULL DEFAULT '',
+    custom_description TEXT NOT NULL DEFAULT '',
+    cover TEXT,
+    tags TEXT NOT NULL DEFAULT '[]',
+    featured INTEGER NOT NULL DEFAULT 0,
+    registered_at TEXT NOT NULL,
+    synced_at TEXT,
+    sync_status TEXT NOT NULL DEFAULT 'idle' CHECK (sync_status IN ('idle','success','error')),
+    sync_error TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS work_github_repositories (
+    work_id INTEGER NOT NULL,
+    repository_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (work_id, repository_id),
+    FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+    FOREIGN KEY (repository_id) REFERENCES github_repositories(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS reference_relations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_id INTEGER NOT NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('post','life_event','work','github_repository')),
+    target_id INTEGER NOT NULL,
+    context TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE(reference_id, target_type, target_id),
+    FOREIGN KEY (reference_id) REFERENCES reference_library(id) ON DELETE CASCADE
   );
   CREATE TABLE IF NOT EXISTS moments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,6 +280,14 @@ export const INDEX_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);
   CREATE INDEX IF NOT EXISTS idx_content_interactions_time ON content_interactions (created_at);
   CREATE INDEX IF NOT EXISTS idx_posts_status_time ON posts (status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_post_short_links_post ON post_short_links (post_id);
   CREATE INDEX IF NOT EXISTS idx_posts_category ON posts (category COLLATE NOCASE);
   CREATE INDEX IF NOT EXISTS idx_reference_library_category ON reference_library (category COLLATE NOCASE);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_life_events_source_moment
+    ON life_events (source_moment_id) WHERE source_moment_id IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_life_events_occurred ON life_events (occurred_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_github_repositories_registered ON github_repositories (registered_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_reference_relations_reference ON reference_relations (reference_id);
+  CREATE INDEX IF NOT EXISTS idx_reference_relations_target ON reference_relations (target_type, target_id);
+  CREATE INDEX IF NOT EXISTS idx_reference_library_saved ON reference_library (saved_at DESC, id DESC);
 `;
