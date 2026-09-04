@@ -41,7 +41,7 @@ test("admin “use current location” works and sends coordinates via POST body
 
   await page.goto("/admin/moments/new");
   await page.getByRole("button", { name: "使用现在位置" }).click();
-  await expect(page.getByLabel("想法位置")).toHaveValue("杭州市", { timeout: 15_000 });
+  await expect(page.getByLabel("絮语位置")).toHaveValue("杭州市", { timeout: 15_000 });
 
   expect(captured.length).toBe(1);
   expect(captured[0].method).toBe("POST");
