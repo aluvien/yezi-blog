@@ -29,6 +29,14 @@ export function getPostAttachments(postId: number): Attachment[] {
     .all(postId, postId) as Attachment[];
 }
 
+/** 文章编辑器图片合集优先复用的已上传图片。只返回已入库附件，避免把磁盘上
+ * 尚未建立记录的文件误当成可保存的文章附件；正文仍可通过上传或网址补充图片。 */
+export function listImageAttachments(): Attachment[] {
+  return db
+    .prepare("SELECT * FROM attachments WHERE mime_type LIKE 'image/%' ORDER BY created_at DESC, id DESC")
+    .all() as Attachment[];
+}
+
 export function attachAttachmentsToPost(ids: number[], postId: number): void {
   const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))].slice(0, 100);
   const transaction = db.transaction(() => {

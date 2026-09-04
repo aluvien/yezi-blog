@@ -10,7 +10,6 @@ import { githubDisplayDescription, githubDisplayTitle, parseGithubTopics } from 
 import { LIFE_TABS, LIFE_TAB_LABELS, lifeTabHref, type LifeTab } from "@/lib/life";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 import { SiteImage } from "@/components/site/SiteImage";
-import { ClassicReaderExit } from "@/components/site/ClassicReaderExit";
 import { ClassicReferenceList } from "@/components/site/ClassicReferenceList";
 
 type ClassicLifePageProps = {
@@ -346,7 +345,6 @@ export function ClassicLifePage({ active, counts, items, page, total, limit }: C
       <div className="page-header reader-exit-anchor">
         <h1 className="page-title">生活小记</h1>
         <span className="page-subtitle">不曾虚度的光</span>
-        <ClassicReaderExit />
       </div>
 
       <div className="intro prose classic-life-intro">

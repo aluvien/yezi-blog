@@ -35,7 +35,7 @@ function isSafeMarkdownUrl(value: string) {
   }
 }
 
-export default function PostForm({ post, initialAttachments = [], initialReferences = [], categories = [], usedTags = [], openReferenceDialog = false }: { post?: Post; initialAttachments?: Attachment[]; initialReferences?: ArticleReferenceSnapshot[]; categories?: string[]; usedTags?: Array<{ tag: string; count: number }>; openReferenceDialog?: boolean }) {
+export default function PostForm({ post, initialAttachments = [], initialReferences = [], availableImageAttachments = [], categories = [], usedTags = [], openReferenceDialog = false }: { post?: Post; initialAttachments?: Attachment[]; initialReferences?: ArticleReferenceSnapshot[]; availableImageAttachments?: Attachment[]; categories?: string[]; usedTags?: Array<{ tag: string; count: number }>; openReferenceDialog?: boolean }) {
   const router = useRouter();
   const [title, setTitle] = useState(post?.title ?? "");
   const [slug, setSlug] = useState(post?.slug ?? "");
@@ -58,6 +58,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   const [dialogError, setDialogError] = useState("");
   const [dialogUploading, setDialogUploading] = useState(false);
   const [dialogAttachments, setDialogAttachments] = useState<Attachment[]>([]);
+  const [dialogSelectedAttachments, setDialogSelectedAttachments] = useState<Attachment[]>([]);
   const [dialogGalleryColumns, setDialogGalleryColumns] = useState<"auto" | "2" | "3">("auto");
   const [pending, startTransition] = useTransition();
   const [attachmentOriginal, setAttachmentOriginal] = useState(false);
@@ -67,6 +68,9 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   const selectionRef = useRef<TextRange | null>(null);
   const dialogRangeRef = useRef<TextRange | null>(null);
   const selectedTags = parsePostTags(tags);
+  const galleryAttachments = [...initialAttachments, ...availableImageAttachments]
+    .filter((attachment) => attachment.id > 0 && attachment.mime_type.startsWith("image/"))
+    .filter((attachment, index, all) => all.findIndex((item) => item.id === attachment.id) === index);
 
   function submit() {
     setError("");
@@ -181,6 +185,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     setDialogUrl("");
     setDialogError("");
     setDialogAttachments([]);
+    setDialogSelectedAttachments([]);
     setDialogGalleryColumns("auto");
   }
 
@@ -202,6 +207,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     setMarkdownDialog(null);
     setDialogError("");
     setDialogAttachments([]);
+    setDialogSelectedAttachments([]);
     setDialogGalleryColumns("auto");
     dialogRangeRef.current = null;
     if (markdownImageInputRef.current) markdownImageInputRef.current.value = "";
@@ -279,6 +285,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
         return;
       }
       const entries = [
+        ...dialogSelectedAttachments.map((attachment) => ({ label: attachment.original_name, url: attachment.path })),
         ...dialogAttachments.map((attachment) => ({ label: attachment.original_name, url: attachment.path })),
         ...directUrls.map((url, index) => ({ label: `图片 ${index + 1}`, url })),
       ];
@@ -289,10 +296,11 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
       }
       const columns = dialogGalleryColumns === "auto" ? "" : ` cols-${dialogGalleryColumns}`;
       const markdown = `\n\n!gallery${columns}\n${uniqueEntries.map((entry) => `- ![${escapeMarkdownLabel(entry.label) || "图片"}](${escapeMarkdownUrl(entry.url)})`).join("\n")}\n!endgallery\n\n`;
-      if (dialogAttachments.length > 0) {
+      const selectedAttachments = [...dialogSelectedAttachments, ...dialogAttachments];
+      if (selectedAttachments.length > 0) {
         setAttachments((current) => {
           const next = [...current];
-          for (const attachment of dialogAttachments) {
+          for (const attachment of selectedAttachments) {
             if (!next.some((item) => item.id === attachment.id)) next.unshift(attachment);
           }
           return next;
@@ -606,6 +614,37 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
                     <option value="3">固定 3 列</option>
                   </select>
                 </label>
+              )}
+
+              {markdownDialog === "gallery" && (
+                <fieldset className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                  <legend className="px-1 text-xs font-medium text-neutral-700">优先使用已上传图片</legend>
+                  {galleryAttachments.length > 0 ? (
+                    <div className="mt-1 grid max-h-56 grid-cols-3 gap-2 overflow-y-auto pr-1">
+                      {galleryAttachments.map((attachment) => {
+                        const selected = dialogSelectedAttachments.some((item) => item.id === attachment.id);
+                        return (
+                          <button
+                            key={attachment.id}
+                            type="button"
+                            aria-label={`选择图片：${attachment.original_name}`}
+                            aria-pressed={selected}
+                            onClick={() => setDialogSelectedAttachments((current) => current.some((item) => item.id === attachment.id) ? current.filter((item) => item.id !== attachment.id) : [...current, attachment])}
+                            className={`overflow-hidden rounded-lg border text-left transition-colors ${selected ? "border-accent ring-2 ring-accent/20" : "border-neutral-200 hover:border-accent/50"}`}
+                          >
+                            {/* 后台图片路径由本地上传目录提供，原生 img 可避免额外的远程域名配置。 */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={attachment.path} alt="" className="aspect-square w-full object-cover" />
+                            <span className="block truncate px-1.5 py-1 text-[11px] text-neutral-600" title={attachment.original_name}>{attachment.original_name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-neutral-400">暂无已上传图片，可继续上传新图片。</p>
+                  )}
+                  {dialogSelectedAttachments.length > 0 && <p className="mt-2 text-xs text-neutral-500">已选择 {dialogSelectedAttachments.length} 张，插入时会按选择顺序排列。</p>}
+                </fieldset>
               )}
 
               <label className="text-sm text-neutral-700">

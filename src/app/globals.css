@@ -9330,33 +9330,39 @@ html[data-layout-theme="classic"] .classic-article-detail .reader-exit .icon {
   height: 24px;
 }
 
+/* 登录后的前台编辑入口与阅读控制同在标题右侧：编辑按钮向左让出分享、退出
+ * 两个图标按钮，避免管理员进入阅读模式后出现重叠遮挡。 */
+html[data-layout-theme="classic"] .article-detail-edit-zone > .article-edit-btn {
+  right: 88px;
+}
+
 /* 阅读模式中的轻量分享入口：默认不抢正文视线，进入沉浸模式后和退出按钮
- * 一起显示在文章标题右侧；按钮文案沿用经典版正文的摘要字体。 */
+ * 一起显示在文章标题右侧；它与退出按钮保持同一点击尺寸，仅保留图标。 */
 html[data-layout-theme="classic"] .classic-article-detail .classic-share-button {
   position: absolute;
   top: 2px;
   right: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 32px;
+  justify-content: center;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
   border: 0;
   border-radius: 999px;
-  padding: 0 9px;
+  padding: 0;
   color: var(--muted);
   background: transparent;
-  font-family: var(--font-copy);
-  font-size: 12px;
-  line-height: 1;
   opacity: 0;
   pointer-events: none;
   transition: color 160ms ease, background-color 160ms ease, opacity 160ms ease;
 }
 
 html[data-layout-theme="classic"] .classic-article-detail .classic-share-button__icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
 }
 
 html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:hover,
@@ -9377,13 +9383,7 @@ html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:
 
 @media (max-width: 640px) {
   html[data-layout-theme="classic"] .classic-article-detail .classic-share-button {
-    right: 40px;
-    min-height: 30px;
-    padding: 0 7px;
-  }
-
-  html[data-layout-theme="classic"] .classic-article-detail .classic-share-button span {
-    display: none;
+    right: 44px;
   }
 }
 

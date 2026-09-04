@@ -63,18 +63,18 @@ export function ClassicShareButton({ postId }: { postId: number }) {
     }
   }
 
-  const label = state === "loading" ? "生成中…" : state === "copied" ? "链接已复制" : state === "shared" ? "已分享" : state === "error" ? "分享失败" : "分享";
+  const label = state === "loading" ? "生成中…" : state === "copied" ? "链接已复制" : state === "shared" ? "已分享" : state === "error" ? "分享失败" : "生成并分享文章短链接";
   return (
     <button
       type="button"
-      className="classic-share-button"
+      className="icon-button classic-share-button"
       aria-label={shortPath ? `分享短链接 ${shortPath}` : "生成并分享文章短链接"}
       title={shortPath ? `短链接：${shortPath}` : "生成并分享文章短链接"}
       onClick={() => void handleShare()}
       disabled={state === "loading"}
     >
-      {state === "copied" ? <Check className="classic-share-button__icon" aria-hidden="true" /> : state === "shared" ? <Share2 className="classic-share-button__icon" aria-hidden="true" /> : shortPath ? <Link2 className="classic-share-button__icon" aria-hidden="true" /> : <Share2 className="classic-share-button__icon" aria-hidden="true" />}
-      <span>{label}</span>
+      {state === "copied" ? <Check className="icon classic-share-button__icon" strokeWidth={2} aria-hidden="true" /> : state === "shared" ? <Share2 className="icon classic-share-button__icon" strokeWidth={2} aria-hidden="true" /> : shortPath ? <Link2 className="icon classic-share-button__icon" strokeWidth={2} aria-hidden="true" /> : <Share2 className="icon classic-share-button__icon" strokeWidth={2} aria-hidden="true" />}
+      <span className="sr-only">{label}</span>
     </button>
   );
 }
