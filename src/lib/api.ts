@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import type { Comment, Moment, Post, ReferenceLibraryItem, Work } from "@/lib/db";
+import type { Comment, GithubRepository, LifeEvent, LifeFeedItem, Moment, Post, ReferenceLibraryItem, Work } from "@/lib/db";
 import { articleReferenceCoverSrc, type ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { stripMarkdown } from "@/lib/markdown";
 import { parsePostTags } from "@/lib/post-tags";
+import { formatLifeEventDate, normalizeLifeDatePrecision } from "@/lib/life-events";
 
 // 默认不发送跨域响应头，避免公开评论接口被任意站点调用。
 // 需要 App 跨域访问时，显式设置 API_CORS_ORIGIN 为一个可信来源。
@@ -169,9 +170,78 @@ export function publicReference(reference: ReferenceLibraryItem) {
     key_points: parseReferenceKeyPoints(reference.key_points),
     category: reference.category,
     tags: parsePostTags(reference.tags),
+    note: reference.note,
+    status: reference.status,
+    favorite: reference.favorite === 1,
+    saved_at: reference.saved_at ?? reference.created_at,
     created_at: reference.created_at,
     updated_at: reference.updated_at,
   };
+}
+
+/**
+ * 生活节点：整理后的时间索引。occurred_at 按 date_precision 展示，
+ * 另附 formatLifeEventDate 的显示值，方便原生端直接渲染年份/年月/日。
+ */
+export function publicLifeEvent(event: LifeEvent) {
+  return {
+    id: event.id,
+    title: event.title,
+    content: event.content,
+    occurred_at: event.occurred_at,
+    date_precision: event.date_precision,
+    occurred_display: formatLifeEventDate(event.occurred_at, normalizeLifeDatePrecision(event.date_precision)),
+    cover: event.cover,
+    images: parseImages(event.images),
+    tags: parsePostTags(event.tags),
+    location: event.location,
+    source_type: event.source_type,
+    source_moment_id: event.source_moment_id,
+    created_at: event.created_at,
+    updated_at: event.updated_at,
+  };
+}
+
+/**
+ * GitHub 仓库：自定义展示字段优先，附带安全的同步元数据。
+ * 绝不暴露 sync_error / sync_status 等内部诊断信息。
+ */
+export function publicGithubRepository(repository: GithubRepository) {
+  return {
+    id: repository.id,
+    owner: repository.owner,
+    name: repository.name,
+    full_name: repository.full_name,
+    repo_url: repository.repo_url,
+    display_title: repository.custom_title.trim() || repository.name,
+    display_description: repository.custom_description.trim() || repository.description,
+    description: repository.description,
+    homepage: repository.homepage,
+    primary_language: repository.primary_language,
+    topics: parseImages(repository.topics),
+    stars: repository.stars,
+    forks: repository.forks,
+    license: repository.license,
+    default_branch: repository.default_branch,
+    archived: repository.archived === 1,
+    visibility: repository.visibility,
+    cover: repository.cover,
+    tags: parsePostTags(repository.tags),
+    featured: repository.featured === 1,
+    github_created_at: repository.github_created_at,
+    github_updated_at: repository.github_updated_at,
+    pushed_at: repository.pushed_at,
+    registered_at: repository.registered_at,
+  };
+}
+
+/** 小记统一时间流的一项：带类型判别的轻量信封 + 对应实体的公开表示。 */
+export function publicLifeFeedItem(item: LifeFeedItem) {
+  const base = { type: item.type, id: item.id, sort_time: item.sort_time };
+  if (item.type === "life_event") return { ...base, life_event: publicLifeEvent(item.value) };
+  if (item.type === "work") return { ...base, work: publicWork(item.value) };
+  if (item.type === "github_repository") return { ...base, github_repository: publicGithubRepository(item.value) };
+  return { ...base, reference: publicReference(item.value) };
 }
 
 /** Public Markdown reference metadata, enriched with the same safe cover URL used by web cards. */

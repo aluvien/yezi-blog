@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
-export function SiteSearch({ placeholder = "搜索文章和想法" }: { placeholder?: string } = {}) {
+export function SiteSearch({ placeholder = "搜索文章和絮语" }: { placeholder?: string } = {}) {
   const router = useRouter();
   const searchRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -54,7 +54,7 @@ export function SiteSearch({ placeholder = "搜索文章和想法" }: { placehol
       {open && (
         <div className="site-search-popover" role="dialog" aria-label="站内搜索">
           <form onSubmit={submit} className="site-search-form">
-            <label htmlFor="site-search-input" className="sr-only">搜索文章和想法</label>
+            <label htmlFor="site-search-input" className="sr-only">搜索文章和絮语</label>
             <input
               id="site-search-input"
               value={query}

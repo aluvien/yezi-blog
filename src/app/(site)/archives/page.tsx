@@ -21,7 +21,7 @@ import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "归档", description: "按时间浏览所有文章与想法。", alternates: { canonical: PUBLIC_ROUTES.archives } };
+export const metadata: Metadata = { title: "归档", description: "按时间浏览所有文章与絮语。", alternates: { canonical: PUBLIC_ROUTES.archives } };
 
 export default async function ArchivesPage() {
   const posts = getCachedPublishedPosts();
@@ -97,7 +97,7 @@ export default async function ArchivesPage() {
   return <>
     <div className="mobile-home-page md:hidden"><MobileFeed items={mobileItems} authorName={authorName} authorAvatar={getAuthorAvatar(siteSettings) || undefined} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} canEdit={isAuthorized} /></div>
     <div className="mx-auto hidden max-w-[860px] py-8 md:block md:py-12">
-      <PageHeader eyebrow="时间线" title="归档" description="文章与想法按时间自然排列，方便从头浏览。" trailing={`${items.length} 条记录`} />
+      <PageHeader eyebrow="时间线" title="归档" description="文章与絮语按时间自然排列，方便从头浏览。" trailing={`${items.length} 条记录`} />
       <div>
         {items.map((item) => item.type === "post" ? (
           <div key={`post-${item.value.id}`} className="py-6"><PostEntry post={item.value} commentCount={item.commentCount} canEdit={isAuthorized} /></div>

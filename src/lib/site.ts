@@ -2,7 +2,7 @@
 export const site = {
   name: "Yezi's Blog",
   author: "Yezi",
-  description: "个人博客：记录文章、想法与作品。",
+  description: "个人博客：记录文章、絮语与作品。",
   url: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3030").replace(/\/+$/, ""),
 };
 

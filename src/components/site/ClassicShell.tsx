@@ -18,23 +18,43 @@ export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: 
   const pathname = usePathname();
   const isHome = pathname === "/";
   const [readingState, setReadingState] = useState({ path: "", active: false });
-  const reading = readingState.path === pathname && readingState.active;
+  const [urlReading, setUrlReading] = useState(false);
+  // body.dataset.reading 是切页时由 effect 归一化的外部状态；一起判断可避免
+  // 从沉浸页面返回后再回退时，旧的 path 状态把按钮误显示成“退出阅读模式”。
+  const reading = readingState.path === pathname
+    && readingState.active
+    && (typeof document === "undefined" || document.body.dataset.reading === "immersive");
   const siteName = siteSettings.site_name?.trim() || "Whono";
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
   const year = new Date().getFullYear();
   const articlePath = isPublicPostDetailPath(pathname);
+  const publicSection = getPublicSection(pathname);
+  const memoPath = !articlePath && (publicSection === "life" || publicSection === "works");
+  const readerAvailable = articlePath || memoPath;
   const readerLabel = reading ? "退出阅读模式" : "阅读模式";
+
+  useEffect(() => {
+    const syncUrlReading = () => {
+      const params = new URLSearchParams(window.location.search);
+      const value = (params.get("reading") || params.get("reader") || params.get("mode") || "").trim().toLowerCase();
+      setUrlReading(["1", "true", "immersive", "reader", "reading"].includes(value));
+    };
+    syncUrlReading();
+    window.addEventListener("popstate", syncUrlReading);
+    return () => window.removeEventListener("popstate", syncUrlReading);
+  }, [pathname]);
   const routeClass = useMemo(() => {
     if (articlePath) return "article-page immersive-page";
-    const section = getPublicSection(pathname);
+    const section = publicSection;
     if (section === "home") return "home";
     if (section === "about") return "about-page";
-    if (section === "works") return "memo-page";
+    // 「小记」聚合页沿用参考站的书页版式，并允许按需进入阅读模式。
+    if (section === "life" || section === "works") return "memo-page immersive-page";
     if (section === "moments") return "bits-page";
     if (section === "archives") return "archive-page";
     if (section === "posts") return "essay-page";
     return "";
-  }, [articlePath, pathname]);
+  }, [articlePath, publicSection]);
 
   useEffect(() => {
     const body = document.body;
@@ -44,13 +64,14 @@ export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: 
   }, [routeClass]);
 
   useEffect(() => {
-    // Article routes are marked immersive-page so the reader can expand on
-    // demand, but they must still start in normal mode. Leaving this unset
-    // accidentally matched the immersive footer-hiding rule.
-    if (document.body.dataset.reading !== "immersive") {
-      document.body.dataset.reading = "normal";
-    }
-  }, [articlePath, pathname]);
+    // 每次切换公开页面都回到普通模式，避免从文章/小记的沉浸状态跳转后
+    // 侧栏继续隐藏；用户仍可在当前页面再次点按阅读按钮进入沉浸模式。
+    const immersive = readerAvailable && urlReading;
+    document.body.dataset.reading = immersive ? "immersive" : "normal";
+    document.body.classList.toggle("immersive-page", immersive || articlePath || memoPath);
+    const resetTimer = window.setTimeout(() => setReadingState({ path: pathname, active: immersive }), 0);
+    return () => window.clearTimeout(resetTimer);
+  }, [pathname, readerAvailable, urlReading, articlePath, memoPath]);
 
   useEffect(() => {
     if (!document.documentElement.dataset.themeMode) {
@@ -92,7 +113,7 @@ export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: 
         </ul>
 
         <div className="sidebar-actions">
-          {articlePath ? (
+          {readerAvailable ? (
             <button id="reader-toggle" className="icon-button reader-toggle sidebar-action--rail-hidden" type="button" aria-label={readerLabel} aria-pressed={reading} data-tooltip={readerLabel} onClick={toggleReading}>
               <BookOpen className="icon icon-book-open" strokeWidth={2} aria-hidden="true" />
               <Book className="icon icon-book-closed" strokeWidth={2} aria-hidden="true" />

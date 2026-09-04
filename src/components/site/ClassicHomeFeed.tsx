@@ -56,7 +56,7 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
   }
 
   return (
-    <article className="bit-card classic-home-feed__bit" id={`moment-${moment.id}`} role="link" tabIndex={0} aria-label={`查看想法：${formatDateOnly(moment.created_at)}`} onClick={openMoment} onKeyDown={openMomentFromKeyboard}>
+    <article className="bit-card classic-home-feed__bit" id={`moment-${moment.id}`} role="link" tabIndex={0} aria-label={`查看絮语：${formatDateOnly(moment.created_at)}`} onClick={openMoment} onKeyDown={openMomentFromKeyboard}>
       <div className="classic-home-feed__bit-copy">
         <div className="bit-author">
           <div className={`avatar${authorAvatar ? " avatar--image" : " is-fallback"}`} aria-hidden="true">

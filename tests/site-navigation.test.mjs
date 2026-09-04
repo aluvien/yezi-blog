@@ -22,11 +22,19 @@ test("classic labels point to the same canonical pages", () => {
     [
       ["随笔", "/posts"],
       ["絮语", "/moments"],
-      ["小记", "/works"],
+      ["小记", "/life"],
       ["归档", "/archives"],
       ["关于", "/about"],
     ],
   );
+});
+
+test("life is its own section, distinct from works", () => {
+  assert.equal(getPublicSection("/life"), "life");
+  assert.equal(isPublicNavActive("/life", "life"), true);
+  assert.equal(isPublicNavActive("/life?type=works", "life"), true);
+  // 旧地址仍归入 works 栏目，供重定向前的高亮兼容。
+  assert.equal(getPublicSection("/works"), "works");
 });
 
 test("groups details and taxonomy pages under articles", () => {

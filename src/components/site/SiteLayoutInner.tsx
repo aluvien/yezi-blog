@@ -78,7 +78,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
   }
   const siteName = siteSettings.site_name?.trim() || site.name;
   const authorName = getSiteAuthor(siteSettings);
-  const siteSubtitle = siteSettings.site_subtitle?.trim() || "文章 · 想法 · 作品";
+  const siteSubtitle = siteSettings.site_subtitle?.trim() || "文章 · 絮语 · 作品";
   const siteLogo = siteSettings.site_logo?.trim();
   const hideSiteLogoBorder = siteSettings.site_logo_no_border === "1";
   const footerText = siteSettings.footer_text?.trim() || "认真写字，也认真生活。";
@@ -205,7 +205,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
                   </span>
                 </p>
                 <div className="mt-3 space-y-2 text-[12px] leading-5 text-muted">
-                  <p>文章记录完整思考，想法保存正在发生的瞬间。</p>
+                  <p>文章记录完整思考，絮语保存正在发生的瞬间。</p>
                   <Link href={PUBLIC_ROUTES.rss} className="inline-flex text-wechat-blue transition-colors hover:text-accent">订阅 RSS <span className="ml-1">↗</span></Link>
                 </div>
               </div>

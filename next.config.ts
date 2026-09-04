@@ -143,7 +143,9 @@ const nextConfig: NextConfig = {
       { source: "/archive/:slug", destination: "/posts/:slug", permanent: true },
       { source: "/essay", destination: "/posts", permanent: true },
       { source: "/bits", destination: "/moments", permanent: true },
-      { source: "/memo", destination: "/works", permanent: true },
+      // 「小记」升级为聚合页 /life；作品成为其下的一类内容，旧地址永久跳转保留兼容。
+      { source: "/works", destination: "/life?type=works", permanent: true },
+      { source: "/memo", destination: "/life", permanent: true },
       { source: "/archive", destination: "/archives", permanent: true },
     ];
   },

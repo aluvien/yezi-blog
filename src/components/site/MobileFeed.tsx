@@ -36,7 +36,7 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
       enabled={canEdit}
       zoneClassName="mobile-feed-edit-zone"
       buttonClassName="mobile-feed-edit-btn"
-      label="编辑想法"
+      label="编辑絮语"
     >
     <article ref={targetRef} className="mobile-feed-memo">
       <div className="mobile-feed-memo-head">

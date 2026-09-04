@@ -241,6 +241,121 @@ const MIGRATIONS: readonly Migration[] = [
       if (authState) ensureColumn(db, "auth_state", "password_fingerprint", "TEXT");
     },
   },
+  {
+    // 小记系统升级：独立的生活节点、GitHub 仓库登记与作品关联、以及资料间的
+    // 宽泛关联。表结构已在 BASE_SCHEMA_SQL 中定义（供全新库使用），这里用
+    // IF NOT EXISTS 让历史库补齐同样的结构，二者语义一致、可重复执行。
+    version: 14,
+    name: "life-milestones-github-and-relations",
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS life_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL DEFAULT '',
+          content TEXT NOT NULL DEFAULT '',
+          occurred_at TEXT NOT NULL,
+          date_precision TEXT NOT NULL DEFAULT 'day' CHECK (date_precision IN ('day','month','year')),
+          cover TEXT,
+          images TEXT NOT NULL DEFAULT '[]',
+          tags TEXT NOT NULL DEFAULT '[]',
+          location TEXT NOT NULL DEFAULT '',
+          source_type TEXT NOT NULL DEFAULT 'manual' CHECK (source_type IN ('manual','moment')),
+          source_moment_id INTEGER,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (source_moment_id) REFERENCES moments(id) ON DELETE SET NULL
+        );
+        CREATE TABLE IF NOT EXISTS github_repositories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner TEXT NOT NULL,
+          name TEXT NOT NULL,
+          full_name TEXT NOT NULL UNIQUE,
+          repo_url TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          homepage TEXT NOT NULL DEFAULT '',
+          primary_language TEXT NOT NULL DEFAULT '',
+          topics TEXT NOT NULL DEFAULT '[]',
+          stars INTEGER NOT NULL DEFAULT 0,
+          forks INTEGER NOT NULL DEFAULT 0,
+          license TEXT NOT NULL DEFAULT '',
+          default_branch TEXT NOT NULL DEFAULT '',
+          archived INTEGER NOT NULL DEFAULT 0,
+          visibility TEXT NOT NULL DEFAULT 'public',
+          github_created_at TEXT NOT NULL DEFAULT '',
+          github_updated_at TEXT NOT NULL DEFAULT '',
+          pushed_at TEXT NOT NULL DEFAULT '',
+          custom_title TEXT NOT NULL DEFAULT '',
+          custom_description TEXT NOT NULL DEFAULT '',
+          cover TEXT,
+          tags TEXT NOT NULL DEFAULT '[]',
+          featured INTEGER NOT NULL DEFAULT 0,
+          registered_at TEXT NOT NULL,
+          synced_at TEXT,
+          sync_status TEXT NOT NULL DEFAULT 'idle' CHECK (sync_status IN ('idle','success','error')),
+          sync_error TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS work_github_repositories (
+          work_id INTEGER NOT NULL,
+          repository_id INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (work_id, repository_id),
+          FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+          FOREIGN KEY (repository_id) REFERENCES github_repositories(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS reference_relations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          reference_id INTEGER NOT NULL,
+          target_type TEXT NOT NULL CHECK (target_type IN ('post','life_event','work','github_repository')),
+          target_id INTEGER NOT NULL,
+          context TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          UNIQUE(reference_id, target_type, target_id),
+          FOREIGN KEY (reference_id) REFERENCES reference_library(id) ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_life_events_source_moment
+          ON life_events (source_moment_id) WHERE source_moment_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_life_events_occurred ON life_events (occurred_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_github_repositories_registered ON github_repositories (registered_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_reference_relations_reference ON reference_relations (reference_id);
+        CREATE INDEX IF NOT EXISTS idx_reference_relations_target ON reference_relations (target_type, target_id);
+      `);
+    },
+  },
+  {
+    // 收藏引用增强：备注、流转状态、收藏标记，并把“收藏时间”与“发布时间”
+    // 分开。saved_at 是本次新增的语义字段，历史数据回填为既有的 created_at，
+    // 保证升级后小记时间流的排序稳定。
+    version: 15,
+    name: "reference-library-collection-metadata",
+    up(db) {
+      ensureColumn(db, "reference_library", "note", "TEXT NOT NULL DEFAULT ''");
+      ensureColumn(db, "reference_library", "status", "TEXT NOT NULL DEFAULT 'inbox'");
+      ensureColumn(db, "reference_library", "favorite", "INTEGER NOT NULL DEFAULT 0");
+      ensureColumn(db, "reference_library", "saved_at", "TEXT");
+      ensureColumn(db, "reference_library", "last_checked_at", "TEXT");
+      const referenceTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reference_library'").get();
+      if (referenceTable) db.prepare("UPDATE reference_library SET saved_at = created_at WHERE saved_at IS NULL OR trim(saved_at) = ''").run();
+      db.exec("CREATE INDEX IF NOT EXISTS idx_reference_library_saved ON reference_library (saved_at DESC, id DESC)");
+    },
+  },
+  {
+    // 文章阅读模式分享使用稳定的八位短码；短码与文章解耦保存，文章改名或
+    // slug 调整后，已经分享出去的地址仍然可以正常跳转。
+    version: 16,
+    name: "post-short-links",
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS post_short_links (
+          code TEXT PRIMARY KEY,
+          post_id INTEGER NOT NULL UNIQUE,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_post_short_links_post ON post_short_links (post_id);
+      `);
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

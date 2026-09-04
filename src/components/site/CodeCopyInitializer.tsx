@@ -8,6 +8,27 @@ export function CodeCopyInitializer() {
     const onClick = async (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+
+      const expandButton = target.closest<HTMLButtonElement>("button[data-code-expand]");
+      if (expandButton) {
+        const block = expandButton.closest<HTMLElement>(".code-block[data-code-collapsible]");
+        if (!block) return;
+        const isCollapsed = block.dataset.collapsed !== "false";
+        const nextCollapsed = !isCollapsed;
+        block.dataset.collapsed = nextCollapsed ? "true" : "false";
+        expandButton.setAttribute("aria-expanded", String(!nextCollapsed));
+        const actionLabel = nextCollapsed ? "展开全部代码" : "收起代码";
+        expandButton.setAttribute("aria-label", actionLabel);
+        expandButton.title = actionLabel;
+        const label = expandButton.querySelector<HTMLElement>(".code-expand-toggle__label");
+        if (label) {
+          label.textContent = nextCollapsed
+            ? `展开全部代码${block.dataset.lines ? `（${block.dataset.lines} 行）` : ""}`
+            : "收起代码";
+        }
+        return;
+      }
+
       const button = target.closest<HTMLButtonElement>("button[data-code-copy]");
       if (!button) return;
       const code = button.closest(".code-block")?.querySelector("pre code");

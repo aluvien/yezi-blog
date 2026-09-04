@@ -10,6 +10,9 @@ import type {
   ReferenceLibraryItem,
 } from "./types";
 
+// 清洗控制字符（用 RegExp 构造，避免源码出现裸控制符）；与相邻函数的 category 归一化同义。
+const REF_CONTROL_CHARS = new RegExp("[\\u0000-\\u001F\\u007F]", "g");
+
 /** 将正文里的引用快照同步为本地缓存，文章访问时不再请求第三方网页。 */
 export function syncArticleReferences(postId: number, snapshots: ArticleReferenceSnapshot[]): void {
   const unique = new Map<string, ArticleReferenceSnapshot>();
@@ -90,8 +93,8 @@ export function upsertReferenceLibrarySnapshot(input: ArticleReferenceSnapshot, 
   const normalizedCategory = String(category ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
   db.prepare(`
     INSERT INTO reference_library
-      (url, canonical_url, title, source_name, author, published_at, cover, description, summary, key_points, category, tags, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (url, canonical_url, title, source_name, author, published_at, cover, description, summary, key_points, category, tags, saved_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(canonical_url) DO UPDATE SET
       url = excluded.url,
       title = CASE WHEN excluded.title != '' THEN excluded.title ELSE reference_library.title END,
@@ -118,6 +121,7 @@ export function upsertReferenceLibrarySnapshot(input: ArticleReferenceSnapshot, 
     JSON.stringify(snapshot.keyPoints),
     normalizedCategory,
     normalizedTags,
+    timestamp,
     timestamp,
     timestamp,
   );
@@ -159,6 +163,8 @@ export type ReferenceLibraryQuery = {
   tag?: string;
   limit?: number;
   offset?: number;
+  /** "updated"（后台默认，最近维护优先）或 "saved"（小记时间流，收藏时间优先）。 */
+  order?: "updated" | "saved";
 };
 
 function referenceLibraryFilters(options: Pick<ReferenceLibraryQuery, "keyword" | "category" | "tag">): { where: string; parameters: string[] } {
@@ -200,6 +206,9 @@ function referenceLibraryFilters(options: Pick<ReferenceLibraryQuery, "keyword" 
 export function listReferenceLibrary(options: ReferenceLibraryQuery = {}): ReferenceLibraryItem[] {
   const { where, parameters } = referenceLibraryFilters(options);
   const { limit, offset } = options;
+  const orderBy = options.order === "saved"
+    ? "ORDER BY COALESCE(NULLIF(rl.saved_at, ''), rl.created_at) DESC, rl.id DESC"
+    : "ORDER BY rl.updated_at DESC, rl.id DESC";
   let pagination = "";
   const paginationParameters: number[] = [];
   if (Number.isInteger(limit) && (limit as number) > 0) {
@@ -220,7 +229,7 @@ export function listReferenceLibrary(options: ReferenceLibraryQuery = {}): Refer
     LEFT JOIN posts p ON p.id = ar.post_id
     ${where}
     GROUP BY rl.id
-    ORDER BY rl.updated_at DESC, rl.id DESC${pagination}
+    ${orderBy}${pagination}
   `).all(...parameters, ...paginationParameters) as ReferenceLibraryItem[];
 }
 
@@ -268,8 +277,51 @@ export function updateReferenceLibraryCategory(id: number, category: string): bo
   return db.prepare("UPDATE reference_library SET category = ?, updated_at = ? WHERE id = ?").run(normalizedCategory, now(), id).changes > 0;
 }
 
+export type ReferenceCollectionMetadata = {
+  category?: string;
+  tags?: string | string[];
+  note?: string;
+  status?: "inbox" | "read" | "archived";
+  favorite?: boolean;
+};
+
 /**
- * 从独立引用资料库移除一条记录。文章正文中的快照和关联关系保留，
+ * 更新收藏资料的展示元数据。未提供的字段保持原值，避免局部编辑误清空；
+ * published_at（原文发布时间）永不受影响，收藏时间 saved_at 只在插入时确定。
+ */
+export function updateReferenceLibraryCollection(id: number, data: ReferenceCollectionMetadata): boolean {
+  if (!Number.isInteger(id) || id <= 0) return false;
+  const current = db.prepare("SELECT category, tags, note, status, favorite FROM reference_library WHERE id = ?").get(id) as
+    | { category: string; tags: string; note: string; status: "inbox" | "read" | "archived"; favorite: number }
+    | undefined;
+  if (!current) return false;
+  const nextCategory = data.category === undefined ? current.category : cleanReferenceText(data.category, 80);
+  const nextTags = data.tags === undefined ? current.tags : JSON.stringify(normalizeReferenceTags(data.tags));
+  const nextNote = data.note === undefined ? current.note : cleanReferenceText(data.note, 2_000);
+  const nextStatus = data.status === undefined || (data.status !== "inbox" && data.status !== "read" && data.status !== "archived")
+    ? current.status
+    : data.status;
+  const nextFavorite = data.favorite === undefined ? current.favorite : data.favorite ? 1 : 0;
+  return db.prepare("UPDATE reference_library SET category = ?, tags = ?, note = ?, status = ?, favorite = ?, updated_at = ? WHERE id = ?")
+    .run(nextCategory, nextTags, nextNote, nextStatus, nextFavorite, now(), id).changes > 0;
+}
+
+function cleanReferenceText(value: unknown, maxLength: number): string {
+  return String(value ?? "").replace(REF_CONTROL_CHARS, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+/** 批量按 id 水合收藏条目（轻量，无归档/关联 JOIN），供小记统一时间流使用。 */
+export function getReferencesByIds(ids: number[]): Map<number, ReferenceLibraryItem> {
+  const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  const map = new Map<number, ReferenceLibraryItem>();
+  if (unique.length === 0) return map;
+  const placeholders = unique.map(() => "?").join(",");
+  const rows = db.prepare(`SELECT *, NULL AS archive_captured_at, NULL AS archive_updated_at, NULL AS archive_cache_report, 0 AS linked_post_count, NULL AS linked_post_titles FROM reference_library WHERE id IN (${placeholders})`).all(...unique) as ReferenceLibraryItem[];
+  for (const row of rows) map.set(row.id, row);
+  return map;
+}
+
+/** 只从独立引用资料库移除一条记录。文章正文中的快照和关联关系保留，
  * 避免管理页清理资料库时意外改写已经发布的文章。
  */
 export function deleteReferenceLibrary(id: number): boolean {

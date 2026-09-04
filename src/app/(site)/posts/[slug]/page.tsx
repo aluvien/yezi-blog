@@ -19,6 +19,7 @@ import { ArticleEditZone } from "@/components/site/ArticleEditZone";
 import { getSession } from "@/lib/auth";
 import { getCachedPostBySlug, getCachedSiteSettings } from "@/lib/server-data";
 import { ClassicReaderExit } from "@/components/site/ClassicReaderExit";
+import { ClassicShareButton } from "@/components/site/ClassicShareButton";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
@@ -92,6 +93,7 @@ export default async function PostPage({ params }: Props) {
           <div className="article-header reader-exit-anchor">
             <h1 className="page-title">{post.title}</h1>
             <ClassicReaderExit />
+            <ClassicShareButton postId={post.id} />
             <div className="meta-line meta-line--items">
               <span className="meta-line__item"><time dateTime={displayDate.value}>{`${displayDate.label}${formatDateOnly(displayDate.value)}`}</time></span>
               {tags.length > 0 ? <span className="meta-line__item meta-line__item--tags">{tags.map((tag) => <Link className="tag" href={PUBLIC_ROUTES.tag(tag)} key={tag}>#{tag}</Link>)}</span> : null}

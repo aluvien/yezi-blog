@@ -2,6 +2,8 @@ import Link from "next/link";
 import {
   countAttachments,
   countArticleReferences,
+  countGithubRepositories,
+  countLifeEvents,
   countMoments,
   countPendingComments,
   countPosts,
@@ -31,26 +33,26 @@ export default function AdminDashboard() {
 
   const recentTags = listRecentTags(5);
 
-  const row1 = [
+  const stats = [
     { label: "文章", count: countPosts(), href: "/admin/posts" },
-    { label: "想法", count: countMoments(), href: "/admin/moments" },
+    { label: "絮语", count: countMoments(), href: "/admin/moments" },
+    { label: "生活节点", count: countLifeEvents(), href: "/admin/life/milestones" },
     { label: "作品", count: countWorks(), href: "/admin/works" },
+    { label: "GitHub", count: countGithubRepositories(), href: "/admin/life/github" },
+    { label: "收藏引用", count: referenceCount, href: "/admin/references" },
     { label: pending > 0 ? `评论 · 待审 ${pending}` : "评论", count: pending, href: "/admin/comments" },
-  ];
-  const row2 = [
+    { label: "附件", count: countAttachments(), href: "/admin/attachments" },
     { label: "阅读", count: metrics.views, href: "/admin" },
     { label: "点赞", count: metrics.likes, href: "/admin" },
-    { label: "附件", count: countAttachments(), href: "/admin/attachments" },
-    { label: "引用", count: referenceCount, href: "/admin/references" },
   ];
 
   return (
     <div className="flex flex-col gap-5">
       <AdminPageHeader eyebrow="DASHBOARD" title="仪表盘" description="查看内容规模、互动数据和最近更新。" />
 
-      {/* 第一排:文章 / 想法 / 作品 / 评论 */}
+      {/* 统计：内容规模 + 互动数据，小记相关分项各自可见。 */}
       <div className="grid grid-cols-4 gap-2 sm:gap-3">
-        {row1.map((s) => (
+        {stats.map((s) => (
           <Link
             key={s.label}
             href={s.href}
@@ -62,22 +64,6 @@ export default function AdminDashboard() {
             </div>
           </Link>
         ))}
-      </div>
-
-      {/* 第二排:阅读 / 点赞 / 附件 / 引用 */}
-      <div className="grid grid-cols-4 gap-2 sm:gap-3">
-        {row2.map((s) => (
-          <Link
-            key={s.label}
-            href={s.href}
-            className="admin-card admin-dashboard-stat min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
-          >
-            <div className="text-xl font-bold sm:text-2xl">{s.count}</div>
-            <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">
-              {s.label}
-            </div>
-            </Link>
-          ))}
       </div>
 
       {/* 第三排:标签+分类(上下堆叠) / 最新文章 / 最新评论 */}

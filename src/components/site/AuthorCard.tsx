@@ -17,7 +17,7 @@ export function AuthorCard({ authorName = site.author, avatar, avatarNoBorder = 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-[15px] font-semibold text-foreground">{authorName}<span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">作者</span></div>
         <div className="mt-1 text-[13px] leading-relaxed text-muted">
-          记录文章、想法与作品。感谢你读到这里。
+          记录文章、絮语与作品。感谢你读到这里。
         </div>
       </div>
     </div>

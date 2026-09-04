@@ -40,7 +40,7 @@ test.describe.serial("core editorial smoke flows", () => {
     await expect(navigation).toBeVisible();
     await expect(navigation).toHaveCSS("min-height", "66px");
     await expect(navigation.getByRole("link")).toHaveCount(5);
-    for (const label of ["首页", "文章", "想法", "作品", "关于"]) {
+    for (const label of ["首页", "文章", "絮语", "作品", "关于"]) {
       await expect(navigation.getByRole("link", { name: label })).toBeVisible();
     }
 

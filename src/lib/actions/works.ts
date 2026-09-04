@@ -14,6 +14,8 @@ export interface WorkInput {
   cover: string | null;
   link: string;
   sort_order: number;
+  /** 关联的 GitHub 仓库 id 列表；不传则保持既有关联不变。 */
+  repository_ids?: number[];
 }
 
 /** Server Action 入口：只做 Cookie 会话鉴权，业务逻辑在 @/lib/admin/works。 */

@@ -210,6 +210,22 @@
   transition: color 0.2s ease;
 }
 
+/* 经典版首页与随笔列表保持目标站的单行标题节奏。标题所在的 flex
+ * 轨道允许收缩，文本本身负责显示省略号，避免长标题把卡片撑高或换行。 */
+.classic-entry-card .list-item__title-group {
+  flex: 1 1 auto;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.classic-entry-card .list-item__title {
+  flex: 1 1 auto;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .list-item__title:hover {
   color: #b88f8f;
 }

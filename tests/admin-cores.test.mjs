@@ -146,8 +146,8 @@ test("work core enforces format, url and sort bounds", async () => {
 });
 
 test("moment core enforces content, image, location and non-empty rules", async () => {
-  assert.equal((await createMomentEntry({ content: 1, images: [] })).error, "想法数据格式无效");
-  assert.equal((await createMomentEntry({ content: "字".repeat(20_001), images: [] })).error, "想法内容不能超过 2 万个字符");
+  assert.equal((await createMomentEntry({ content: 1, images: [] })).error, "絮语数据格式无效");
+  assert.equal((await createMomentEntry({ content: "字".repeat(20_001), images: [] })).error, "絮语内容不能超过 2 万个字符");
   assert.equal((await createMomentEntry({ content: "x", images: ["not-a-url"] })).error, "图片地址无效或数量超过 9 张");
   assert.equal((await createMomentEntry({ content: "x", images: Array.from({ length: 10 }, (_, i) => `/uploads/${i}.png`) })).error, "图片地址无效或数量超过 9 张");
   assert.equal((await createMomentEntry({ content: "x", images: [], location: "城".repeat(81) })).error, "位置格式无效或超过 80 个字符");
@@ -155,12 +155,12 @@ test("moment core enforces content, image, location and non-empty rules", async 
 
   const created = await createMomentEntry({ content: "第一条", images: ["/uploads/a.png"], tags: ["t"], location: "杭州市" });
   assert.equal(created.ok, true);
-  assert.equal((await updateMomentEntry(0, { content: "x", images: [] })).error, "想法数据格式无效");
+  assert.equal((await updateMomentEntry(0, { content: "x", images: [] })).error, "絮语数据格式无效");
   assert.equal((await updateMomentEntry(created.data.id, { content: "  ", images: [] })).error, "写点什么或至少保留一张图");
-  assert.equal((await updateMomentEntry(9999, { content: "x", images: [] })).error, "想法不存在");
+  assert.equal((await updateMomentEntry(9999, { content: "x", images: [] })).error, "絮语不存在");
   const partial = await updateMomentEntry(created.data.id, { content: "更新", images: [] });
   assert.equal(partial.ok, true, "未提供 tags/location 时应保留原值");
-  assert.equal((await deleteMomentEntry(9999)).error, "想法不存在");
+  assert.equal((await deleteMomentEntry(9999)).error, "絮语不存在");
   assert.equal((await deleteMomentEntry(created.data.id)).ok, true);
 });
 

@@ -2776,8 +2776,10 @@ summary {
   position: absolute;
   z-index: 20;
   bottom: calc(100% + 0.65rem);
-  left: 50%;
+  left: var(--site-reference-tooltip-left, 50%);
   width: min(20rem, calc(100vw - 2rem));
+  max-width: var(--site-reference-tooltip-max-width, calc(100vw - 2rem));
+  box-sizing: border-box;
   padding: 0.65rem 0.75rem;
   border: 1px solid color-mix(in srgb, var(--divider) 84%, var(--accent));
   border-radius: 0.65rem;
@@ -2790,7 +2792,7 @@ summary {
   line-height: 1.65;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 0.25rem);
+  transform: translate(var(--site-reference-tooltip-translate-x, -50%), 0.25rem);
   transition: opacity 160ms ease, transform 160ms ease, visibility 0s linear 160ms;
   visibility: hidden;
 }
@@ -2798,7 +2800,7 @@ summary {
 :is(.article-body, .classic-article-prose) .site-article-reference-tooltip::after {
   position: absolute;
   top: 100%;
-  left: 50%;
+  left: var(--site-reference-tooltip-arrow-left, 50%);
   width: 0.55rem;
   height: 0.55rem;
   border-right: 1px solid color-mix(in srgb, var(--divider) 84%, var(--accent));
@@ -2810,7 +2812,7 @@ summary {
 
 :is(.article-body, .classic-article-prose) .site-article-reference:is(:hover, :focus-within, .is-tooltip-open) .site-article-reference-tooltip {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translate(var(--site-reference-tooltip-translate-x, -50%), 0);
   transition: opacity 160ms ease, transform 160ms ease;
   visibility: visible;
 }
@@ -9328,6 +9330,63 @@ html[data-layout-theme="classic"] .classic-article-detail .reader-exit .icon {
   height: 24px;
 }
 
+/* 阅读模式中的轻量分享入口：默认不抢正文视线，进入沉浸模式后和退出按钮
+ * 一起显示在文章标题右侧；按钮文案沿用经典版正文的摘要字体。 */
+html[data-layout-theme="classic"] .classic-article-detail .classic-share-button {
+  position: absolute;
+  top: 2px;
+  right: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 9px;
+  color: var(--muted);
+  background: transparent;
+  font-family: var(--font-copy);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: color 160ms ease, background-color 160ms ease, opacity 160ms ease;
+}
+
+html[data-layout-theme="classic"] .classic-article-detail .classic-share-button__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:hover,
+html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:focus-visible {
+  color: var(--text);
+  background: var(--panel);
+}
+
+html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .classic-share-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 640px) {
+  html[data-layout-theme="classic"] .classic-article-detail .classic-share-button {
+    right: 40px;
+    min-height: 30px;
+    padding: 0 7px;
+  }
+
+  html[data-layout-theme="classic"] .classic-article-detail .classic-share-button span {
+    display: none;
+  }
+}
+
 html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose {
   width: 100%;
   max-width: none;
@@ -9794,4 +9853,29 @@ html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose
 html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose .site-article-reference-link:focus-visible {
   color: var(--accent);
   border-bottom-color: currentColor;
+}
+
+/* Markdown 表格使用独立滚动容器。表格保持内容固有宽度，容器不足时
+ * 在触摸屏和桌面端都可以横向滚动，不再把多列压缩成不可读的窄栏。 */
+:is(.article-body, .classic-article-prose, .prose) .markdown-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  margin: 1.35rem 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+:is(.article-body, .classic-article-prose, .prose) .markdown-table-scroll > table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  margin: 0;
+  table-layout: auto;
+}
+
+:is(.article-body, .classic-article-prose, .prose) .markdown-table-scroll > table :is(th, td) {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }

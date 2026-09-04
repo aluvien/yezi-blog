@@ -197,7 +197,7 @@ async function sendDashboard(chatId: string): Promise<void> {
     "<b>📊 博客数据概览</b>",
     "",
     `<b>文章</b>　${countPublishedPosts()} 已发布 / ${countPosts()} 总计`,
-    `<b>想法</b>　${countMoments()}　　<b>作品</b>　${countWorks()}`,
+    `<b>絮语</b>　${countMoments()}　　<b>作品</b>　${countWorks()}`,
     `<b>待审评论</b>　${countPendingComments()}　　<b>引用</b>　${countArticleReferences()}`,
     `<b>附件</b>　${countAttachments()}`,
     "",
@@ -219,7 +219,7 @@ async function sendPendingComments(chatId: string): Promise<void> {
   }
   await sendTelegramMessage(`<b>💬 待审评论</b>\n\n共 ${countPendingComments()} 条，以下展示最近 ${comments.length} 条。`, { chatId, parseMode: "HTML" });
   for (const comment of comments) {
-    const target = comment.target_type === "post" ? "文章" : "想法";
+    const target = comment.target_type === "post" ? "文章" : "絮语";
     await sendTelegramMessage([
       `<b>评论 #${comment.id}</b>　${escapeTelegramHtml(compact(comment.nickname, 60))}`,
       `<b>${target}</b>　${escapeTelegramHtml(compact(comment.target_label ?? "已删除内容", 100))}`,

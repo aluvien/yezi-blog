@@ -19,16 +19,19 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "strong", "em", "del", "blockquote", "cite", "code", "pre",
     "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "aside", "details", "summary", "time", "iframe", "button", "svg", "path", "rect",
+    "figure", "figcaption",
   ],
   allowedAttributes: {
     a: ["href", "title", "target", "rel", "class", "aria-label"],
     img: ["src", "srcset", "sizes", "alt", "title", "loading", "decoding", "class", "data-original-src"],
     code: ["class"],
     blockquote: ["class"],
-    div: ["class", "data-hydrated", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover", "data-lang", "data-lines"],
+    div: ["class", "data-hydrated", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover", "data-lang", "data-lines", "data-code-collapsible", "data-collapsed"],
     h3: ["class"],
     p: ["class", "data-icon"],
     ul: ["class"],
+    figure: ["class"],
+    figcaption: ["class"],
     li: ["class"],
     aside: ["class", "aria-label"],
     details: ["class", "open"],
@@ -36,7 +39,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     time: ["class", "datetime"],
     iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
     span: ["class", "aria-hidden", "role"],
-    button: ["class", "type", "aria-label", "title", "data-state", "data-code-copy"],
+    button: ["class", "type", "aria-label", "aria-expanded", "title", "data-state", "data-code-copy", "data-code-expand"],
     svg: ["class", "width", "height", "viewBox", "fill", "stroke", "stroke-width", "aria-hidden"],
     path: ["d", "fill", "stroke", "stroke-width"],
     rect: ["x", "y", "width", "height", "rx", "fill", "stroke", "stroke-width"],
@@ -52,6 +55,10 @@ export interface TocHeading {
   text: string;
   level: number;
 }
+
+// 超过这个行数的代码块默认收起，避免一篇文章被大段代码推得过长；
+// 展开按钮仍会保留完整代码，复制操作也始终复制全部内容。
+const COLLAPSIBLE_CODE_LINE_THRESHOLD = 16;
 
 /** HTML 属性转义，避免 Markdown 内容进入属性时破坏 HTML 结构。 */
 function escapeHtml(value: string): string {
@@ -162,6 +169,85 @@ function expandSafeCalloutHtml(content: string, blocks: Map<string, string>): st
   });
 }
 
+function parseGalleryImageLine(line: string): { alt: string; src: string; title: string } | null {
+  const withoutBullet = line.trim().replace(/^[-*+]\s+/, "");
+  const match = withoutBullet.match(/^!\[([^\]]*)\]\((.+)\)$/);
+  if (!match) return null;
+  let destination = match[2].trim();
+  let title = "";
+  const titled = destination.match(/^(\S+)\s+["']([^"']*)["']$/);
+  if (titled) {
+    destination = titled[1];
+    title = titled[2];
+  }
+  const src = destination.replace(/^<|>$/g, "");
+  return safeMarkdownUrl(src, "image") ? { alt: match[1].trim(), src, title } : null;
+}
+
+/**
+ * 将编辑器生成的图片合集短代码转换为现有正文 gallery 样式。格式示例：
+ *
+ *   !gallery cols-3
+ *   - ![第一张](/uploads/202609/one.webp)
+ *   - ![第二张](/uploads/202609/two.webp)
+ *   !endgallery
+ *
+ * 解析只在围栏代码之外进行，无法识别的行会让整个块按普通 Markdown 原样
+ * 渲染，避免作者手写的内容被静默吞掉。
+ */
+function expandGalleryShortcodes(content: string, blocks: Map<string, string>): string {
+  const lines = content.split(/\r?\n/);
+  const output: string[] = [];
+  let fence: { character: "`" | "~"; length: number } | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const fenceMarker = lines[index].match(/^\s*(`{3,}|~{3,})/);
+    if (fence) {
+      output.push(lines[index]);
+      if (fenceMarker && fenceMarker[1][0] === fence.character && fenceMarker[1].length >= fence.length) fence = null;
+      continue;
+    }
+    if (fenceMarker) {
+      output.push(lines[index]);
+      fence = { character: fenceMarker[1][0] as "`" | "~", length: fenceMarker[1].length };
+      continue;
+    }
+    const header = lines[index].match(/^\s*!gallery(?:\s+cols-(2|3))?\s*$/i);
+    if (!header) {
+      output.push(lines[index]);
+      continue;
+    }
+    const entries: Array<{ alt: string; src: string; title: string }> = [];
+    let cursor = index + 1;
+    let closed = false;
+    for (; cursor < lines.length; cursor += 1) {
+      if (/^\s*!endgallery\s*$/i.test(lines[cursor])) {
+        closed = true;
+        break;
+      }
+      if (!lines[cursor].trim()) continue;
+      const entry = parseGalleryImageLine(lines[cursor]);
+      if (!entry) break;
+      entries.push(entry);
+    }
+    if (!closed || entries.length === 0 || cursor >= lines.length) {
+      output.push(lines[index]);
+      continue;
+    }
+    const className = header[1] ? `gallery cols-${header[1]}` : "gallery";
+    const list = entries.map((entry) => {
+      const titleAttribute = entry.title ? ` title="${escapeHtml(entry.title)}"` : "";
+      const image = renderMarkdownImage(entry.src, entry.alt, titleAttribute);
+      const caption = entry.alt ? `<figcaption>${escapeHtml(entry.alt)}</figcaption>` : "";
+      return `<li><figure>${image}${caption}</figure></li>`;
+    }).join("");
+    const token = `__YEZI_GALLERY_${blocks.size}__`;
+    blocks.set(token, `<ul class="${className}">${list}</ul>`);
+    output.push("", token, "");
+    index = cursor;
+  }
+  return output.join("\n");
+}
+
 /**
  * 渲染文章 markdown 为 HTML。
  * h2/h3 会自动添加 id 属性用于 TOC 锚点。
@@ -192,6 +278,13 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
     if (!safeSrc) return escapeHtml(text);
     const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
     return renderMarkdownImage(safeSrc, text, titleAttribute);
+  };
+
+  // 表格外包一层滚动容器：表格本身保留 table 布局与固有列宽，窄屏时由
+  // 容器负责横向滚动，避免把每一列压缩到难以阅读的宽度。
+  const defaultTable = renderer.table.bind(renderer);
+  renderer.table = function (token: Tokens.Table) {
+    return `<div class="markdown-table-scroll">${defaultTable(token)}</div>`;
   };
 
   renderer.heading = function (this: Renderer, { tokens, depth }: Tokens.Heading) {
@@ -259,12 +352,18 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
     const codeMarkup = `<pre><code${codeClass}>${lineMarkup}</code></pre>`;
     const iconMarkup = `<svg class="code-lang-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 5h16v14H4zM6 7v10h12V7zM8 9h8v2H8zm0 4h5v2H8z"/></svg>`;
     const copyMarkup = `<button class="code-copy" type="button" aria-label="复制代码" title="复制代码" data-code-copy="true" data-state="idle"><svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1 0-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>`;
-    return `<div class="code-block" data-lang="${escapeHtml(language)}" data-lines="${lines.length}"><div class="code-toolbar"><span class="code-lang">${iconMarkup}<span>${escapeHtml(languageLabel)}</span></span><div class="code-meta"><span class="code-info">UTF-8</span><span class="code-separator">|</span><span class="code-info">${lines.length} Lines</span><span class="code-separator">|</span>${copyMarkup}</div></div>${codeMarkup}</div>`;
+    const isCollapsible = lines.length > COLLAPSIBLE_CODE_LINE_THRESHOLD;
+    const blockClass = isCollapsible ? "code-block code-block--collapsible" : "code-block";
+    const collapseAttributes = isCollapsible ? ' data-code-collapsible="true" data-collapsed="true"' : "";
+    const expandMarkup = isCollapsible
+      ? `<button class="code-expand-toggle" type="button" aria-expanded="false" aria-label="展开全部代码" title="展开全部代码" data-code-expand="true"><span class="code-expand-toggle__label">展开全部代码（${lines.length} 行）</span><svg class="code-expand-toggle__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`
+      : "";
+    return `<div class="${blockClass}" data-lang="${escapeHtml(language)}" data-lines="${lines.length}"${collapseAttributes}><div class="code-toolbar"><span class="code-lang">${iconMarkup}<span>${escapeHtml(languageLabel)}</span></span><div class="code-meta"><span class="code-info">UTF-8</span><span class="code-separator">|</span><span class="code-info">${lines.length} Lines</span><span class="code-separator">|</span>${copyMarkup}</div></div>${codeMarkup}${expandMarkup}</div>`;
   };
 
   const expandedContent = expandMediaShortcodes(expandArticleReferenceMarkers(expandSiteArticleReferenceMarkers(content, inlineSiteReferences)));
   const safeHtmlContent = expandSafeCalloutHtml(expandedContent, specialBlocks);
-  const preparedContent = expandCalloutDirectives(safeHtmlContent, references, specialBlocks);
+  const preparedContent = expandGalleryShortcodes(expandCalloutDirectives(safeHtmlContent, references, specialBlocks), specialBlocks);
   let html = sanitizeHtml(marked.parse(preparedContent, { async: false, gfm: true, breaks: false, renderer }), SANITIZE_OPTIONS);
   for (const [token, markup] of inlineSiteReferences) html = html.replaceAll(token, markup);
   return html;
