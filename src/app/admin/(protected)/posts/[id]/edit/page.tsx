@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getPost, getPostAttachments, listAllTags, listArticleReferenceSnapshotsForPost, listCategories } from "@/lib/db";
+import { getPost, getPostAttachments, listAllTags, listArticleReferenceSnapshotsForPost, listCategories, listImageAttachments } from "@/lib/db";
 import PostForm from "@/components/admin/PostForm";
 import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
@@ -11,10 +11,11 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
   if (!post) notFound();
   const categories = listCategories().map((c) => c.name);
   const usedTags = listAllTags();
+  const imageAttachments = listImageAttachments();
   return (
     <div className="flex flex-col gap-4">
       <AdminPageHeader eyebrow="EDIT POST" title="编辑文章" description="修改文章正文、封面、分类、标签和发布状态。" />
-      <PostForm post={post} initialAttachments={getPostAttachments(post.id)} initialReferences={listArticleReferenceSnapshotsForPost(post.id)} categories={categories} usedTags={usedTags} />
+      <PostForm post={post} initialAttachments={getPostAttachments(post.id)} initialReferences={listArticleReferenceSnapshotsForPost(post.id)} availableImageAttachments={imageAttachments} categories={categories} usedTags={usedTags} />
     </div>
   );
 }

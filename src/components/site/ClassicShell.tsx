@@ -29,8 +29,7 @@ export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: 
   const year = new Date().getFullYear();
   const articlePath = isPublicPostDetailPath(pathname);
   const publicSection = getPublicSection(pathname);
-  const memoPath = !articlePath && (publicSection === "life" || publicSection === "works");
-  const readerAvailable = articlePath || memoPath;
+  const readerAvailable = articlePath;
   const readerLabel = reading ? "退出阅读模式" : "阅读模式";
 
   useEffect(() => {
@@ -48,8 +47,8 @@ export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: 
     const section = publicSection;
     if (section === "home") return "home";
     if (section === "about") return "about-page";
-    // 「小记」聚合页沿用参考站的书页版式，并允许按需进入阅读模式。
-    if (section === "life" || section === "works") return "memo-page immersive-page";
+    // 「小记」聚合页沿用参考站的书页版式，但不提供文章阅读模式入口。
+    if (section === "life" || section === "works") return "memo-page";
     if (section === "moments") return "bits-page";
     if (section === "archives") return "archive-page";
     if (section === "posts") return "essay-page";
@@ -65,13 +64,13 @@ export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: 
 
   useEffect(() => {
     // 每次切换公开页面都回到普通模式，避免从文章/小记的沉浸状态跳转后
-    // 侧栏继续隐藏；用户仍可在当前页面再次点按阅读按钮进入沉浸模式。
+    // 侧栏继续隐藏；文章页仍可在当前页面再次点按阅读按钮进入沉浸模式。
     const immersive = readerAvailable && urlReading;
     document.body.dataset.reading = immersive ? "immersive" : "normal";
-    document.body.classList.toggle("immersive-page", immersive || articlePath || memoPath);
+    document.body.classList.toggle("immersive-page", immersive || articlePath);
     const resetTimer = window.setTimeout(() => setReadingState({ path: pathname, active: immersive }), 0);
     return () => window.clearTimeout(resetTimer);
-  }, [pathname, readerAvailable, urlReading, articlePath, memoPath]);
+  }, [pathname, readerAvailable, urlReading, articlePath]);
 
   useEffect(() => {
     if (!document.documentElement.dataset.themeMode) {
