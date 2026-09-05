@@ -23,7 +23,7 @@ type ClassicLifePageProps = {
 
 const CLASSIC_LIFE_INTRO = [
   "时间流经我们，如同风穿过回廊。",
-  "为瞬间的感受，留下一份文字备份。",
+  "为值得记下的片刻，留一份文字备份。",
 ];
 
 function itemTitle(item: LifeFeedItem): string {
@@ -189,21 +189,9 @@ function ClassicLifeEntry({ item, index, compact = false }: { item: LifeFeedItem
   );
 }
 
-function detailListLabel(active: LifeTab): { title: string; subtitle: string } {
-  if (active === "milestones") return { title: "生活节点", subtitle: "时间与简述" };
-  if (active === "github") return { title: "GitHub", subtitle: "仓库记录" };
-  return { title: "作品", subtitle: "单栏条目" };
-}
-
-function ClassicLifeDetailList({ active, items }: { active: LifeTab; items: LifeFeedItem[] }) {
-  const label = detailListLabel(active);
+function ClassicLifeDetailList({ items }: { items: LifeFeedItem[] }) {
   return (
     <div className="memo-content prose classic-life-content classic-life-content--detail">
-      <div className="classic-life-detail-heading" aria-hidden="true">
-        <span>{label.title}</span>
-        <span>·</span>
-        <span>{label.subtitle}</span>
-      </div>
       {items.length === 0 ? (
         <p className="classic-life-empty">还没有可留存的记录。</p>
       ) : (
@@ -215,10 +203,11 @@ function ClassicLifeDetailList({ active, items }: { active: LifeTab; items: Life
   );
 }
 
-function timelineDateParts(item: LifeFeedItem): { year: string; day: string } {
-  const date = itemDate(item);
-  const match = date.match(/^(\d{4})-(\d{2}-\d{2})/);
-  return match ? { year: match[1], day: match[2] } : { year: date, day: "" };
+function referenceTimelineKind(reference: ReferenceLibraryItem): string {
+  const category = reference.category.trim();
+  if (category && !/^(未分类|uncategorized|unknown)$/i.test(category)) return category;
+  const firstTag = parsePostTags(reference.tags)[0]?.trim();
+  return firstTag ? `#${firstTag}` : "收藏引用";
 }
 
 function ClassicLifeTimelineTitle({ item }: { item: LifeFeedItem }) {
@@ -248,7 +237,7 @@ function ClassicLifeReferenceTimelineLine({ reference }: { reference: ReferenceL
 
   return (
     <div className="classic-life-reference-line">
-      <span className="classic-life-reference-line__kind">收藏引用</span>
+      <span className="classic-life-reference-line__kind">{referenceTimelineKind(reference)}</span>
       <span className="classic-life-reference-line__separator" aria-hidden="true">·</span>
       <span className="site-article-reference classic-life-reference-line__link-shell">
         <a
@@ -271,12 +260,11 @@ function ClassicLifeReferenceTimelineLine({ reference }: { reference: ReferenceL
 }
 
 function ClassicLifeTimelineItem({ item }: { item: LifeFeedItem }) {
-  const date = timelineDateParts(item);
+  const date = itemDate(item);
   return (
     <article id={itemAnchor(item)} className={`classic-life-timeline__item classic-life-timeline__item--${item.type}`}>
       <time className="classic-life-timeline__date" dateTime={item.sort_time}>
-        <span>{date.year}</span>
-        {date.day ? <span>{date.day}</span> : null}
+        {date}
       </time>
       <div className="classic-life-timeline__content">
         {item.type === "reference" ? (
@@ -342,7 +330,7 @@ export function ClassicLifePage({ active, counts, items, page, total, limit }: C
       ) : isAll ? (
         <ClassicLifeFlatList items={items} />
       ) : (
-        <ClassicLifeDetailList active={active} items={items} />
+        <ClassicLifeDetailList items={items} />
       )}
 
       <ClassicLifePager active={active} page={page} total={total} limit={limit} />
