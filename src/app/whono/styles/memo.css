@@ -195,12 +195,13 @@ body.memo-page[data-reading="immersive"] .prose p {
 }
 
 .memo-page .classic-life-intro {
-  max-width: 780px;
-  margin-top: 28px;
-  margin-bottom: 28px;
+  max-width: 680px;
+  margin-top: 26px;
+  margin-bottom: 26px;
+  color: var(--muted);
   font-family: var(--font-copy);
-  font-size: 16px;
-  line-height: 1.85;
+  font-size: 15px;
+  line-height: 1.9;
 }
 
 .memo-page .classic-life-intro p {
@@ -230,6 +231,7 @@ body.memo-page[data-reading="immersive"] .prose p {
 }
 
 .life-tabs--classic a {
+  position: relative;
   display: inline-flex;
   align-items: baseline;
   gap: 5px;
@@ -238,7 +240,9 @@ body.memo-page[data-reading="immersive"] .prose p {
   font-size: 13px;
   line-height: 1.6;
   white-space: nowrap;
-  border-bottom: 1px solid transparent;
+  border-bottom: 0;
+  padding-bottom: 4px;
+  text-decoration: none;
   transition: color 160ms ease, border-color 160ms ease;
 }
 
@@ -251,6 +255,16 @@ body.memo-page[data-reading="immersive"] .prose p {
 
 .life-tabs--classic a.is-active {
   font-weight: 600;
+}
+
+.life-tabs--classic a.is-active::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--accent);
+  content: "";
 }
 
 .life-tabs--classic .life-tabs__count {
@@ -323,11 +337,11 @@ body.memo-page[data-reading="immersive"] .prose p {
 }
 
 .memo-page .classic-life-timeline {
-  --classic-life-timeline-rail-x: 98px;
+  --classic-life-timeline-rail-x: 136px;
   --classic-life-timeline-item-offset: 0px;
   position: relative;
-  margin-top: 6px;
-  padding: 8px 0 4px;
+  margin-top: 4px;
+  padding: 12px 0 4px;
 }
 
 .memo-page .classic-life-timeline::before {
@@ -343,9 +357,11 @@ body.memo-page[data-reading="immersive"] .prose p {
 .classic-life-timeline__item {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 84px) minmax(0, 1fr);
-  column-gap: 28px;
-  padding: 0 0 32px;
+  grid-template-columns: minmax(0, 116px) minmax(0, 1fr);
+  column-gap: 30px;
+  align-items: center;
+  min-height: 50px;
+  padding: 0 0 20px;
 }
 
 .classic-life-timeline__item:last-child {
@@ -354,7 +370,7 @@ body.memo-page[data-reading="immersive"] .prose p {
 
 .classic-life-timeline__item::before {
   position: absolute;
-  top: calc(50% - 16px);
+  top: 50%;
   left: calc(var(--classic-life-timeline-rail-x) - var(--classic-life-timeline-item-offset) - 5px);
   box-sizing: border-box;
   width: 10px;
@@ -367,13 +383,12 @@ body.memo-page[data-reading="immersive"] .prose p {
   transform: translateY(-50%);
 }
 
-.classic-life-timeline__item:last-child::before {
-  top: 50%;
-}
-
 .classic-life-timeline__date {
+  display: inline-flex;
   align-self: center;
-  padding-top: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
   color: var(--faint);
   font-family: var(--font-copy);
   font-size: 12px;
@@ -381,6 +396,10 @@ body.memo-page[data-reading="immersive"] .prose p {
   line-height: 1.5;
   text-align: right;
   white-space: nowrap;
+}
+
+.classic-life-timeline__date span:last-child {
+  color: var(--muted);
 }
 
 .classic-life-timeline__content {
@@ -396,7 +415,7 @@ body.memo-page[data-reading="immersive"] .prose p {
   overflow: hidden;
   padding-left: 0;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.6;
   white-space: nowrap;
 }
@@ -429,7 +448,7 @@ body.memo-page[data-reading="immersive"] .prose p {
 .classic-life-timeline__kind {
   color: var(--muted);
   font-family: var(--font-copy);
-  font-size: 0.72em;
+  font-size: 12px;
   font-weight: 400;
 }
 
@@ -460,6 +479,68 @@ body.memo-page[data-reading="immersive"] .prose p {
   color: var(--muted);
   font-size: 0.8em;
   font-weight: 400;
+}
+
+.memo-page .classic-life-content--detail {
+  margin-top: 4px;
+  font-family: var(--font-readable);
+}
+
+.classic-life-detail-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 11px 0;
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 13px;
+}
+
+.classic-life-detail-heading span:first-child {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.classic-life-detail-heading span:nth-child(2) {
+  color: var(--border);
+}
+
+.classic-life-detail-list .classic-life-entry {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 20px 0 21px;
+}
+
+.classic-life-detail-list .classic-life-entry h3 {
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.classic-life-detail-list .classic-life-entry h3::before {
+  display: none;
+}
+
+.classic-life-detail-list .classic-life-entry h3 a {
+  border-bottom: 0;
+  text-decoration: none;
+}
+
+.classic-life-detail-list .classic-life-entry > p,
+.classic-life-detail-list .classic-life-entry__markdown {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-family: var(--font-copy);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.classic-life-detail-list .classic-life-entry__meta {
+  margin-top: 0;
 }
 
 /* 全部时间轴中的收藏只保留一行标签和链接标题，摘要通过标题附近的
@@ -506,7 +587,7 @@ body.memo-page[data-reading="immersive"] .prose p {
   color: var(--text);
   font-family: var(--font-readable);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.6;
   text-decoration: none;
   transition: color 160ms ease;
@@ -808,8 +889,9 @@ body.memo-page[data-reading="immersive"] .prose p {
   color: var(--text);
   font-family: var(--font-readable);
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.55;
+  white-space: nowrap;
   text-decoration: none;
   transition: color 160ms ease;
 }
@@ -823,6 +905,7 @@ body.memo-page[data-reading="immersive"] .prose p {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .memo-page .classic-reference-item__external {
@@ -881,6 +964,7 @@ body.memo-page[data-reading="immersive"] .prose p {
 }
 
 .memo-page .classic-reference-item__tooltip-label {
+  display: none;
   color: var(--accent);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -940,10 +1024,10 @@ body.memo-page[data-reading="immersive"] .prose p {
   }
 
   .memo-page .classic-life-timeline {
-    --classic-life-timeline-rail-x: 7px;
-    --classic-life-timeline-item-offset: 24px;
+    --classic-life-timeline-rail-x: 66px;
+    --classic-life-timeline-item-offset: 0px;
     margin-top: 2px;
-    padding: 6px 0 4px 24px;
+    padding: 8px 0 4px;
   }
 
   .memo-page .classic-life-timeline::before {
@@ -953,27 +1037,26 @@ body.memo-page[data-reading="immersive"] .prose p {
   }
 
   .classic-life-timeline__item {
-    display: block;
-    padding-bottom: 26px;
+    display: grid;
+    grid-template-columns: minmax(0, 52px) minmax(0, 1fr);
+    column-gap: 26px;
+    min-height: 54px;
+    padding-bottom: 20px;
   }
 
   .classic-life-timeline__item::before {
-    top: 4px;
-    left: calc(var(--classic-life-timeline-rail-x) - var(--classic-life-timeline-item-offset) - 5px);
+    top: 50%;
+    left: calc(var(--classic-life-timeline-rail-x) - 5px);
     width: 10px;
     height: 10px;
-    transform: none;
-  }
-
-  .classic-life-timeline__item:last-child::before {
-    top: 4px;
+    transform: translateY(-50%);
   }
 
   .classic-life-timeline__date {
-    display: block;
-    margin-bottom: 4px;
-    padding-top: 0;
-    text-align: left;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    line-height: 1.35;
   }
 
   .memo-page .classic-life-content--flat .classic-life-timeline__content > h3 {
@@ -986,6 +1069,14 @@ body.memo-page[data-reading="immersive"] .prose p {
 
   .classic-life-reference-line__link {
     font-size: 15px;
+  }
+
+  .memo-page .classic-life-detail-list .classic-life-entry {
+    padding: 17px 0 18px;
+  }
+
+  .classic-life-detail-list .classic-life-entry h3 {
+    font-size: 16px;
   }
 
   .classic-life-reference-line__tooltip {
