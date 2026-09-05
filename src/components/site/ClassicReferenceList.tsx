@@ -8,12 +8,14 @@ type ReferenceLabel = {
 };
 
 function referenceCategory(reference: ReferenceLibraryItem): string {
-  return reference.category.trim() || "未分类";
+  const category = reference.category.trim();
+  return /^(未分类|uncategorized|unknown)$/i.test(category) ? "" : category;
 }
 
 function referenceLabels(reference: ReferenceLibraryItem): ReferenceLabel[] {
-  const labels: ReferenceLabel[] = [{ label: referenceCategory(reference), kind: "category" }];
-  const seen = new Set([labels[0].label.toLocaleLowerCase()]);
+  const category = referenceCategory(reference);
+  const labels: ReferenceLabel[] = category ? [{ label: category, kind: "category" }] : [];
+  const seen = new Set(labels.map((label) => label.label.toLocaleLowerCase()));
   for (const tag of parsePostTags(reference.tags)) {
     const key = tag.toLocaleLowerCase();
     if (seen.has(key)) continue;
@@ -55,7 +57,7 @@ function referenceLabelCounts(references: ReferenceLibraryItem[], label: Referen
 
 function ClassicReferenceTaxonomy({ references }: { references: ReferenceLibraryItem[] }) {
   const labels = referenceTaxonomy(references);
-  if (labels.length === 0) return null;
+  if (labels.length < 2) return null;
 
   return (
     <div className="classic-reference-taxonomy" aria-label="收藏分类与标签">
@@ -77,15 +79,17 @@ function ClassicReferenceItem({ reference }: { reference: ReferenceLibraryItem }
   const summary = referenceSummary(reference);
   const tooltipId = `classic-reference-summary-${reference.id}`;
   const labels = referenceLabels(reference);
-  const category = labels[0];
-  const tags = labels.slice(1);
+  const category = labels.find((label) => label.kind === "category");
+  const tags = labels.filter((label) => label.kind === "tag");
 
   return (
     <li className="classic-reference-item">
-      <div className="classic-reference-item__labels" aria-label="收藏分类与标签">
-        <span className="classic-reference-item__category">{category.label}</span>
-        {tags.map((tag) => <span className="classic-reference-item__tag" key={tag.label}>#{tag.label}</span>)}
-      </div>
+      {category || tags.length > 0 ? (
+        <div className="classic-reference-item__labels" aria-label="收藏分类与标签">
+          {category ? <span className="classic-reference-item__category">{category.label}</span> : null}
+          {tags.map((tag) => <span className="classic-reference-item__tag" key={tag.label}>#{tag.label}</span>)}
+        </div>
+      ) : null}
       <span className="site-article-reference classic-reference-item__link-shell">
         <a
           className="site-article-reference-link classic-reference-item__link"

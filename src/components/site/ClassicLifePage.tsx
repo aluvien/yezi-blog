@@ -21,16 +21,9 @@ type ClassicLifePageProps = {
   limit: number;
 };
 
-type ClassicLifeGroup = {
-  year: string;
-  items: LifeFeedItem[];
-};
-
 const CLASSIC_LIFE_INTRO = [
   "时间流经我们，如同风穿过回廊。",
-  "总有一些瞬间，携带着特别的气息或光亮，短暂停留后便消散。",
-  "有些感受，无法被镜头承载，有些记忆难以被影像收藏。",
-  "也许，为瞬间的感受留下一份文字备份，正是抵抗遗忘最温柔却最有效的方式。",
+  "为瞬间的感受，留下一份文字备份。",
 ];
 
 function itemTitle(item: LifeFeedItem): string {
@@ -62,12 +55,6 @@ function itemDate(item: LifeFeedItem): string {
   return item.sort_time.slice(0, 10);
 }
 
-function itemYear(item: LifeFeedItem): string {
-  const value = item.type === "life_event" ? item.value.occurred_at : item.sort_time;
-  const year = value.slice(0, 4);
-  return /^\d{4}$/.test(year) ? year : "其他";
-}
-
 function itemHref(item: LifeFeedItem): string | null {
   if (item.type === "life_event") {
     return item.value.source_type === "moment" && item.value.source_moment_id
@@ -94,22 +81,6 @@ function itemAnchor(item: LifeFeedItem): string {
   return `life-${item.type.replace(/_/g, "-")}-${item.id}`;
 }
 
-function groupItems(items: LifeFeedItem[]): ClassicLifeGroup[] {
-  const groups: ClassicLifeGroup[] = [];
-  const byYear = new Map<string, ClassicLifeGroup>();
-  for (const item of items) {
-    const year = itemYear(item);
-    const existing = byYear.get(year);
-    if (existing) existing.items.push(item);
-    else {
-      const group = { year, items: [item] };
-      byYear.set(year, group);
-      groups.push(group);
-    }
-  }
-  return groups;
-}
-
 function ClassicLifeTabs({ active, counts }: Pick<ClassicLifePageProps, "active" | "counts">) {
   return (
     <nav className="life-tabs life-tabs--classic" aria-label="小记分类">
@@ -126,28 +97,6 @@ function ClassicLifeTabs({ active, counts }: Pick<ClassicLifePageProps, "active"
           );
         })}
       </ul>
-    </nav>
-  );
-}
-
-function ClassicLifeToc({ groups }: { groups: ClassicLifeGroup[] }) {
-  return (
-    <nav className="memo-toc classic-life-toc" aria-label="小记目录">
-      {groups.map((group) => (
-        <details key={group.year} open>
-          <summary>{group.year === "其他" ? "其他记录" : `${group.year}年记`}</summary>
-          <ul className="toc-items">
-            {group.items.map((item, index) => (
-              <li key={`${item.type}-${item.id}`}>
-                <a href={`#${itemAnchor(item)}`}>
-                  <span className="toc-num">{index + 1}</span>
-                  <span className="classic-life-toc__title">{itemTitle(item)}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ))}
     </nav>
   );
 }
@@ -240,6 +189,38 @@ function ClassicLifeEntry({ item, index, compact = false }: { item: LifeFeedItem
   );
 }
 
+function detailListLabel(active: LifeTab): { title: string; subtitle: string } {
+  if (active === "milestones") return { title: "生活节点", subtitle: "时间与简述" };
+  if (active === "github") return { title: "GitHub", subtitle: "仓库记录" };
+  return { title: "作品", subtitle: "单栏条目" };
+}
+
+function ClassicLifeDetailList({ active, items }: { active: LifeTab; items: LifeFeedItem[] }) {
+  const label = detailListLabel(active);
+  return (
+    <div className="memo-content prose classic-life-content classic-life-content--detail">
+      <div className="classic-life-detail-heading" aria-hidden="true">
+        <span>{label.title}</span>
+        <span>·</span>
+        <span>{label.subtitle}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="classic-life-empty">还没有可留存的记录。</p>
+      ) : (
+        <div className="classic-life-detail-list">
+          {items.map((item, index) => <ClassicLifeEntry key={`${item.type}-${item.id}`} item={item} index={index} compact />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function timelineDateParts(item: LifeFeedItem): { year: string; day: string } {
+  const date = itemDate(item);
+  const match = date.match(/^(\d{4})-(\d{2}-\d{2})/);
+  return match ? { year: match[1], day: match[2] } : { year: date, day: "" };
+}
+
 function ClassicLifeTimelineTitle({ item }: { item: LifeFeedItem }) {
   const title = itemTitle(item);
   const href = itemHref(item);
@@ -290,9 +271,13 @@ function ClassicLifeReferenceTimelineLine({ reference }: { reference: ReferenceL
 }
 
 function ClassicLifeTimelineItem({ item }: { item: LifeFeedItem }) {
+  const date = timelineDateParts(item);
   return (
     <article id={itemAnchor(item)} className={`classic-life-timeline__item classic-life-timeline__item--${item.type}`}>
-      <time className="classic-life-timeline__date" dateTime={item.sort_time}>{itemDate(item)}</time>
+      <time className="classic-life-timeline__date" dateTime={item.sort_time}>
+        <span>{date.year}</span>
+        {date.day ? <span>{date.day}</span> : null}
+      </time>
       <div className="classic-life-timeline__content">
         {item.type === "reference" ? (
           <ClassicLifeReferenceTimelineLine reference={item.value} />
@@ -336,7 +321,6 @@ function ClassicLifePager({ active, page, total, limit }: Pick<ClassicLifePagePr
 export function ClassicLifePage({ active, counts, items, page, total, limit }: ClassicLifePageProps) {
   const isReferences = active === "references";
   const isAll = active === "all";
-  const groups = isReferences || isAll ? [] : groupItems(items);
   const references = isReferences
     ? items.flatMap((item) => item.type === "reference" ? [item.value] : [])
     : [];
@@ -358,19 +342,7 @@ export function ClassicLifePage({ active, counts, items, page, total, limit }: C
       ) : isAll ? (
         <ClassicLifeFlatList items={items} />
       ) : (
-        <>
-          {groups.length > 0 ? <ClassicLifeToc groups={groups} /> : null}
-          <div className="memo-content prose classic-life-content">
-            {groups.length === 0 ? (
-              <p className="classic-life-empty">还没有可留存的记录。</p>
-            ) : groups.map((group) => (
-              <section key={group.year} id={`life-year-${group.year}`} className="classic-life-year">
-                <h2>{group.year === "其他" ? "其他记录" : `${group.year}年记`}</h2>
-                {group.items.map((item, index) => <ClassicLifeEntry key={`${item.type}-${item.id}`} item={item} index={index} />)}
-              </section>
-            ))}
-          </div>
-        </>
+        <ClassicLifeDetailList active={active} items={items} />
       )}
 
       <ClassicLifePager active={active} page={page} total={total} limit={limit} />
