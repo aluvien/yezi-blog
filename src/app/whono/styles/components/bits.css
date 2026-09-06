@@ -1137,6 +1137,11 @@
     aspect-ratio: 1 / 1;
   }
 
+  /* 单图按图片自身比例展示，避免被移动端网格的正方形规则上下撑出留白。 */
+  .bit-media-item--single {
+    aspect-ratio: auto;
+  }
+
   .bit-media-item--wide {
     grid-column: auto;
     aspect-ratio: 1 / 1;
