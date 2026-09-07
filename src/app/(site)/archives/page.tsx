@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { countApprovedCommentsBulk, getContentMetricsBulk, hasLikedBulk } from "@/lib/db";
+import { listPostSummaries } from "@/lib/db";
 import { getSiteAuthor } from "@/lib/site";
 import { getAuthorAvatar } from "@/lib/author";
 import { getVisitorKeyFromRequest } from "@/lib/request";
@@ -10,9 +10,9 @@ import { MomentEntry } from "@/components/site/MomentEntry";
 import { CommentSection } from "@/components/site/CommentSection";
 import { PageHeader } from "@/components/site/PageHeader";
 import { getSession } from "@/lib/auth";
-import { stripMarkdown } from "@/lib/markdown";
+import { getHomeFeedPage } from "@/lib/home-feed";
 import { toPostSummary } from "@/lib/mobile-feed";
-import { getCachedMoments, getCachedPublishedPosts, getCachedPublishedTags, getCachedSiteSettings } from "@/lib/server-data";
+import { getCachedPublishedTags, getCachedSiteSettings } from "@/lib/server-data";
 import { ClassicArchiveList } from "@/components/site/ClassicHome";
 import { ClassicEntrySearch } from "@/components/site/ClassicEntrySearch";
 import { ClassicEntryTags } from "@/components/site/ClassicEntryTags";
@@ -23,15 +23,48 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "归档", description: "按时间浏览所有文章与絮语。", alternates: { canonical: PUBLIC_ROUTES.archives } };
 
-export default async function ArchivesPage() {
-  const posts = getCachedPublishedPosts();
+const ARCHIVE_PAGE_SIZE = 12;
+
+type SearchParams = { page?: string | string[] };
+
+function firstParam(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value ?? "").trim();
+}
+
+function pageParam(value: string | string[] | undefined): number {
+  const parsed = Number.parseInt(firstParam(value), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 10_000) : 1;
+}
+
+function archivePageHref(page: number): string {
+  return page <= 1 ? PUBLIC_ROUTES.archives : `${PUBLIC_ROUTES.archives}?page=${page}`;
+}
+
+function ArchivePager({ page, hasMore }: { page: number; hasMore: boolean }) {
+  if (page <= 1 && !hasMore) return null;
+  return (
+    <nav className="mt-10 flex items-center justify-between text-sm" aria-label="归档分页">
+      {page > 1
+        ? <Link href={archivePageHref(page - 1)} className="rounded-full bg-soft px-4 py-2 text-muted no-underline transition-colors hover:text-foreground">← 上一页</Link>
+        : <span className="px-4 py-2 text-muted/40">← 上一页</span>}
+      <span className="text-xs text-muted tabular-nums">第 {page} 页</span>
+      {hasMore
+        ? <Link href={archivePageHref(page + 1)} className="rounded-full bg-soft px-4 py-2 text-muted no-underline transition-colors hover:text-foreground">下一页 →</Link>
+        : <span className="px-4 py-2 text-muted/40">下一页 →</span>}
+    </nav>
+  );
+}
+
+export default async function ArchivesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const params = await searchParams;
   const archiveTags = getCachedPublishedTags(100);
   const siteSettings = getCachedSiteSettings();
   const authorName = getSiteAuthor(siteSettings);
 
-  // The classic archive only renders article title/date/tags. Avoid loading
-  // interaction counters and comment state that this view never displays.
+  // The classic archive has a browser-side search index, so retain all article
+  // rows but use the summary projection instead of loading full Markdown bodies.
   if (siteSettings.layout_theme === "classic") {
+    const posts = listPostSummaries();
     const emptyMetrics = { views: 0, likes: 0 };
     const classicItems: FeedItem[] = posts.map((post) => ({
       type: "post" as const,
@@ -56,48 +89,21 @@ export default async function ArchivesPage() {
     );
   }
 
-  const moments = getCachedMoments();
+  const page = pageParam(params.page);
   const isAuthorized = !!(await getSession());
   const visitorKey = await getVisitorKeyFromRequest();
-  const postIds = posts.map((post) => post.id);
-  const momentIds = moments.map((moment) => moment.id);
-  const postCommentCounts = countApprovedCommentsBulk("post", postIds);
-  const momentCommentCounts = countApprovedCommentsBulk("moment", momentIds);
-  const postMetrics = getContentMetricsBulk("post", postIds);
-  const momentMetrics = getContentMetricsBulk("moment", momentIds);
-  const postLiked = hasLikedBulk("post", postIds, visitorKey);
-  const momentLiked = hasLikedBulk("moment", momentIds, visitorKey);
-  const emptyMetrics = { views: 0, likes: 0 };
-  const items = [
-    ...posts.map((post) => ({
-      type: "post" as const,
-      value: post,
-      commentCount: postCommentCounts.get(post.id) ?? 0,
-      metrics: postMetrics.get(post.id) ?? emptyMetrics,
-      initialLiked: postLiked.get(post.id) ?? false,
-    })),
-    ...moments.map((moment) => ({
-      type: "moment" as const,
-      value: moment,
-      commentCount: momentCommentCounts.get(moment.id) ?? 0,
-      metrics: momentMetrics.get(moment.id) ?? emptyMetrics,
-      initialLiked: momentLiked.get(moment.id) ?? false,
-    })),
-  ].sort((a, b) => new Date(b.value.created_at).getTime() - new Date(a.value.created_at).getTime());
-  const mobileItems: FeedItem[] = items.map((item) => item.type === "post"
-    ? {
-        ...item,
-        value: toPostSummary(item.value, stripMarkdown(item.value.content, 120)),
-      }
-    : item);
+  // The shared feed query selects one page and hydrates metrics/comments for
+  // those IDs, instead of reading and sorting the entire archive in JS.
+  const archivePage = getHomeFeedPage({ offset: (page - 1) * ARCHIVE_PAGE_SIZE, limit: ARCHIVE_PAGE_SIZE, visitorKey });
+  const items = archivePage.items;
 
-  // 移动端（MobileFeed）与桌面端列表是两套布局，用 CSS 显隐各渲染一份：
-  // 代价是 moment 的 CommentSection 会被 SSR 两次。对个人博客数据量可接受，
-  // 保持现状以维持两端各自独立、清晰的视觉与交互；若未来需要优化再合并为单一响应式组件。
   return <>
-    <div className="mobile-home-page md:hidden"><MobileFeed items={mobileItems} authorName={authorName} authorAvatar={getAuthorAvatar(siteSettings) || undefined} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} canEdit={isAuthorized} /></div>
+    <div className="mobile-home-page md:hidden">
+      <MobileFeed items={items} authorName={authorName} authorAvatar={getAuthorAvatar(siteSettings) || undefined} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} canEdit={isAuthorized} />
+      <ArchivePager page={page} hasMore={archivePage.hasMore} />
+    </div>
     <div className="mx-auto hidden max-w-[860px] py-8 md:block md:py-12">
-      <PageHeader eyebrow="时间线" title="归档" description="文章与絮语按时间自然排列，方便从头浏览。" trailing={`${items.length} 条记录`} />
+      <PageHeader eyebrow="时间线" title="归档" description="文章与絮语按时间自然排列，方便从头浏览。" trailing={`第 ${page} 页`} />
       <div>
         {items.map((item) => item.type === "post" ? (
           <div key={`post-${item.value.id}`} className="py-6"><PostEntry post={item.value} commentCount={item.commentCount} canEdit={isAuthorized} /></div>
@@ -105,6 +111,7 @@ export default async function ArchivesPage() {
           <div key={`moment-${item.value.id}`} className="py-6"><MomentEntry moment={item.value} commentCount={item.commentCount} metrics={item.metrics} authorName={authorName} authorAvatar={getAuthorAvatar(siteSettings) || undefined} authorAvatarNoBorder={siteSettings.author_avatar_no_border === "1"} initialLiked={item.initialLiked} canEdit={isAuthorized}><CommentSection targetType="moment" targetId={item.value.id} authorName={authorName} /></MomentEntry></div>
         ))}
       </div>
+      <ArchivePager page={page} hasMore={archivePage.hasMore} />
     </div>
   </>;
 }

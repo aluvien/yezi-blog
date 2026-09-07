@@ -14,6 +14,7 @@ const {
   db,
   setSiteSettings,
   syncArticleReferences,
+  updateReferenceLibraryCollection,
   upsertReferenceLibrarySnapshot,
 } = await import("../src/lib/db.ts");
 const { GET: apiRoot } = await import("../src/app/api/v1/route.ts");
@@ -105,7 +106,7 @@ test("v1 exposes only public site configuration and reference-card data", async 
     default_music: "qqvip:private:playlist",
     show_references_page: "1",
   });
-  upsertReferenceLibrarySnapshot({
+  const storedReference = upsertReferenceLibrarySnapshot({
     url: "https://example.com/library-item",
     canonicalUrl: "https://example.com/library-item",
     title: "公开收藏",
@@ -117,6 +118,7 @@ test("v1 exposes only public site configuration and reference-card data", async 
     summary: "摘要",
     keyPoints: ["要点"],
   }, { category: "阅读", tags: ["iOS", "架构"] });
+  updateReferenceLibraryCollection(storedReference.id, { note: "只供后台整理使用", status: "read", favorite: true });
 
   const root = await apiRoot().json();
   assert.equal(root.endpoints.site, "/api/v1/site");
@@ -139,6 +141,10 @@ test("v1 exposes only public site configuration and reference-card data", async 
   assert.match(references.data[0].cover_url, /^\/api\/article-references\/image\?/);
   assert.equal("archive_cache_report" in references.data[0], false);
   assert.equal("linked_post_titles" in references.data[0], false);
+  assert.equal("note" in references.data[0], false);
+  assert.equal("status" in references.data[0], false);
+  assert.equal("favorite" in references.data[0], false);
+  assert.equal(JSON.stringify(references.data[0]).includes("只供后台整理使用"), false);
 
   const referenceCategories = await referenceCategoriesGet().json();
   assert.deepEqual(referenceCategories.data, [{ category: "阅读", count: 1 }]);
@@ -172,6 +178,8 @@ test("public reference endpoints opt into short shared-cache TTLs while metric-b
   assert.match(tags.headers.get("cache-control"), /public, max-age=15, s-maxage=60, stale-while-revalidate=600/);
   const categories = await categoriesGet();
   assert.match(categories.headers.get("cache-control"), /s-maxage=60/);
+  const references = referencesGet(new Request("http://yezi.test/api/v1/references?limit=5"));
+  assert.match((await references).headers.get("cache-control"), /public, max-age=15, s-maxage=60, stale-while-revalidate=600/);
 
   const posts = await postsGet(new Request("http://yezi.test/api/v1/posts?limit=5"));
   assert.equal(posts.headers.get("cache-control"), "no-store", "含实时 views/likes 的列表不得进入共享缓存");

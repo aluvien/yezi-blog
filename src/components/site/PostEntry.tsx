@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Post } from "@/lib/db";
+import type { PostSummary } from "@/lib/mobile-feed";
 import { formatDateOnly } from "@/lib/format";
 import { stripMarkdown } from "@/lib/markdown";
 import { parsePostTags } from "@/lib/post-tags";
@@ -9,8 +10,8 @@ import { SiteImage } from "@/components/site/SiteImage";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 /** 首页时间线中的文章条目 */
-export function PostEntry({ post, commentCount = 0, canEdit = false }: { post: Post; commentCount?: number; canEdit?: boolean }) {
-  const excerpt = stripMarkdown(post.content, 110);
+export function PostEntry({ post, commentCount = 0, canEdit = false }: { post: Post | PostSummary; commentCount?: number; canEdit?: boolean }) {
+  const excerpt = "excerpt" in post ? post.excerpt : stripMarkdown(post.content, 110);
   const firstTag = parsePostTags(post.tags)[0];
   return (
     <ArticleEditZone
