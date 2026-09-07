@@ -15,7 +15,7 @@ export function GET(request: Request) {
   return apiJson({
     data: references.map(publicReference),
     meta: paginationMeta(page, limit, countReferenceLibrary(filters)),
-  });
+  }, 200, { cache: "short" });
 }
 
 export function OPTIONS() {

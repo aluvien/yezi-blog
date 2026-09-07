@@ -38,6 +38,7 @@ yarn-error.log*
 
 # database & uploads
 /data/
+/data 2/
 /public/uploads/
 .deploy-sync.lock
 

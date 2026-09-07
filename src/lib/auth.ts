@@ -41,29 +41,38 @@ export async function login(password: string, options: { secure?: boolean; ip?: 
     warnedFlag.__warnedCookieSecure = true;
     console.warn("[auth] 生产环境未设置 SESSION_COOKIE_SECURE=true；使用 HTTPS 反代时请显式开启，以保证会话 cookie 携带 Secure 标记。");
   }
-  // 直连或未配置可信代理时 IP 可能是 unknown，也必须纳入限流，不能绕过保护。
+  // 直连或未配置可信代理时 IP 可能是 unknown；这时只使用账户级失败计数，
+  // 避免所有访客共享一个客户端锁定桶。
   const ip = options.ip?.trim() || "unknown";
   const now = Date.now();
   const existing = getLoginAttempt(ip);
   const globalExisting = getLoginAttempt(GLOBAL_LOGIN_KEY);
   const ipBlockedUntil = existing?.blocked_until ?? 0;
+  // A client-level lock must be fail-closed: do not keep checking password
+  // candidates while the caller is blocked. When no trusted proxy is
+  // configured every caller shares the "unknown" key, so only the account-wide
+  // guard applies; otherwise one visitor could lock out every direct client.
+  const hasStableClientKey = ip !== "unknown";
+  if (hasStableClientKey && ipBlockedUntil > now) {
+    return { ok: false, blocked: true, retryAfter: Math.ceil((ipBlockedUntil - now) / 1000) };
+  }
+
   const passwordMatches = verifyPassword(password);
   const globalBlockedUntil = globalExisting?.blocked_until ?? 0;
   if (!passwordMatches) {
-    if (ipBlockedUntil > now) {
-      return { ok: false, blocked: true, retryAfter: Math.ceil((ipBlockedUntil - now) / 1000) };
-    }
     // The account-wide guard blocks distributed guessing, but an attacker must
     // not be able to use it to reject the administrator's correct password.
     if (globalBlockedUntil > now) {
       return { ok: false, blocked: true, retryAfter: Math.ceil((globalBlockedUntil - now) / 1000) };
     }
-    const failure = recordLoginFailure(ip, {
-      now,
-      windowMs: LOGIN_WINDOW_MS,
-      maxAttempts: LOGIN_MAX_ATTEMPTS,
-      blockMs: LOGIN_BLOCK_MS,
-    });
+    const failure = hasStableClientKey
+      ? recordLoginFailure(ip, {
+          now,
+          windowMs: LOGIN_WINDOW_MS,
+          maxAttempts: LOGIN_MAX_ATTEMPTS,
+          blockMs: LOGIN_BLOCK_MS,
+        })
+      : { blockedUntil: 0 };
     const globalFailure = recordLoginFailure(GLOBAL_LOGIN_KEY, {
       now,
       windowMs: LOGIN_WINDOW_MS,

@@ -219,7 +219,11 @@ export function listReferenceLibrary(options: ReferenceLibraryQuery = {}): Refer
       paginationParameters.push(offset as number);
     }
   }
-  return db.prepare(`
+  // Select the page from the base table first. The archive/article joins can
+  // multiply rows and force GROUP BY to aggregate the whole library before a
+  // LIMIT takes effect; restricting them to the selected IDs keeps list
+  // requests proportional to the page size.
+  const fullQuery = `
     SELECT rl.*, ara.captured_at AS archive_captured_at, ara.updated_at AS archive_updated_at, ara.cache_report AS archive_cache_report,
       COUNT(ar.id) AS linked_post_count,
       GROUP_CONCAT(DISTINCT p.title) AS linked_post_titles
@@ -230,7 +234,37 @@ export function listReferenceLibrary(options: ReferenceLibraryQuery = {}): Refer
     ${where}
     GROUP BY rl.id
     ${orderBy}${pagination}
-  `).all(...parameters, ...paginationParameters) as ReferenceLibraryItem[];
+  `;
+  // Unbounded administrative exports must keep the original query shape: a
+  // placeholder per row would exceed SQLite's variable limit on large sites.
+  if (!(Number.isInteger(limit) && (limit as number) > 0)) {
+    return db.prepare(fullQuery).all(...parameters, ...paginationParameters) as ReferenceLibraryItem[];
+  }
+
+  const selected = db.prepare(`
+    SELECT rl.id
+    FROM reference_library rl
+    ${where}
+    ${orderBy}${pagination}
+  `).all(...parameters, ...paginationParameters) as Array<{ id: number }>;
+  if (selected.length === 0) return [];
+  if (selected.length > 900) {
+    return db.prepare(fullQuery).all(...parameters, ...paginationParameters) as ReferenceLibraryItem[];
+  }
+
+  const placeholders = selected.map(() => "?").join(",");
+  return db.prepare(`
+    SELECT rl.*, ara.captured_at AS archive_captured_at, ara.updated_at AS archive_updated_at, ara.cache_report AS archive_cache_report,
+      COUNT(ar.id) AS linked_post_count,
+      GROUP_CONCAT(DISTINCT p.title) AS linked_post_titles
+    FROM reference_library rl
+    LEFT JOIN article_reference_archives ara ON ara.canonical_url = rl.canonical_url OR ara.url = rl.url
+    LEFT JOIN article_references ar ON ar.canonical_url = rl.canonical_url OR ar.url = rl.url
+    LEFT JOIN posts p ON p.id = ar.post_id
+    WHERE rl.id IN (${placeholders})
+    GROUP BY rl.id
+    ${orderBy}
+  `).all(...selected.map((item) => item.id)) as ReferenceLibraryItem[];
 }
 
 export function countReferenceLibrary(options: Pick<ReferenceLibraryQuery, "keyword" | "category" | "tag"> = {}): number {

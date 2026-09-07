@@ -9,12 +9,14 @@ import { stripMarkdown } from "@/lib/markdown";
 import { ClassicEntrySearch } from "@/components/site/ClassicEntrySearch";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
+const POSTS_PAGE_SIZE = 12;
+
 export async function PostsPageView({ searchParams, classic: classicOverride }: { searchParams: Promise<{ page?: string }>; classic?: boolean }) {
   const { page } = await searchParams;
   const current = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
   const total = countPublishedPosts();
-  const shown = listPosts({ limit: current * 12 });
-  const hasMore = total > shown.length;
+  const shown = listPosts({ limit: POSTS_PAGE_SIZE, offset: (current - 1) * POSTS_PAGE_SIZE });
+  const hasMore = current * POSTS_PAGE_SIZE < total;
   const siteSettings = getCachedSiteSettings();
   const classic = classicOverride ?? siteSettings.layout_theme === "classic";
   const showMore = siteSettings.show_more_posts !== "0";

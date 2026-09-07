@@ -120,12 +120,18 @@ try {
       body: JSON.stringify({ password: "wrong-password" }),
     });
   }
-  const validLoginAfterIpLock = await fetch(`${baseUrl}/api/admin/login`, {
+  const blockedLogin = await fetch(`${baseUrl}/api/admin/login`, {
     method: "POST",
     headers: { "content-type": "application/json", origin: baseUrl, "x-real-ip": "198.51.100.220" },
     body: JSON.stringify({ password: "production-smoke-password" }),
   });
-  if (!validLoginAfterIpLock.ok) throw new Error("单 IP 登录保护错误地拒绝了正确密码");
+  if (blockedLogin.status !== 429) throw new Error("单 IP 登录保护未拒绝锁定期内的登录尝试");
+  const validLoginAfterIpLock = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: baseUrl, "x-real-ip": "198.51.100.221" },
+    body: JSON.stringify({ password: "production-smoke-password" }),
+  });
+  if (!validLoginAfterIpLock.ok) throw new Error("单 IP 锁定不应影响其他可信来源的正确密码");
   const adminCookie = validLoginAfterIpLock.headers.get("set-cookie")?.split(";", 1)[0] || "";
   if (!adminCookie) throw new Error("standalone 登录未返回管理员会话 Cookie");
 
