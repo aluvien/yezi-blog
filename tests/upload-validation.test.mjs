@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { ALLOWED_UPLOAD_TYPES, hasSafeImageDimensions, hasValidUploadSignature, MAX_UPLOAD_SIZE } from "../src/lib/upload-validation.ts";
+import { ALLOWED_UPLOAD_TYPES, hasSafeImageDimensions, hasValidUploadSignature, MAX_UPLOAD_DIMENSION, MAX_UPLOAD_REQUEST_SIZE, MAX_UPLOAD_SIZE } from "../src/lib/upload-validation.ts";
 import { writeUploadWithRecord } from "../src/lib/upload-storage.ts";
+import { readLimitedFormData, RequestBodyError } from "../src/lib/request.ts";
+import { MAX_CONCURRENT_UPLOADS, withUploadProcessingLimit } from "../src/lib/upload-processing.ts";
 
 test("upload allow-list accepts supported MIME types and rejects an unknown type", () => {
   for (const mime of ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]) {
@@ -41,7 +43,50 @@ test("DOCX cannot be spoofed with an arbitrary ZIP container", () => {
 test("image dimension guard rejects pixel bombs before image transformation", () => {
   assert.equal(hasSafeImageDimensions(6_000, 10_000), true);
   assert.equal(hasSafeImageDimensions(6_300, 10_000), false);
+  assert.equal(hasSafeImageDimensions(MAX_UPLOAD_DIMENSION, 1), true);
+  assert.equal(hasSafeImageDimensions(MAX_UPLOAD_DIMENSION + 1, 1), false);
   assert.equal(hasSafeImageDimensions(undefined, 100), false);
+});
+
+test("multipart body limit rejects chunked bodies without Content-Length", async () => {
+  const form = new FormData();
+  form.append("file", new File([Buffer.from("hello")], "hello.txt", { type: "text/plain" }));
+  const source = new Request("https://yezi.test/api/admin/upload", { method: "POST", body: form });
+  const headers = new Headers(source.headers);
+  headers.delete("content-length");
+  const noLength = new Request(source.url, { method: "POST", headers, body: source.body, duplex: "half" });
+  const parsed = await readLimitedFormData(noLength, MAX_UPLOAD_REQUEST_SIZE);
+  assert.equal(parsed.get("file")?.size, 5);
+
+  const oversized = new Request("https://yezi.test/api/admin/upload", {
+    method: "POST",
+    headers: { "content-type": "multipart/form-data; boundary=limited" },
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(MAX_UPLOAD_REQUEST_SIZE - 1));
+        controller.enqueue(new Uint8Array(2));
+        controller.close();
+      },
+    }),
+    duplex: "half",
+  });
+  await assert.rejects(
+    readLimitedFormData(oversized, MAX_UPLOAD_REQUEST_SIZE, "上传请求不能超过 21MB"),
+    (error) => error instanceof RequestBodyError && error.status === 413 && error.message === "上传请求不能超过 21MB",
+  );
+});
+
+test("upload processing has a bounded sharp/multipart concurrency budget", async () => {
+  assert.equal(MAX_CONCURRENT_UPLOADS, 2);
+  let releaseFirst;
+  let releaseSecond;
+  const first = withUploadProcessingLimit(() => new Promise((resolve) => { releaseFirst = resolve; }));
+  const second = withUploadProcessingLimit(() => new Promise((resolve) => { releaseSecond = resolve; }));
+  await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(withUploadProcessingLimit(async () => "third"), /服务繁忙/);
+  releaseFirst("first");
+  releaseSecond("second");
+  assert.deepEqual(await Promise.all([first, second]), ["first", "second"]);
 });
 
 test("database record failures remove the file that was just written", async () => {

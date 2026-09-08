@@ -7,7 +7,8 @@ export const PUBLIC_ROUTES = {
   posts: "/posts",
   moments: "/moments",
   life: "/life",
-  works: "/works",
+  // 作品已并入小记聚合页；/works 只作为历史兼容入口保留在 next.config.ts。
+  works: "/life?type=works",
   archives: "/archives",
   references: "/references",
   about: "/about",
@@ -79,7 +80,18 @@ export function getPublicSection(pathname: string): PublicSection | null {
   return null;
 }
 
+function isWorksPath(pathname: string): boolean {
+  const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, "") || "/";
+  if (path === "/works" || path.startsWith("/works/") || path === "/memo" || path.startsWith("/memo/")) return true;
+  if (path !== "/life") return false;
+  const query = pathname.split("?", 2)[1]?.split("#", 1)[0] ?? "";
+  return new URLSearchParams(query).get("type") === "works";
+}
+
 export function isPublicNavActive(pathname: string, section: PublicSection): boolean {
+  // The modern “作品” item uses the canonical filtered /life URL, while the
+  // classic shell intentionally keeps the aggregate /life item active there.
+  if (section === "works") return isWorksPath(pathname);
   return getPublicSection(pathname) === section;
 }
 

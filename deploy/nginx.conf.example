@@ -16,8 +16,11 @@ server {
     listen 80;
     server_name example.com;  # TODO: 改成你的域名
 
-    # 后台上传图片的大小上限（按需调整）
+    # 上传请求的基础设施硬上限。两个上传 Route Handler 会在应用层以
+    # 21 MiB 流式请求上限再次校验，超过此处的 22 MiB（含 multipart 开销）
+    # 的 Content-Length 和 chunked 请求都由 Nginx 拒绝，不进入应用解析。
     client_max_body_size 22m;
+    client_body_timeout 60s;
 
     # 部署健康检查只给本机 deploy worker 用；公网一律 403。
     # （应用层还有第二道保险：写探针只认部署时注入的一次性 token。）

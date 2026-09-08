@@ -1,6 +1,7 @@
-import { getSiteSettings, listPosts, listMoments, parseMomentImages } from "@/lib/db";
+import { listPosts, listMoments, parseMomentImages } from "@/lib/db";
 import { stripMarkdown } from "@/lib/markdown";
 import { site } from "@/lib/site";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const revalidate = 300;
@@ -15,11 +16,10 @@ function escapeXml(s: string): string {
 }
 
 export function GET() {
-  const classic = getSiteSettings().layout_theme === "classic";
   const items = [
     ...listPosts().map((post) => ({
       title: post.title,
-      link: `${site.url}${classic ? "/essay" : "/posts"}/${post.slug}`,
+      link: `${site.url}${PUBLIC_ROUTES.post(post.slug)}`,
       description: stripMarkdown(post.content, 200),
       pubDate: new Date(post.created_at).toUTCString(),
       guid: `post-${post.id}`,
@@ -29,7 +29,7 @@ export function GET() {
       const images = parseMomentImages(moment);
       return {
         title: text.length > 40 ? text.slice(0, 40) + "…" : text,
-        link: `${site.url}${classic ? "/bits" : "/moments"}#moment-${moment.id}`,
+        link: `${site.url}${PUBLIC_ROUTES.moment(moment.id)}`,
         description: moment.content + (images.length ? `\n图片：${images.join(" ")}` : ""),
         pubDate: new Date(moment.created_at).toUTCString(),
         guid: `moment-${moment.id}`,

@@ -1,6 +1,7 @@
 export const MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
 export const MAX_UPLOAD_REQUEST_SIZE = 21 * 1024 * 1024;
 export const MAX_UPLOAD_PIXELS = 60 * 1024 * 1024;
+export const MAX_UPLOAD_DIMENSION = 16_384;
 
 export const ALLOWED_UPLOAD_TYPES: Readonly<Record<string, string>> = {
   "image/jpeg": ".jpg",
@@ -44,5 +45,11 @@ export function hasValidUploadSignature(mime: string, buffer: Buffer): boolean {
 }
 
 export function hasSafeImageDimensions(width: number | undefined, height: number | undefined): boolean {
-  return Boolean(width && height && width > 0 && height > 0 && width * height <= MAX_UPLOAD_PIXELS);
+  return Boolean(
+    width && height
+    && Number.isFinite(width) && Number.isFinite(height)
+    && width > 0 && height > 0
+    && width <= MAX_UPLOAD_DIMENSION && height <= MAX_UPLOAD_DIMENSION
+    && width * height <= MAX_UPLOAD_PIXELS,
+  );
 }

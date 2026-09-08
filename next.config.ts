@@ -73,8 +73,8 @@ const nextConfig: NextConfig = {
   // Server Actions 同源校验（origin vs host）失败、后台所有保存操作报
   // "Invalid Server Actions request"。显式放行站点域名。
   experimental: {
-    // 文件本体最多 20 MiB，Route Handler 允许 1 MiB multipart 开销；
-    // Proxy/Nginx 再留 1 MiB，并由 Nginx 在公开入口稳定返回 413。
+    // 普通 Proxy 请求最多缓冲 22 MiB；上传接口在 src/proxy.ts 中排除，
+    // 由 Route Handler 以 21 MiB 计数流硬限制，Nginx 公开入口再用 22 MiB 拒绝。
     proxyClientMaxBodySize: "22mb",
     serverActions: {
       allowedOrigins: serverActionAllowedOrigins,

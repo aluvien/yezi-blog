@@ -108,6 +108,8 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   // CSP nonce must be attached before every rendered route. Static assets do
-  // not render HTML and are intentionally excluded from this work.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|fonts/|pwa-icon/|manifest.webmanifest|sitemap.xml|rss.xml).*)"],
+  // not render HTML and are intentionally excluded from this work. Uploads
+  // are also excluded: their Route Handler applies a counting stream limit;
+  // letting Proxy clone them would add a second large per-request buffer.
+  matcher: ["/((?!api/admin/upload(?:/|$)|api/moments/upload(?:/|$)|_next/static|_next/image|favicon.ico|fonts/|pwa-icon/|manifest.webmanifest|sitemap.xml|rss.xml).*)"],
 };

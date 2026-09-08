@@ -17,21 +17,23 @@ import {
   normalizeLifeTab,
   type LifeTab,
 } from "@/lib/life";
-import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "小记",
-  description: "记录经历，也留下做过的事：生活节点、作品、代码与收藏的资料。",
-  alternates: { canonical: PUBLIC_ROUTES.life },
-};
 
 type SearchParams = { type?: string | string[]; page?: string | string[]; limit?: string | string[] };
 
 function firstParam(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value ?? "").trim();
+}
+
+export async function generateMetadata({ searchParams }: { searchParams: Promise<SearchParams> }): Promise<Metadata> {
+  const type = normalizeLifeTab(firstParam((await searchParams).type));
+  return {
+    title: "小记",
+    description: "记录经历，也留下做过的事：生活节点、作品、代码与收藏的资料。",
+    alternates: { canonical: lifeTabHref(type) },
+  };
 }
 
 function pageHref(type: LifeTab, page: number): string {

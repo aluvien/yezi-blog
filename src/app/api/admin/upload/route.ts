@@ -5,11 +5,13 @@ import path from "path";
 import sharp from "sharp";
 import { requireAdminApi } from "@/lib/auth";
 import { createAttachment, getPost, type Attachment } from "@/lib/db";
+import { isDeploymentWriteHoldActive } from "@/lib/deploy-write-guard";
 import { getUploadDir } from "@/lib/uploads";
-import { getClientIp, hashIp } from "@/lib/request";
+import { getClientIp, hashIp, readLimitedFormData, RequestBodyError } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
-import { ALLOWED_UPLOAD_TYPES, hasSafeImageDimensions, hasValidUploadSignature, MAX_UPLOAD_REQUEST_SIZE, MAX_UPLOAD_SIZE } from "@/lib/upload-validation";
+import { ALLOWED_UPLOAD_TYPES, hasSafeImageDimensions, hasValidUploadSignature, MAX_UPLOAD_REQUEST_SIZE, MAX_UPLOAD_SIZE, MAX_UPLOAD_PIXELS } from "@/lib/upload-validation";
 import { writeUploadWithRecord } from "@/lib/upload-storage";
+import { withUploadProcessingLimit } from "@/lib/upload-processing";
 
 export const runtime = "nodejs";
 
@@ -19,30 +21,47 @@ const UPLOAD_WINDOW_MS = 60 * 1000;
 const UPLOAD_MAX = 30;
 const allowUpload = createSlidingWindowLimiter({ windowMs: UPLOAD_WINDOW_MS, maxRequests: UPLOAD_MAX, maxKeys: 1_000 });
 export async function POST(request: Request) {
+  // Upload routes bypass Proxy so large request bodies are not cloned there.
+  // Preserve Proxy's deployment write hold explicitly before auth or parsing.
+  if (isDeploymentWriteHoldActive()) {
+    return NextResponse.json(
+      { error: "正在完成安全部署，请稍后重试" },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  }
   const session = await requireAdminApi(request);
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const rateKey = hashIp(getClientIp(request));
   if (!allowUpload(rateKey)) {
     return NextResponse.json({ error: "上传过于频繁，请稍后再试" }, { status: 429 });
   }
-  const declaredLength = Number(request.headers.get("content-length"));
-  // 文件本体上限 20MB，另给 multipart 边界与字段留 1MB；先看 Content-Length，
-  // 避免 request.formData() 在发现文件过大前就把整个请求缓冲进内存。
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_REQUEST_SIZE) {
-    return NextResponse.json({ error: "上传请求不能超过 21MB" }, { status: 413 });
-  }
 
+  try {
+    return await withUploadProcessingLimit(() => processUpload(request));
+  } catch (error) {
+    if (error instanceof Error && error.message === "服务繁忙") {
+      return NextResponse.json({ error: "上传服务繁忙，请稍后再试" }, { status: 429 });
+    }
+    console.error("[upload] 未处理错误", error instanceof Error ? error.message : error);
+    return NextResponse.json({ error: "上传失败，请稍后再试" }, { status: 500 });
+  }
+}
+
+async function processUpload(request: Request) {
   let file: File | null = null;
   let postId: number | null = null;
   let original = false;
   try {
-    const form = await request.formData();
+    const form = await readLimitedFormData(request, MAX_UPLOAD_REQUEST_SIZE, "上传请求不能超过 21MB");
     const f = form.get("file");
     if (f instanceof File) file = f;
     const rawPostId = Number(form.get("post_id"));
     if (Number.isInteger(rawPostId) && rawPostId > 0 && getPost(rawPostId)) postId = rawPostId;
     original = form.get("original") === "true";
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
   }
   if (!file) return NextResponse.json({ error: "缺少文件" }, { status: 400 });
@@ -58,7 +77,7 @@ export async function POST(request: Request) {
   // 像素炸弹防护：所有图片类型（含勾选“原图”的分支）都先按头信息校验分辨率上限。
   if (file.type.startsWith("image/")) {
     try {
-      const meta = await sharp(finalBuffer).metadata();
+      const meta = await sharp(finalBuffer, { limitInputPixels: MAX_UPLOAD_PIXELS }).metadata();
       if (!meta.width || !meta.height || !hasValidUploadSignature(file.type, finalBuffer)) {
         return NextResponse.json({ error: "图片文件内容无效" }, { status: 400 });
       }
@@ -74,7 +93,7 @@ export async function POST(request: Request) {
   }
   if (shouldCompress) {
     try {
-      finalBuffer = await sharp(finalBuffer)
+      finalBuffer = await sharp(finalBuffer, { limitInputPixels: MAX_UPLOAD_PIXELS })
         .rotate()
         .resize({ width: 1920, height: 1920, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 80 })

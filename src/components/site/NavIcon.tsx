@@ -20,6 +20,7 @@ export function NavIcon({ href, className = "h-4 w-4" }: { href: string; classNa
     case "/references":
       return <svg {...common}><path d="M6 4.5A2.5 2.5 0 0 1 8.5 2H20v17H8.5A2.5 2.5 0 0 0 6 21.5z" /><path d="M6 4.5v17" /><path d="M10 7h6M10 11h6" /></svg>;
     case "/works":
+    case "/life?type=works":
       return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>;
     default:
       return <svg {...common}><circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5" /></svg>;

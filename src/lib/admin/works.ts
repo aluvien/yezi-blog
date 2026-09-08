@@ -51,7 +51,6 @@ export async function createWorkEntry(data: WorkInput): Promise<ActionResult> {
   if (repoIds) setWorkRepositories(work.id, repoIds);
   revalidatePath("/admin/works");
   revalidatePath("/admin/life");
-  revalidatePath("/works");
   revalidatePath("/life");
   revalidatePath("/");
   return { ok: true, data: work };
@@ -72,7 +71,6 @@ export async function updateWorkEntry(id: number, data: WorkInput): Promise<Acti
   if (repoIds) setWorkRepositories(id, repoIds);
   revalidatePath("/admin/works");
   revalidatePath("/admin/life");
-  revalidatePath("/works");
   revalidatePath("/life");
   revalidatePath("/");
   return { ok: true, data: work };
@@ -83,7 +81,6 @@ export async function deleteWorkEntry(id: number): Promise<ActionResult> {
   deleteWork(id);
   revalidatePath("/admin/works");
   revalidatePath("/admin/life");
-  revalidatePath("/works");
   revalidatePath("/life");
   revalidatePath("/");
   return { ok: true, data: { id } };

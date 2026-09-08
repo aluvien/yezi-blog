@@ -10,7 +10,7 @@ services:
       # 只允许本机 Nginx/反向代理访问，防止绕过 HTTPS 与真实 IP 边界。
       - "127.0.0.1:3030:3030"
     environment:
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请在 .env 中设置 ADMIN_PASSWORD}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请在 Compose 环境文件中设置 ADMIN_PASSWORD}
       SESSION_COOKIE_SECURE: "true"
       TRUST_PROXY: "true"
       BLOG_ROOT: /app

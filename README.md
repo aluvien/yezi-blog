@@ -427,15 +427,31 @@ Bot 还会在同一 Node 进程中每约 3 秒读取一次管理员指令，不�
 
 项目已配置 `output: 'standalone'`，`Dockerfile` 为多阶段构建：
 
+推荐使用 Compose，并显式通过未提交的环境文件注入管理员密码。Compose 默认只把容器端口发布到宿主机回环地址；若要对外提供服务，应在前面配置 HTTPS 反向代理，不要把 Node 端口直接发布到公网：
+
+```bash
+cp .env.local.example .env.docker
+# 编辑 .env.docker：至少设置随机的 ADMIN_PASSWORD 和正式的 NEXT_PUBLIC_SITE_URL
+openssl rand -base64 32
+docker compose --env-file .env.docker up -d --build
+```
+
+不使用 Compose 时，先构建镜像，再用同样的未提交环境文件运行；下面的端口绑定仍然只允许本机代理访问：
+
 ```bash
 docker build --build-arg NEXT_PUBLIC_SITE_URL=https://your-domain.com -t yezi-blog .
-docker run -d --name yezi-blog -p 3030:3030 \
-  -v blog-data:/app/data \
+docker run -d --name yezi-blog --publish 127.0.0.1:3030:3030 \
+  --env-file .env.docker \
+  --env TRUST_PROXY=true \
+  --env SESSION_COOKIE_SECURE=true \
+  --volume blog-data:/app/data \
   yezi-blog
 ```
 
 注意：
 
+- `ADMIN_PASSWORD` 是生产启动必填项；Compose 对空值会直接失败，standalone 启动脚本也会拒绝无密码启动。密码只放在未提交的环境文件、Docker secret 或外部密钥管理器中，不要写进 `Dockerfile`、命令历史、仓库或镜像层。
+- `docker run` 的 `--publish` 必须保留 `127.0.0.1:` 前缀；若改为 `-p 3030:3030`，应用会暴露到所有网卡。上面的命令假设前面有 HTTPS 反代，因此显式信任其覆盖的代理头并启用 Secure Cookie；直连本机 HTTP 调试时才将两项改为 `false`，不要把容器端口暴露到公网。
 - `better-sqlite3` 是原生模块，镜像内编译，请勿跨平台直接拷贝 `node_modules`。
 - `/app/data`（数据库、上传、引用归档和本地状态）必须整体挂卷持久化，否则容器重建后数据丢失。
 - `NEXT_PUBLIC_SITE_URL` 是构建期内联变量，务必在 `docker build` 时用 `--build-arg` 注入正式域名（见上方示例），否则镜像内为空、SEO 绝对链接会失效；改域名需要重新构建镜像。

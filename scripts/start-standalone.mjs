@@ -39,6 +39,9 @@ restrictFilePermissions(localEnv);
 restrictFilePermissions(fallbackEnv);
 loadEnvFile(localEnv);
 loadEnvFile(fallbackEnv);
+if (process.env.NODE_ENV === "production" && !process.env.ADMIN_PASSWORD?.trim()) {
+  throw new Error("生产环境必须配置 ADMIN_PASSWORD；请通过受保护的环境文件或容器 secret 注入，不要硬编码到镜像");
+}
 if (!process.env.BLOG_ROOT) process.env.BLOG_ROOT = root;
 if (!process.env.PORT) process.env.PORT = "3030";
 if (!process.env.HOSTNAME) process.env.HOSTNAME = "127.0.0.1";

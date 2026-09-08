@@ -42,3 +42,41 @@ test("write hold blocks mutations and known write-on-GET routes but keeps deploy
   assert.equal(proxy(new NextRequest("http://localhost/admin/settings")).status, 503);
   assert.equal(proxy(new NextRequest("http://localhost/api/health/deploy")).status, 200);
 });
+
+test("upload handler preserves the write hold when its large body bypasses Proxy", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-upload-write-hold-"));
+  const guard = path.join(root, "write-hold");
+  const previous = {
+    root: process.env.BLOG_ROOT,
+    database: process.env.BLOG_DB_PATH,
+    hold: process.env.BLOG_DEPLOY_WRITE_HOLD,
+    guard: process.env.BLOG_DEPLOY_WRITE_GUARD_FILE,
+  };
+  fs.writeFileSync(guard, "candidate\n", { mode: 0o600 });
+  process.env.BLOG_ROOT = root;
+  process.env.BLOG_DB_PATH = path.join(root, "data", "blog.db");
+  process.env.BLOG_DEPLOY_WRITE_HOLD = "true";
+  process.env.BLOG_DEPLOY_WRITE_GUARD_FILE = guard;
+
+  const { POST } = await import("../src/app/api/admin/upload/route.ts");
+  const { db } = await import("../src/lib/db.ts");
+  t.after(() => {
+    db.close();
+    for (const [key, value] of Object.entries(previous)) {
+      const environmentKey = {
+        root: "BLOG_ROOT",
+        database: "BLOG_DB_PATH",
+        hold: "BLOG_DEPLOY_WRITE_HOLD",
+        guard: "BLOG_DEPLOY_WRITE_GUARD_FILE",
+      }[key];
+      if (value === undefined) delete process.env[environmentKey];
+      else process.env[environmentKey] = value;
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const response = await POST(new Request("http://localhost/api/admin/upload", { method: "POST" }));
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), { error: "正在完成安全部署，请稍后重试" });
+});

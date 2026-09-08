@@ -13,6 +13,7 @@ import {
   listWorks,
 } from "@/lib/db";
 import type { LifeFeedItem } from "@/lib/db";
+import { PUBLIC_ROUTES } from "@/lib/site-navigation";
 
 export const LIFE_TABS = ["all", "milestones", "works", "github", "references"] as const;
 export type LifeTab = (typeof LIFE_TABS)[number];
@@ -27,7 +28,9 @@ export const LIFE_TAB_LABELS: Record<LifeTab, string> = {
 
 /** 小记各 Tab 的规范地址，供 Tabs 与分享链接复用；未知 type 回落全部。 */
 export function lifeTabHref(type: LifeTab): string {
-  return type === "all" ? "/life" : `/life?type=${type}`;
+  if (type === "all") return PUBLIC_ROUTES.life;
+  if (type === "works") return PUBLIC_ROUTES.works;
+  return `${PUBLIC_ROUTES.life}?type=${type}`;
 }
 
 export function normalizeLifeTab(value: string | undefined): LifeTab {

@@ -11,6 +11,60 @@ export class RequestBodyError extends Error {
   }
 }
 
+/**
+ * Parse multipart form data through a counting stream instead of calling
+ * request.formData() directly. The latter buffers an unbounded chunked body
+ * before the handler can enforce its application limit.
+ */
+export async function readLimitedFormData(request: Request, maxBytes: number, tooLargeMessage = "请求内容过大"): Promise<FormData> {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) throw new RequestBodyError(tooLargeMessage, 413);
+  if (!request.body) throw new RequestBodyError("请求格式错误");
+
+  let size = 0;
+  let oversized = false;
+  const limitedBody = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = request.body!.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          if (!value) continue;
+          size += value.byteLength;
+          if (size > maxBytes) {
+            oversized = true;
+            await reader.cancel();
+            controller.error(new Error("request body exceeds limit"));
+            return;
+          }
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        controller.error(error);
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+
+  try {
+    const limitedRequest = new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: limitedBody,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+    return await limitedRequest.formData();
+  } catch (error) {
+    if (oversized) throw new RequestBodyError(tooLargeMessage, 413);
+    throw error;
+  }
+}
+
 /** Parse a JSON body without allowing an unbounded request to be buffered in memory. */
 export async function readLimitedJson<T = unknown>(request: Request, maxBytes: number): Promise<T> {
   const declared = Number(request.headers.get("content-length"));

@@ -12,6 +12,7 @@ test("builds canonical public content links", () => {
   assert.equal(PUBLIC_ROUTES.post("hello-world"), "/posts/hello-world");
   assert.equal(PUBLIC_ROUTES.post("中文 标题"), "/posts/%E4%B8%AD%E6%96%87%20%E6%A0%87%E9%A2%98");
   assert.equal(PUBLIC_ROUTES.moment(42), "/moments#moment-42");
+  assert.equal(PUBLIC_ROUTES.works, "/life?type=works");
   assert.equal(PUBLIC_ROUTES.category("产品 设计"), "/categories/%E4%BA%A7%E5%93%81%20%E8%AE%BE%E8%AE%A1");
   assert.equal(PUBLIC_ROUTES.tag("随笔"), "/tags/%E9%9A%8F%E7%AC%94");
 });
@@ -33,8 +34,11 @@ test("life is its own section, distinct from works", () => {
   assert.equal(getPublicSection("/life"), "life");
   assert.equal(isPublicNavActive("/life", "life"), true);
   assert.equal(isPublicNavActive("/life?type=works", "life"), true);
+  assert.equal(isPublicNavActive("/life?type=works", "works"), true);
+  assert.equal(isPublicNavActive("/life?type=milestones", "works"), false);
   // 旧地址仍归入 works 栏目，供重定向前的高亮兼容。
   assert.equal(getPublicSection("/works"), "works");
+  assert.equal(isPublicNavActive("/works", "works"), true);
 });
 
 test("groups details and taxonomy pages under articles", () => {
