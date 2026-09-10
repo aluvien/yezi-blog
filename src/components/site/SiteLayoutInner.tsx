@@ -11,6 +11,7 @@ import { ReadingProgress } from "@/components/site/ReadingProgress";
 import { MusicInitializer } from "@/components/site/MusicInitializer";
 import { CodeCopyInitializer } from "@/components/site/CodeCopyInitializer";
 import { SiteArticleReferenceInitializer } from "@/components/site/SiteArticleReferenceInitializer";
+import { SiteInternalLinkInitializer } from "@/components/site/SiteInternalLinkInitializer";
 import { GlobalMusicPlayer } from "@/components/site/GlobalMusicPlayer";
 import { ErrorBoundary } from "@/components/site/ErrorBoundary";
 import { SiteImage } from "@/components/site/SiteImage";
@@ -96,6 +97,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
         </ErrorBoundary>
         <CodeCopyInitializer />
         <SiteArticleReferenceInitializer />
+        <SiteInternalLinkInitializer />
         <ErrorBoundary label="GlobalMusicPlayer">
           <GlobalMusicPlayer
             defaultMusic={siteSettings.default_music?.trim()}
@@ -296,6 +298,7 @@ export function SiteLayoutInner({ children, sidebarData, siteSettings = {}, cate
       </ErrorBoundary>
       <CodeCopyInitializer />
       <SiteArticleReferenceInitializer />
+      <SiteInternalLinkInitializer />
       <ErrorBoundary label="GlobalMusicPlayer">
         <GlobalMusicPlayer
           defaultMusic={siteSettings.default_music?.trim()}
