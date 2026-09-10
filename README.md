@@ -108,9 +108,11 @@ Playwright、性能和 standalone 测试均使用独立的临时 SQLite 数据�
 | `DATA_BACKUP_MIRROR_DIR` | 可选的异机挂载/独立故障域镜像目录，不得放在 `BLOG_ROOT` 内 | 空 |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选，Telegram Bot 通知凭据；用于新评论和 QQ 音乐状态提醒 | 空（不发送） |
 | `TELEGRAM_ADMIN_USER_ID` | 推荐配置的管理员个人 User ID；管理命令、审核和 QQ 登录仅接受该用户的私聊操作 | 空（仅兼容通知 Chat ID 为管理员私聊的旧配置） |
-| `LLM_API_KEY` / `OPENAI_API_KEY` | 可选，文章引用 AI 摘要服务的密钥；兼容 OpenAI Chat Completions 格式 | 空（不生成摘要） |
+| `LLM_API_KEY` / `OPENAI_API_KEY` | 可选，文章引用 AI 摘要和文章 Slug 生成服务的密钥；兼容 OpenAI Chat Completions 格式 | 空（不生成摘要，Slug 使用本地规则兜底） |
 | `LLM_API_URL` | 可选，AI 摘要接口地址，可填服务商根地址、`/v1` 或完整的 Chat Completions 地址 | `https://api.openai.com/v1/chat/completions` |
 | `LLM_MODEL` | 可选，AI 摘要模型名 | `gpt-4o-mini` |
+
+文章编辑器的 Slug 支持两种生成方式：保存新文章或修改文章时，如果 Slug 留空，服务端会先调用上述 LLM；在编辑器 Slug 输入框右侧点击“AI 生成”也可以立即生成并回填。LLM 未配置、超时或返回无效内容时会显示提示，并使用本地拼音规则兜底，避免文章因暂时的 AI 服务异常而无法保存。
 
 ## 音乐功能
 

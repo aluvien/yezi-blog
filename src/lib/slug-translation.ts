@@ -1,7 +1,9 @@
 import { slugify } from "@/lib/slug";
 
 const DEFAULT_LLM_ENDPOINT = "https://api.openai.com/v1/chat/completions";
-const LLM_TIMEOUT_MS = 8_000;
+// 文章标题翻译通常很快，但自建/兼容 OpenAI 的模型首次唤醒可能需要几秒；
+// 留出足够时间避免误判为失败后直接落到拼音 slug。
+const LLM_TIMEOUT_MS = 30_000;
 
 function resolveLlmEndpoint(input: string): string {
   const raw = input.trim() || DEFAULT_LLM_ENDPOINT;
@@ -100,4 +102,25 @@ export async function translateTitleToEnglishSlug(title: string): Promise<string
 /** 测试与调用方共用的安全兜底，确保永远能得到本地可用 slug。 */
 export function localSlugFallback(title: string): string {
   return slugify(title);
+}
+
+export type GeneratedTitleSlug = {
+  slug: string;
+  source: "llm" | "fallback";
+};
+
+/**
+ * 统一文章 slug 的生成入口：优先请求已配置的 LLM，失败或未配置时
+ * 使用本地拼音规则兜底。保存文章和后台手动生成按钮都走这里，避免两
+ * 条路径的行为不一致。
+ */
+export async function generateTitleSlug(title: string): Promise<GeneratedTitleSlug | null> {
+  const source = title.trim();
+  if (!source) return null;
+
+  const translated = await translateTitleToEnglishSlug(source);
+  if (translated) return { slug: translated, source: "llm" };
+
+  const fallback = localSlugFallback(source);
+  return fallback ? { slug: fallback, source: "fallback" } : null;
 }

@@ -20,7 +20,7 @@ import {
 } from "@/lib/article-reference";
 import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
 import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
-import { translateTitleToEnglishSlug } from "@/lib/slug-translation";
+import { generateTitleSlug } from "@/lib/slug-translation";
 import type { ActionResult, PostInput } from "@/lib/actions/posts";
 
 /**
@@ -81,7 +81,7 @@ export async function createPostEntry(data: PostInput): Promise<ActionResult> {
   if (validationError) return { ok: false, error: validationError };
   const referenceSnapshots = data.referenceSnapshots ?? [];
   const content = normalizeMediaShortcodes(compactArticleReferenceMarkers(data.content, referenceSnapshots));
-  const generatedSlug = data.slug.trim() || await translateTitleToEnglishSlug(data.title);
+  const generatedSlug = data.slug.trim() || (await generateTitleSlug(data.title))?.slug;
   let createdPost: ReturnType<typeof getPost>;
   try {
     db.transaction(() => {
@@ -120,7 +120,7 @@ export async function updatePostEntry(id: number, data: PostInput): Promise<Acti
   if (validationError) return { ok: false, error: validationError };
   const referenceSnapshots = data.referenceSnapshots ?? [];
   const content = normalizeMediaShortcodes(compactArticleReferenceMarkers(data.content, referenceSnapshots));
-  const generatedSlug = data.slug.trim() || await translateTitleToEnglishSlug(data.title);
+  const generatedSlug = data.slug.trim() || (await generateTitleSlug(data.title))?.slug;
   let updatedSlug = existing.slug;
   let updatedPost: ReturnType<typeof getPost>;
   try {
