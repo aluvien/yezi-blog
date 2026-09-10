@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /**
@@ -7,6 +8,8 @@ import { useEffect } from "react";
  * 因而第一下轻触只打开提示，短时间内第二下才按普通链接跳转。
  */
 export function SiteArticleReferenceInitializer() {
+  const router = useRouter();
+
   useEffect(() => {
     const TOOLTIP_SELECTOR = ".site-article-reference-tooltip";
     const LINK_SELECTOR = ".site-article-reference-link";
@@ -117,9 +120,36 @@ export function SiteArticleReferenceInitializer() {
       const wrapper = link.closest<HTMLElement>(".site-article-reference");
       if (!wrapper) return;
       const touchInteraction = Date.now() - lastTouchAt < 900 || window.matchMedia("(hover: none)").matches;
-      if (!touchInteraction || wrapper.classList.contains("is-tooltip-open")) return;
+      if (touchInteraction && !wrapper.classList.contains("is-tooltip-open")) {
+        event.preventDefault();
+        open(wrapper);
+        return;
+      }
+
+      // 本站文章引用由 Markdown 输出原生 <a>，不会被 Next <Link> 自动接管。
+      // 普通左键点击改为客户端导航，令布局层的全局播放器在换页时持续挂载；
+      // 新标签、下载与快捷键点击仍完全交给浏览器默认行为。
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        link.target ||
+        link.hasAttribute("download")
+      ) return;
+
+      let destination: URL;
+      try {
+        destination = new URL(link.href, window.location.href);
+      } catch {
+        return;
+      }
+      if (destination.origin !== window.location.origin || !destination.pathname.startsWith("/posts/")) return;
+
       event.preventDefault();
-      open(wrapper);
+      router.push(`${destination.pathname}${destination.search}${destination.hash}`);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
@@ -142,7 +172,7 @@ export function SiteArticleReferenceInitializer() {
       if (positionFrame !== null) window.cancelAnimationFrame(positionFrame);
       if (closeTimer !== null) window.clearTimeout(closeTimer);
     };
-  }, []);
+  }, [router]);
 
   return null;
 }

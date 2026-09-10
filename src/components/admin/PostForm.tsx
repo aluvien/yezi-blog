@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createPostAction, updatePostAction } from "@/lib/actions/posts";
+import { createPostAction, generatePostSlugAction, updatePostAction } from "@/lib/actions/posts";
 import { deleteAttachmentAction } from "@/lib/actions/attachments";
 import type { Attachment, Post } from "@/lib/db";
 import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
@@ -49,6 +49,8 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   const [status, setStatus] = useState<"draft" | "published">(post?.status ?? "draft");
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState("");
+  const [slugNotice, setSlugNotice] = useState("");
+  const [generatingSlug, setGeneratingSlug] = useState(false);
   const [markdownDialog, setMarkdownDialog] = useState<"link" | "image" | "gallery" | null>(null);
   const [musicDialog, setMusicDialog] = useState(false);
   const [videoDialog, setVideoDialog] = useState(false);
@@ -84,6 +86,32 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
       router.push("/admin/posts");
       router.refresh();
     });
+  }
+
+  async function generateSlug() {
+    if (pending || generatingSlug) return;
+    setError("");
+    setSlugNotice("");
+    if (!title.trim()) {
+      setError("请先填写文章标题");
+      return;
+    }
+    setGeneratingSlug(true);
+    try {
+      const result = await generatePostSlugAction(title);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setSlug(result.slug);
+      setSlugNotice(result.source === "llm"
+        ? "已由 AI 生成，可继续编辑"
+        : "AI 暂不可用，已使用本地规则生成；请检查 LLM_API_KEY / OPENAI_API_KEY 配置");
+    } catch {
+      setError("生成 Slug 失败，请稍后重试");
+    } finally {
+      setGeneratingSlug(false);
+    }
   }
 
   function toggleTag(tag: string) {
@@ -376,19 +404,38 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           <label className="mb-1 block text-sm font-medium text-neutral-700">标题</label>
           <input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              setSlugNotice("");
+            }}
             className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
             placeholder="文章标题"
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-neutral-700">Slug（留空自动生成）</label>
-          <input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
-            placeholder="my-first-post"
-          />
+          <label htmlFor="post-slug" className="mb-1 block text-sm font-medium text-neutral-700">Slug（留空自动生成）</label>
+          <div className="flex items-stretch gap-2">
+            <input
+              id="post-slug"
+              value={slug}
+              onChange={(e) => {
+                setSlug(e.target.value);
+                setSlugNotice("");
+              }}
+              className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-base"
+              placeholder="my-first-post"
+            />
+            <button
+              type="button"
+              disabled={pending || generatingSlug}
+              onClick={() => void generateSlug()}
+              className="admin-button admin-button-secondary shrink-0 px-3 py-2 text-sm disabled:opacity-50"
+            >
+              {generatingSlug ? "生成中…" : "AI 生成"}
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-neutral-400">留空保存时自动生成；也可以点击右侧按钮立即生成。</p>
+          {slugNotice && <p role="status" className="mt-1 text-xs text-neutral-500">{slugNotice}</p>}
         </div>
         <div>
         <div className="mb-1 flex items-center justify-between">
