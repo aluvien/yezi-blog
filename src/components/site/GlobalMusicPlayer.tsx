@@ -9,8 +9,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
+  cachedMusicAudioUrl,
   fetchMusicTracks,
   parseMusicSpec,
+  qqMusicMidFromTrackKey,
   resolveMusicCover,
   type MusicTrack,
 } from "@/lib/music";
@@ -159,6 +161,7 @@ export function GlobalMusicPlayer({
     let defaultMusicLoaded = false;
     let defaultMusicLoading: Promise<void> | null = null;
     let cleanupMediaSessionActions: (() => void) | null = null;
+    let cleanupAudioErrorRecovery: (() => void) | null = null;
 
     function updateCurrentTrack(track: MusicTrack | null): void {
       currentTrackRef.current = track;
@@ -529,6 +532,45 @@ export function GlobalMusicPlayer({
             syncMediaSessionPlayback(player.audio, !player.paused);
           });
         });
+        /**
+         * QQ 的播放地址是短时效签名地址：服务端解析成功后，浏览器仍可能在 CDN 处被拒绝
+         * （地址刚好过期，或 CDN 重新校验访客来源）。服务端降级只覆盖“解析这一步失败”，
+         * 覆盖不到这里，所以在媒体元素报错时换用本站降级副本继续播放。
+         * 副本不存在时 type=audio 返回 404，播放器照常表现为无法播放。
+         */
+        const recoverFromCachedAudio = (): void => {
+          if (disposed) return;
+          const index = player.list.index;
+          const track = player.list.audios[index] as MusicTrack | undefined;
+          if (!track) return;
+          const mid = qqMusicMidFromTrackKey(track.key);
+          if (!mid) return;
+          const fallbackUrl = cachedMusicAudioUrl(mid);
+          // 降级副本本身也失败时必须停手，否则会在 error 事件上无限重试。
+          if (track.url === fallbackUrl) return;
+
+          const position = Number.isFinite(player.audio.currentTime) ? player.audio.currentTime : 0;
+          const wasPlaying = !player.paused;
+          track.url = fallbackUrl;
+          const normalized = trackMap.get(trackKey(track));
+          if (normalized) normalized.url = fallbackUrl;
+
+          const restorePosition = (): void => {
+            player.audio.removeEventListener("loadedmetadata", restorePosition);
+            if (position <= 0) return;
+            try {
+              player.audio.currentTime = position;
+            } catch {
+              // 少数容器在元数据就绪前拒绝设置进度，从头播放即可。
+            }
+          };
+          player.audio.addEventListener("loadedmetadata", restorePosition);
+          player.audio.src = fallbackUrl;
+          player.audio.load();
+          if (wasPlaying) void player.audio.play().catch(() => undefined);
+        };
+        player.audio.addEventListener("error", recoverFromCachedAudio);
+        cleanupAudioErrorRecovery = () => player.audio.removeEventListener("error", recoverFromCachedAudio);
 
       } catch {
         // APlayer 初始化异常时降级为"仅静默"：播放器不可用但页面不受影响。
@@ -560,6 +602,8 @@ export function GlobalMusicPlayer({
     return () => {
       disposed = true;
       unlisten?.();
+      cleanupAudioErrorRecovery?.();
+      cleanupAudioErrorRecovery = null;
       cleanupMediaSessionActions?.();
       cleanupMediaSessionActions = null;
       clearMediaSession();

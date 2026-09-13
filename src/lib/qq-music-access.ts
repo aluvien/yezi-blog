@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { db } from "@/lib/db/core";
+import { qqMusicPlaylistIdsForMid } from "@/lib/db/qq-music";
 import { parseMusicSpec, type MusicSpec } from "@/lib/music";
 
 const ACCESS_CACHE_MS = 5_000;
@@ -50,6 +51,18 @@ export function invalidateQQMusicAccessCache(): void {
 
 export function isPublicQQMusicSpec(type: "song" | "playlist", id: string): boolean {
   return accessKeys().has(`${type}:${id}`);
+}
+
+/**
+ * 音频缓存服务的授权判断。
+ *
+ * 歌单里的曲目 mid 通常不会作为独立的 `qqvip:<mid>:song` 出现在正文里，
+ * 只靠 isPublicQQMusicSpec("song") 会把公开歌单的曲目全部拒绝掉，
+ * 因此还要检查该曲目所属的歌单本身是否已被公开内容引用。
+ */
+export function isPublicQQMusicAudio(mid: string): boolean {
+  if (isPublicQQMusicSpec("song", mid)) return true;
+  return qqMusicPlaylistIdsForMid(mid).some((playlistId) => isPublicQQMusicSpec("playlist", playlistId));
 }
 
 /** 所有已保存内容中的歌曲来源；草稿也保留，避免未来发布时重复请求 QQ 音乐。 */

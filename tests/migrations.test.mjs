@@ -27,7 +27,10 @@ test("empty database creates the latest schema and a working FTS index", () => {
     assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'qq_music_metadata'").get());
     assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'qq_music_playlists'").get());
     assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'qq_music_playlist_tracks'").get());
+    assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'qq_music_audio_cache'").get());
+    assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'qq_music_lyric_cache'").get());
     assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_qq_music_playlist_tracks_mid'").get());
+    assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_qq_music_audio_cache_lru'").get());
     assert.ok(temporary.db.prepare("SELECT 1 FROM pragma_table_info('posts') WHERE name = 'status'").get());
     assert.ok(temporary.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_posts_status_time'").get());
 

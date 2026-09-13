@@ -35,6 +35,20 @@ type Playlist = {
   cover: string;
   kind: "created" | "collected" | "search";
 };
+type AudioCacheStats = {
+  enabled: boolean;
+  files: number;
+  totalBytes: number;
+  maxTotalBytes: number;
+  maxFileBytes: number;
+};
+
+/** 后台只展示规模，不需要精确到字节。 */
+function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0 MB";
+  const megabytes = value / (1024 * 1024);
+  return megabytes >= 1024 ? `${(megabytes / 1024).toFixed(2)} GB` : `${megabytes.toFixed(1)} MB`;
+}
 
 type Props = {
   defaultMusic: string;
@@ -68,7 +82,17 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
   const [statusBusy, setStatusBusy] = useState(false);
   const [cacheBusy, setCacheBusy] = useState(false);
   const [cacheMessage, setCacheMessage] = useState("");
+  const [audioCache, setAudioCache] = useState<AudioCacheStats | null>(null);
   const pollingRef = useRef(false);
+
+  const refreshAudioCache = useCallback(async () => {
+    try {
+      setAudioCache(await api<AudioCacheStats>("/api/admin/qq-music?op=audio-cache"));
+    } catch {
+      // 缓存概况只是信息展示，读取失败不应打断登录状态与歌单操作。
+      setAudioCache(null);
+    }
+  }, []);
 
   const refreshStatus = useCallback(async (announce = false) => {
     setStatusBusy(true);
@@ -135,9 +159,12 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
   useEffect(() => {
     // Defer the first request one task so React does not synchronously cascade
     // a state update while mounting this settings form.
-    const timer = window.setTimeout(() => { void refreshStatus(); }, 0);
+    const timer = window.setTimeout(() => {
+      void refreshStatus();
+      void refreshAudioCache();
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [refreshStatus]);
+  }, [refreshStatus, refreshAudioCache]);
 
   useEffect(() => {
     if (!status?.loggedIn) return;
@@ -227,6 +254,7 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
       const result = await api<{
         deleted: number;
         deletedPlaylists: number;
+        removedAudioFiles: number;
         referenced: number;
         referencedPlaylists: number;
       }>("/api/admin/qq-music", {
@@ -236,13 +264,16 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
       });
       const removedPlaylists = Number(result.deletedPlaylists ?? 0);
       const retainedPlaylists = Number(result.referencedPlaylists ?? 0);
+      const removedAudio = Number(result.removedAudioFiles ?? 0);
+      const audioNote = removedAudio > 0 ? `，并删除 ${removedAudio} 份降级音频副本` : "";
       setCacheMessage(result.deleted > 0 || removedPlaylists > 0
-        ? `已清理 ${result.deleted} 条歌曲缓存和 ${removedPlaylists} 个歌单快照；保留 ${result.referenced} 首单曲及 ${retainedPlaylists} 个正在引用的歌单。`
+        ? `已清理 ${result.deleted} 条歌曲缓存和 ${removedPlaylists} 个歌单快照${audioNote}；保留 ${result.referenced} 首单曲及 ${retainedPlaylists} 个正在引用的歌单。`
         : `没有发现未引用缓存；当前保留 ${result.referenced} 首单曲及 ${retainedPlaylists} 个正在引用的歌单。`);
     } catch (error) {
       setCacheMessage(error instanceof Error ? error.message : "清理歌曲缓存失败");
     } finally {
       setCacheBusy(false);
+      void refreshAudioCache();
     }
   }
 
@@ -371,6 +402,11 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
           </button>
         </div>
         {cacheMessage && <p className="mt-2 text-xs leading-5 text-neutral-500">{cacheMessage}</p>}
+        <p className="mt-2 text-xs leading-5 text-neutral-500">
+          {audioCache
+            ? `播放授权降级副本：${audioCache.enabled ? `${audioCache.files} 首 / ${formatBytes(audioCache.totalBytes)}（上限 ${formatBytes(audioCache.maxTotalBytes)}）` : "已关闭"}。授权正常时播放过的歌曲会自动缓存到服务器，Cookie 失效时改用它继续播放；重启登录后无需手动清理。`
+            : "正在读取播放授权降级副本状态…"}
+        </p>
       </div>
       {message && <p className={`mt-3 text-xs leading-5 ${status?.available === false ? "text-red-600" : "text-neutral-500"}`}>{message}</p>}
     </div>

@@ -199,3 +199,16 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
 export function qqMusicHealthStatusLabel(status: QQMusicHealthStatus): string {
   return statusLabel(status);
 }
+
+/**
+ * 上一次健康检查是否已经证明登录态不可用。
+ *
+ * 音频缓存的降级播放用它做短路：Cookie 失效时实时解析必然失败，而
+ * qqMusicRequest 的超时是 12 秒，不短路会让访客白等一次注定失败的请求。
+ * 只认「未登录」和「Cookie 已失效」两种状态；服务不可用属于另一类故障，
+ * 那条路径通常立即失败，交给正常的 try/fallback 处理即可。
+ */
+export function qqMusicSessionKnownInvalid(): boolean {
+  const status = getQQMusicHealthAlertState().lastStatus;
+  return status === "missing_session" || status === "expired";
+}

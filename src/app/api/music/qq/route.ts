@@ -1,15 +1,27 @@
+import fs from "node:fs";
+import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
 import {
+  getQQMusicLyricCache,
   getQQMusicMetadata,
   getQQMusicPlaylistMetadata,
+  upsertQQMusicLyricCache,
   upsertQQMusicMetadata,
   upsertQQMusicPlaylistMetadata,
 } from "@/lib/db";
 import { getClientIp, hashIp } from "@/lib/request";
 import { createSlidingWindowLimiter } from "@/lib/rate-limit";
-import { isPublicQQMusicSpec, lyricUrl, verifyLyricAuthorization } from "@/lib/qq-music-access";
+import { isPublicQQMusicAudio, isPublicQQMusicSpec, lyricUrl, verifyLyricAuthorization } from "@/lib/qq-music-access";
+import { qqMusicSessionKnownInvalid } from "@/lib/qq-music-health";
+import {
+  cachedAudioUrl,
+  hasCachedAudio,
+  openCachedAudioFile,
+  scheduleAudioCacheWarm,
+} from "@/lib/qq-music-audio-cache";
 import { normalizeMusicDisplayText } from "@/lib/music";
+import { parseByteRange } from "@/lib/byte-range";
 import { BoundedSingleFlight } from "@/lib/bounded-single-flight";
 import {
   findRecord,
@@ -30,6 +42,11 @@ export const dynamic = "force-dynamic";
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 12;
 const allowQQMusicRequest = createSlidingWindowLimiter({ windowMs: WINDOW_MS, maxRequests: MAX_REQUESTS, maxKeys: 5_000 });
+// 缓存音频按 Range 分段返回：拖动进度条会连续产生多次请求，因此单独给一个更宽松的
+// 额度，不与播放解析共享 12 次/分钟的预算，否则 seek 会被自己的限流打断。
+const MAX_AUDIO_REQUESTS = 240;
+const allowQQMusicAudioRequest = createSlidingWindowLimiter({ windowMs: WINDOW_MS, maxRequests: MAX_AUDIO_REQUESTS, maxKeys: 5_000 });
+const LYRIC_HEADERS = { "content-type": "text/plain; charset=utf-8", "cache-control": "private, max-age=300" };
 const RESOLUTION_TIMEOUT_MS = 25_000;
 const FAILURE_CACHE_MS = 15_000;
 const MAX_CONCURRENT_RESOLUTIONS = 4;
@@ -41,6 +58,43 @@ const expensiveResolution = new BoundedSingleFlight({
 
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status, headers: { "cache-control": "no-store" } });
+}
+
+/**
+ * 输出本地缓存的音频字节。
+ *
+ * 必须有 Range 支持：iOS Safari 对没有 206 / Accept-Ranges 的音频可能直接不出声，
+ * 桌面端也会失去拖动进度条的能力。这与 /uploads 的整文件流式输出不同。
+ */
+async function serveCachedAudio(request: Request, mid: string): Promise<Response> {
+  const file = openCachedAudioFile(mid);
+  if (!file) return jsonError("缓存音频不可用", 404);
+  const headers: Record<string, string> = {
+    "content-type": file.mime,
+    "accept-ranges": "bytes",
+    // 与元数据接口保持一致：授权相关资源只交给浏览器自己缓存，不让中间层留存。
+    "cache-control": "private, max-age=86400",
+    etag: file.etag,
+    "last-modified": file.lastModified.toUTCString(),
+  };
+  if (request.headers.get("if-none-match") === file.etag) {
+    return new Response(null, { status: 304, headers });
+  }
+  const range = parseByteRange(request.headers.get("range"), file.size);
+  if (range === "unsatisfiable") {
+    return new Response(null, { status: 416, headers: { ...headers, "content-range": `bytes */${file.size}` } });
+  }
+  const stream = Readable.toWeb(
+    fs.createReadStream(file.absolutePath, range ? { start: range.start, end: range.end } : undefined),
+  ) as ReadableStream<Uint8Array>;
+  return new Response(stream, {
+    status: range ? 206 : 200,
+    headers: {
+      ...headers,
+      "content-length": String(range ? range.end - range.start + 1 : file.size),
+      ...(range ? { "content-range": `bytes ${range.start}-${range.end}/${file.size}` } : {}),
+    },
+  });
 }
 
 function asRecord(value: unknown): JsonRecord | null {
@@ -146,6 +200,18 @@ function cachedPlaylistMetadata(playlistId: string) {
       key: `qqvip:${track.mid}`,
     })),
   };
+}
+
+/**
+ * 授权失效时的降级响应：把本站已缓存的音频字节地址交给播放器。
+ *
+ * 展示信息仍然来自持久化元数据，因此掉登录态后歌名、歌手和封面都不会消失。
+ * 只在确实存在可用副本时返回非空，调用方据此决定是降级还是照常报错。
+ */
+function degradedAudioTrack(mid: string) {
+  if (!openCachedAudioFile(mid)) return null;
+  const info = cachedTrackMetadata(mid) ?? { name: "QQ 音乐", artist: "", cover: "", key: `qqvip:${mid}` };
+  return { ...info, url: cachedAudioUrl(mid), lrc: lyricUrl(mid), cached: true };
 }
 
 /**
@@ -281,15 +347,33 @@ async function resolvePlaylistMetadata(playlistId: string, signal: AbortSignal) 
   return cachePlaylistSongs(playlistId, songs);
 }
 
-type ResolvedPlaylistTrack = ReturnType<typeof trackInfo> & { url: string; lrc: string };
+type ResolvedPlaylistTrack = ReturnType<typeof trackInfo> & { url: string; lrc: string; cached?: boolean };
 
 async function resolvePlaylistTrack(song: JsonRecord, signal: AbortSignal): Promise<ResolvedPlaylistTrack | null> {
   const mid = getRecordString(song, ["songmid", "mid", "songMid", "songid", "songId"]);
   if (!/^[A-Za-z0-9_-]{4,80}$/.test(mid)) return null;
+
+  /** 授权失效时的降级：用本站缓存的音频字节继续填充歌单。 */
+  const degradedTrack = (): ResolvedPlaylistTrack | null => {
+    if (!openCachedAudioFile(mid)) return null;
+    const cached = cachedTrackMetadata(mid);
+    const metadata = cached ?? trackInfo({ data: song }, mid);
+    if (!cached) cacheTrackMetadata(mid, metadata);
+    return { ...metadata, url: cachedAudioUrl(mid), lrc: lyricUrl(mid), cached: true };
+  };
+
+  // 健康检查已经证明登录态失效且本地有副本时直接降级，省掉一次注定失败的 12 秒请求。
+  if (qqMusicSessionKnownInvalid() && hasCachedAudio(mid)) {
+    const fallback = degradedTrack();
+    if (fallback) return fallback;
+  }
+
   try {
     const raw = await qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" }, signal });
     const url = playbackUrl(raw);
-    if (!url) return null;
+    if (!url) throw new Error("播放地址不可用");
+    // 正常路径始终实时走 QQ；解析成功时顺手留一份降级副本。
+    scheduleAudioCacheWarm(mid, url);
     const cached = cachedTrackMetadata(mid);
     const metadata = cached ?? trackInfo({ data: song }, mid);
     if (!cached) cacheTrackMetadata(mid, metadata);
@@ -299,8 +383,8 @@ async function resolvePlaylistTrack(song: JsonRecord, signal: AbortSignal): Prom
       lrc: lyricUrl(mid),
     };
   } catch {
-    // 单首歌曲没有播放权限时跳过，不影响歌单中其他歌曲继续播放。
-    return null;
+    // 单首歌曲没有播放权限时先降级到本地缓存；仍不可用才跳过，不影响歌单其他歌曲。
+    return degradedTrack();
   }
 }
 
@@ -387,15 +471,20 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const kind = url.searchParams.get("type") ?? "track";
   const identifier = (url.searchParams.get("id") ?? url.searchParams.get("mid") ?? "").trim();
-  if (!["track", "playlist", "playlist-metadata", "lyric", "song", "metadata"].includes(kind)) return jsonError("请求类型无效", 400);
+  if (!["track", "playlist", "playlist-metadata", "lyric", "song", "metadata", "audio"].includes(kind)) return jsonError("请求类型无效", 400);
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(identifier)) return jsonError(kind.startsWith("playlist") ? "歌单标识无效" : "歌曲标识无效", 400);
   const admin = await requireAdminApi();
   const publicType = kind.startsWith("playlist") ? "playlist" : "song";
   if (kind === "lyric") {
     const token = url.searchParams.get("token") ?? "";
     if (!admin && !verifyLyricAuthorization(identifier, token)) return jsonError("歌词授权无效或已过期", 403);
-  } else if (!admin && !isPublicQQMusicSpec(publicType, identifier)) {
+  } else if (!admin && !(kind === "audio" ? isPublicQQMusicAudio(identifier) : isPublicQQMusicSpec(publicType, identifier))) {
     return jsonError("音乐未在公开内容中授权", 403);
+  }
+  // 缓存音频的分段请求不占用 QQ 解析额度，否则拖动进度条会被自己的限流打断。
+  if (kind === "audio") {
+    if (!allowQQMusicAudioRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);
+    return serveCachedAudio(request, identifier);
   }
   if (kind === "metadata") {
     const cached = cachedTrackMetadata(identifier);
@@ -434,22 +523,54 @@ export async function GET(request: Request) {
     const mid = identifier;
     if (!/^[A-Za-z0-9_-]{4,80}$/.test(mid)) return jsonError("歌曲标识无效", 400);
     if (kind === "lyric") {
-      const lyric = await expensiveResolution.run(`lyric:${mid}`, async (signal) => {
-        const raw = await qqMusicRequest("/getLyric", { query: { songmid: mid, isFormat: "1" }, signal });
-        return findString(unwrapData(raw), ["lyric", "lrc"]).slice(0, 512 * 1024);
-      });
-      return new Response(lyric, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "private, max-age=300" } });
+      const cachedLyric = getQQMusicLyricCache(mid);
+      // 歌词无法从音频字节里恢复，授权失效时只能靠这份文本缓存续上。
+      if (qqMusicSessionKnownInvalid() && cachedLyric) {
+        return new Response(cachedLyric, { headers: LYRIC_HEADERS });
+      }
+      let lyric: string;
+      try {
+        lyric = await expensiveResolution.run(`lyric:${mid}`, async (signal) => {
+          const raw = await qqMusicRequest("/getLyric", { query: { songmid: mid, isFormat: "1" }, signal });
+          return findString(unwrapData(raw), ["lyric", "lrc"]).slice(0, 512 * 1024);
+        });
+      } catch (error) {
+        if (cachedLyric) return new Response(cachedLyric, { headers: LYRIC_HEADERS });
+        throw error;
+      }
+      if (lyric) upsertQQMusicLyricCache(mid, lyric);
+      return new Response(lyric, { headers: LYRIC_HEADERS });
     }
-    const track = await expensiveResolution.run(`track:${mid}`, async (signal) => {
-      const cached = cachedTrackMetadata(mid);
-      const [info, playRaw] = await Promise.all([
-        cached ? Promise.resolve(cached) : resolveTrackMetadata(mid, signal),
-        qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" }, signal }),
-      ]);
-      const audio = playbackUrl(playRaw);
-      if (!audio) throw new Error("播放地址不可用");
-      return { ...info, url: audio, lrc: lyricUrl(mid) };
-    });
+    // 健康检查已证明登录态失效且本地有副本时直接降级，省掉一次注定失败的 12 秒请求。
+    if (qqMusicSessionKnownInvalid() && hasCachedAudio(mid)) {
+      const degraded = degradedAudioTrack(mid);
+      if (degraded) {
+        console.warn(`[qq-music] track ${mid} served from local audio cache`);
+        return NextResponse.json(degraded, { headers: { "cache-control": "private, max-age=60" } });
+      }
+    }
+    let track;
+    try {
+      track = await expensiveResolution.run(`track:${mid}`, async (signal) => {
+        const cached = cachedTrackMetadata(mid);
+        const [info, playRaw] = await Promise.all([
+          cached ? Promise.resolve(cached) : resolveTrackMetadata(mid, signal),
+          qqMusicRequest("/getMusicPlay", { query: { songmid: mid, quality: "320" }, signal }),
+        ]);
+        const audio = playbackUrl(playRaw);
+        if (!audio) throw new Error("播放地址不可用");
+        // 正常播放始终实时走 QQ；只在解析成功时顺手留一份降级副本。
+        scheduleAudioCacheWarm(mid, audio);
+        return { ...info, url: audio, lrc: lyricUrl(mid) };
+      });
+    } catch (error) {
+      const degraded = degradedAudioTrack(mid);
+      if (degraded) {
+        console.warn(`[qq-music] track ${mid} served from local audio cache`);
+        return NextResponse.json(degraded, { headers: { "cache-control": "private, max-age=60" } });
+      }
+      throw error;
+    }
     return NextResponse.json(track, {
       headers: { "cache-control": "private, max-age=120" },
     });
