@@ -19,6 +19,7 @@ import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
 import { inspectQQMusicHealth, qqMusicHealthStatusLabel } from "@/lib/qq-music-health";
 import { cleanupUnusedQQMusicCache, upsertQQMusicMetadata } from "@/lib/db";
 import { listReferencedQQMusicPlaylistIds, listReferencedQQMusicSongIds } from "@/lib/qq-music-access";
+import { qqMusicAudioCacheStats, removeCachedAudioFiles } from "@/lib/qq-music-audio-cache";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
 import {
   QQ_LOGIN_SOURCE,
@@ -96,6 +97,9 @@ export async function GET(request: Request) {
       validateNativeQQMusicRuntime();
       return noCache({ ready: true });
     }
+    if (op === "audio-cache") {
+      return noCache(qqMusicAudioCacheStats());
+    }
     if (op === "search") {
       const key = (url.searchParams.get("q") ?? "").trim().slice(0, 80);
       const type = url.searchParams.get("type") === "playlist" ? "playlist" : "song";
@@ -162,9 +166,13 @@ export async function POST(request: Request) {
     const referencedSongs = listReferencedQQMusicSongIds();
     const referencedPlaylists = listReferencedQQMusicPlaylistIds();
     const deleted = cleanupUnusedQQMusicCache(referencedSongs, referencedPlaylists);
+    // 音频索引行已经被清理删掉，必须按清理返回的文件名删磁盘文件；
+    // 此时再按 mid 反查文件名已经查不到了，会把文件留成孤儿。
+    const removedFiles = removeCachedAudioFiles(deleted.removedAudioFiles);
     return noCache({
       deleted: deleted.songs,
       deletedPlaylists: deleted.playlists,
+      removedAudioFiles: removedFiles,
       referenced: referencedSongs.size,
       referencedPlaylists: referencedPlaylists.size,
     });

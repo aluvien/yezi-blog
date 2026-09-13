@@ -356,6 +356,33 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    // 登录授权失效时，站内仍应能播放已经缓存过的音频；字节存 data/qq-music-audio/，
+    // 这里只存文件元信息用于容量淘汰与孤儿回收。歌词文本单独缓存，因为歌词无法从
+    // 音频字节中恢复，而授权失效后 /getLyric 同样会失败。
+    version: 17,
+    name: "qq-music-audio-cache",
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS qq_music_audio_cache (
+          mid TEXT PRIMARY KEY,
+          file_name TEXT NOT NULL,
+          mime TEXT NOT NULL DEFAULT 'audio/mpeg',
+          bytes INTEGER NOT NULL DEFAULT 0,
+          etag TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          last_hit_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS qq_music_lyric_cache (
+          mid TEXT PRIMARY KEY,
+          lyric TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_qq_music_audio_cache_lru
+          ON qq_music_audio_cache (last_hit_at ASC);
+      `);
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

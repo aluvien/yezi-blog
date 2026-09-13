@@ -123,10 +123,11 @@ test("QQ music song and playlist metadata persists independently from playback U
   assert.equal(listReferencedQQMusicSongIds().has("DraftSong01"), true);
   assert.equal(listReferencedQQMusicPlaylistIds().has("MomentList01"), true);
   assert.equal(listReferencedQQMusicPlaylistIds().has("DefaultList01"), true);
-  assert.deepEqual(
-    cleanupUnusedQQMusicCache(listReferencedQQMusicSongIds(), listReferencedQQMusicPlaylistIds()),
-    { songs: 2, playlists: 1 },
-  );
+  const cleaned = cleanupUnusedQQMusicCache(listReferencedQQMusicSongIds(), listReferencedQQMusicPlaylistIds());
+  assert.equal(cleaned.songs, 2);
+  assert.equal(cleaned.playlists, 1);
+  // removedSongIds 供调用方清理磁盘上的降级音频副本；顺序由 SQLite 扫描决定。
+  assert.deepEqual([...cleaned.removedSongIds].sort(), ["UnusedListSong01", "UnusedSong01"]);
   assert.equal(getQQMusicMetadata("UnusedSong01"), null);
   assert.equal(getQQMusicMetadata("UnusedListSong01"), null);
   assert.ok(getQQMusicMetadata("PlaylistSong01"));

@@ -236,6 +236,23 @@ export const BASE_SCHEMA_SQL = `
     FOREIGN KEY (playlist_id) REFERENCES qq_music_playlists(playlist_id) ON DELETE CASCADE,
     FOREIGN KEY (mid) REFERENCES qq_music_metadata(mid) ON DELETE RESTRICT
   );
+  -- 音频字节缓存的索引：字节本体在 data/qq-music-audio/，这里只记录文件元信息，
+  -- 便于按容量淘汰与孤儿文件回收。播放 URL 依然不落库（它是短时效签名地址）。
+  CREATE TABLE IF NOT EXISTS qq_music_audio_cache (
+    mid TEXT PRIMARY KEY,
+    file_name TEXT NOT NULL,
+    mime TEXT NOT NULL DEFAULT 'audio/mpeg',
+    bytes INTEGER NOT NULL DEFAULT 0,
+    etag TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    last_hit_at TEXT NOT NULL
+  );
+  -- 歌词是授权失效降级时唯一无法从音频字节里恢复的部分，因此单独持久化文本。
+  CREATE TABLE IF NOT EXISTS qq_music_lyric_cache (
+    mid TEXT PRIMARY KEY,
+    lyric TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -263,6 +280,9 @@ export const BASE_SCHEMA_SQL = `
 export const INDEX_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_qq_music_playlist_tracks_mid
     ON qq_music_playlist_tracks (mid);
+  -- LRU 淘汰按最后一次命中时间排序；音频缓存容量统计与回收都依赖这个索引。
+  CREATE INDEX IF NOT EXISTS idx_qq_music_audio_cache_lru
+    ON qq_music_audio_cache (last_hit_at ASC);
   CREATE INDEX IF NOT EXISTS idx_article_reference_archive_jobs_state_time
     ON article_reference_archive_jobs (state, updated_at ASC);
   CREATE INDEX IF NOT EXISTS idx_article_reference_archive_jobs_url

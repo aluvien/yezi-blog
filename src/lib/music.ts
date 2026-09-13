@@ -196,6 +196,22 @@ export function resolveMusicCover(cover: string | null | undefined, fallback = "
   return compactMusicCoverUrl(cover?.trim() ?? "") || resolvedFallback;
 }
 
+/** 从曲目标识里取出 QQ 歌曲 mid；非 qqvip 曲目（或歌单兜底 key）返回空串。 */
+export function qqMusicMidFromTrackKey(key: string | null | undefined): string {
+  const match = (key ?? "").trim().match(/^qqvip:([A-Za-z0-9_-]{4,80})$/);
+  return match ? match[1] : "";
+}
+
+/**
+ * 站内降级音频地址。
+ *
+ * 只在浏览器直接播放 QQ CDN 地址失败时使用：服务端已经把这首歌的字节缓存在
+ * 本站（授权正常时预热），因此这条路不依赖当前登录态是否有效。
+ */
+export function cachedMusicAudioUrl(mid: string): string {
+  return `/api/music/qq?id=${encodeURIComponent(mid)}&type=audio`;
+}
+
 /** 获取 QQ VIP 单曲或歌单，所有入口统一走本站 QQ 音乐适配器。 */
 export async function fetchMusicTracks(spec: MusicSpec): Promise<MusicTrack[]> {
   if (spec.type !== "song" && spec.type !== "playlist") throw new Error("QQ 音乐登录播放暂支持单曲或歌单");

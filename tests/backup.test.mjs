@@ -110,6 +110,9 @@ test("encrypted complete backup contains persistent data and only the online SQL
   fs.writeFileSync(path.join(tempRoot, "data", "reference-archives", "entry", "reader.md"), "reader");
   fs.writeFileSync(path.join(tempRoot, "data", "qq-music-session.json"), "{\"cookie\":\"encrypted-at-rest-in-backup\"}");
   fs.writeFileSync(path.join(tempRoot, "data", "telegram-bot-state.json"), "{\"offset\":42}");
+  // 音频降级缓存是可再生的派生数据，必须排除在完整备份之外。
+  fs.mkdirSync(path.join(tempRoot, "data", "qq-music-audio"), { recursive: true });
+  fs.writeFileSync(path.join(tempRoot, "data", "qq-music-audio", "CacheMid01.m4a"), "audio");
   process.env.DATA_BACKUP_KEY = Buffer.alloc(32, 7).toString("base64");
   process.env.DATA_BACKUP_MIRROR_DIR = mirrorRoot;
 
@@ -125,4 +128,5 @@ test("encrypted complete backup contains persistent data and only the online SQL
     "data/uploads/202608/photo.png",
   ]);
   assert.equal(checked.entries.some((name) => /blog\.db-(?:wal|shm)$/.test(name)), false);
+  assert.equal(checked.entries.some((name) => name.startsWith("data/qq-music-audio/")), false);
 });
