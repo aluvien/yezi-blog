@@ -29,7 +29,11 @@ export function getMusicLyrics(track: LyricTrack, sourceOverride?: string): Prom
       .then((response) => response.ok ? response.text() : "")
   )
     .then((text) => text ? parseLrc(text) : [])
-    .catch(() => []);
+    .catch(() => [])
+    .then((lines) => {
+      if (lines.length === 0) lyricPromises.delete(key);
+      return lines;
+    });
   lyricPromises.set(key, request);
   return request;
 }

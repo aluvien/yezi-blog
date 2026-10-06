@@ -189,7 +189,8 @@ export function GlobalMusicPlayer({
       const normalized = trackMap.get(trackKey(audio));
       const source = (normalized?.lrc || audio.lrc || "").trim();
       const identity = `${trackKey(audio)}\u0000${source}`;
-      if (lyricSourceByIndex.get(index) === identity) return;
+      if (lyricSourceByIndex.get(index) === identity
+        && (!lyricReadyByIndex.get(index) || (lyricLinesByIndex.get(index)?.length ?? 0) > 0 || !source)) return;
       lyricSourceByIndex.set(index, identity);
       lyricReadyByIndex.set(index, false);
       lyricLinesByIndex.delete(index);
