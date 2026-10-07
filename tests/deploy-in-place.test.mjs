@@ -125,6 +125,7 @@ if(args[1]==="backup") {
  fs.mkdirSync(path.join(root,".next","standalone"),{recursive:true});
  fs.copyFileSync(path.join(root,"scripts","start-standalone.mjs"),path.join(root,".next","standalone","server.js"));
  fs.writeFileSync(path.join(root,".next","version"),"new");
+ if(process.env.TEST_BAD_IMAGE_CACHE==="true") {fs.mkdirSync(path.join(root,".next","standalone",".next","cache"),{recursive:true});fs.writeFileSync(path.join(root,".next","standalone",".next","cache","images"),"not a directory");}
 } else process.exit(2);
 `, { mode: 0o700 });
   t.after(async () => {
@@ -146,7 +147,11 @@ function deploy(env) { return deployInPlace({ env, healthAttempts: 40, healthInt
 
 test("terminal update fast-forwards main, rebuilds in place and restarts the existing standalone PM2 process", async (t) => {
   const f = await fixture(t);
+  const imageCache = path.join(f.root, ".next", "standalone", ".next", "cache", "images", "cached-variant");
+  fs.mkdirSync(imageCache, { recursive: true });
+  fs.writeFileSync(path.join(imageCache, "optimized.webp"), "existing optimized bytes");
   await deploy(f.env);
+  assert.equal(fs.readFileSync(path.join(imageCache, "optimized.webp"), "utf8"), "existing optimized bytes");
   assert.equal(f.git("rev-parse", "HEAD"), f.latest);
   assert.equal(fs.readFileSync(path.join(f.root, "data", "deploy-commit"), "utf8").trim(), f.latest);
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "data", "deploy-status.json"))).status, "success");
@@ -327,5 +332,20 @@ test("a build failure preserves writes made by the live site during preparation"
   await assert.rejects(deploy({ ...f.env, TEST_BUILD_FAIL: "true", TEST_CONCURRENT_WRITE: "true" }));
   assert.equal(fs.readFileSync(path.join(f.root, "data", "blog.db"), "utf8"), "user write during build");
   assert.equal((await fetch(f.env.DEPLOY_HEALTH_URL)).status, 200);
+  assert.ok(!f.events().some(e => e.command === "pm2" && e.args[0] !== "jlist"));
+});
+
+
+test("an image-cache copy failure leaves the original site and cache online", async (t) => {
+  const f = await fixture(t);
+  const cache = path.join(f.root, ".next", "standalone", ".next", "cache", "images");
+  fs.mkdirSync(cache, { recursive: true });
+  fs.writeFileSync(path.join(cache, "cached-image"), "keep");
+  const pid = JSON.parse(fs.readFileSync(f.env.TEST_STATE)).pid;
+  await assert.rejects(deploy({ ...f.env, TEST_BAD_IMAGE_CACHE: "true" }));
+  assert.equal((await fetch(f.env.DEPLOY_HEALTH_URL)).status, 200);
+  assert.equal(JSON.parse(fs.readFileSync(f.env.TEST_STATE)).pid, pid);
+  assert.equal(fs.readFileSync(path.join(cache, "cached-image"), "utf8"), "keep");
+  assert.equal(f.git("rev-parse", "HEAD"), f.old);
   assert.ok(!f.events().some(e => e.command === "pm2" && e.args[0] !== "jlist"));
 });
