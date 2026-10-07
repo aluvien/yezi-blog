@@ -4,8 +4,12 @@ import path from "node:path";
 import { defineConfig } from "@playwright/test";
 
 const e2eRoot = path.join(os.tmpdir(), "yezi-blog-playwright");
-fs.rmSync(e2eRoot, { recursive: true, force: true });
-fs.mkdirSync(e2eRoot, { recursive: true });
+// Playwright workers reload this config after the web server has opened its DB.
+// Clean only in the coordinator, or the live SQLite file is unlinked mid-test.
+if (process.env.TEST_WORKER_INDEX === undefined) {
+  fs.rmSync(e2eRoot, { recursive: true, force: true });
+  fs.mkdirSync(e2eRoot, { recursive: true });
+}
 
 export default defineConfig({
   testDir: "./e2e",
