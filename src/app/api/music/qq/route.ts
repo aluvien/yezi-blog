@@ -55,6 +55,36 @@ const expensiveResolution = new BoundedSingleFlight({
   failureCacheMs: FAILURE_CACHE_MS,
   maxConcurrent: MAX_CONCURRENT_RESOLUTIONS,
 });
+const lyricWarmTasks = new Map<string, Promise<void>>();
+const lyricWarmQueue = new Set<string>();
+
+async function fetchAndCacheLyric(mid: string, signal?: AbortSignal): Promise<string> {
+  const raw = await qqMusicRequest("/getLyric", { query: { songmid: mid, isFormat: "1" }, signal });
+  const lyric = findString(unwrapData(raw), ["lyric", "lrc"]).slice(0, 512 * 1024);
+  if (lyric) upsertQQMusicLyricCache(mid, lyric);
+  return lyric;
+}
+
+function drainLyricCacheWarmQueue(): void {
+  while (lyricWarmTasks.size < MAX_CONCURRENT_RESOLUTIONS && lyricWarmQueue.size > 0) {
+    const mid = lyricWarmQueue.values().next().value as string;
+    lyricWarmQueue.delete(mid);
+    const task = fetchAndCacheLyric(mid)
+      .then(() => undefined)
+      .catch(() => undefined)
+      .finally(() => {
+        lyricWarmTasks.delete(mid);
+        drainLyricCacheWarmQueue();
+      });
+    lyricWarmTasks.set(mid, task);
+  }
+}
+
+function scheduleLyricCacheWarm(mid: string): void {
+  if (getQQMusicLyricCache(mid) || lyricWarmTasks.has(mid) || lyricWarmQueue.has(mid) || lyricWarmQueue.size >= 100) return;
+  lyricWarmQueue.add(mid);
+  drainLyricCacheWarmQueue();
+}
 
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status, headers: { "cache-control": "no-store" } });
@@ -374,6 +404,7 @@ async function resolvePlaylistTrack(song: JsonRecord, signal: AbortSignal): Prom
     if (!url) throw new Error("播放地址不可用");
     // 正常路径始终实时走 QQ；解析成功时顺手留一份降级副本。
     scheduleAudioCacheWarm(mid, url);
+    scheduleLyricCacheWarm(mid);
     const cached = cachedTrackMetadata(mid);
     const metadata = cached ?? trackInfo({ data: song }, mid);
     if (!cached) cacheTrackMetadata(mid, metadata);
@@ -477,7 +508,7 @@ export async function GET(request: Request) {
   const publicType = kind.startsWith("playlist") ? "playlist" : "song";
   if (kind === "lyric") {
     const token = url.searchParams.get("token") ?? "";
-    if (!admin && !verifyLyricAuthorization(identifier, token)) return jsonError("歌词授权无效或已过期", 403);
+    if (!admin && !verifyLyricAuthorization(identifier, token) && !isPublicQQMusicAudio(identifier)) return jsonError("歌词授权无效或已过期", 403);
   } else if (!admin && !(kind === "audio" ? isPublicQQMusicAudio(identifier) : isPublicQQMusicSpec(publicType, identifier))) {
     return jsonError("音乐未在公开内容中授权", 403);
   }
@@ -485,6 +516,10 @@ export async function GET(request: Request) {
   if (kind === "audio") {
     if (!allowQQMusicAudioRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);
     return serveCachedAudio(request, identifier);
+  }
+  if (kind === "lyric") {
+    const cachedLyric = getQQMusicLyricCache(identifier);
+    if (cachedLyric) return new Response(cachedLyric, { headers: LYRIC_HEADERS });
   }
   if (kind === "metadata") {
     const cached = cachedTrackMetadata(identifier);
@@ -531,15 +566,13 @@ export async function GET(request: Request) {
       let lyric: string;
       try {
         lyric = await expensiveResolution.run(`lyric:${mid}`, async (signal) => {
-          const raw = await qqMusicRequest("/getLyric", { query: { songmid: mid, isFormat: "1" }, signal });
-          return findString(unwrapData(raw), ["lyric", "lrc"]).slice(0, 512 * 1024);
+          return fetchAndCacheLyric(mid, signal);
         });
       } catch (error) {
         if (cachedLyric) return new Response(cachedLyric, { headers: LYRIC_HEADERS });
         throw error;
       }
-      if (lyric) upsertQQMusicLyricCache(mid, lyric);
-      return new Response(lyric, { headers: LYRIC_HEADERS });
+      return new Response(lyric || cachedLyric || "", { headers: LYRIC_HEADERS });
     }
     // 健康检查已证明登录态失效且本地有副本时直接降级，省掉一次注定失败的 12 秒请求。
     if (qqMusicSessionKnownInvalid() && hasCachedAudio(mid)) {
@@ -561,6 +594,7 @@ export async function GET(request: Request) {
         if (!audio) throw new Error("播放地址不可用");
         // 正常播放始终实时走 QQ；只在解析成功时顺手留一份降级副本。
         scheduleAudioCacheWarm(mid, audio);
+        scheduleLyricCacheWarm(mid);
         return { ...info, url: audio, lrc: lyricUrl(mid) };
       });
     } catch (error) {
