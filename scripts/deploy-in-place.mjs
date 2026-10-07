@@ -147,6 +147,11 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
   const stateRoot = path.resolve(commandEnv.BLOG_ROOT || project);
   const database = path.resolve(commandEnv.BLOG_DB_PATH || path.join(stateRoot, "data", "blog.db"));
   const data = path.join(stateRoot, "data");
+  const npmCache = path.join(data, "npm-cache");
+  // Control the deployment's cache explicitly. Panel-wide npmrc files may point
+  // to a root-owned shared cache even when npm runs as the website user.
+  commandEnv.npm_config_cache = npmCache;
+  commandEnv.NPM_CONFIG_CACHE = npmCache;
   const statusFile = path.resolve(commandEnv.DEPLOY_STATUS_FILE || path.join(data, "deploy-status.json"));
   const marker = path.join(data, "deploy-commit");
   const lock = path.join(data, ".deploy.lock");
@@ -181,6 +186,9 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
       throw error;
     }
     validateEnvironment(fileEnvironment);
+    fs.mkdirSync(npmCache, { recursive: true, mode: 0o700 });
+    fs.chmodSync(npmCache, 0o700);
+    fs.accessSync(npmCache, fs.constants.W_OK);
     if (!processName || commandEnv.DEPLOY_RESTART_MODE === "direct") throw new Error("项目目录更新需要配置现有 DEPLOY_PM2_NAME；不会自动替换端口进程");
     if (!fs.existsSync(database)) throw new Error(`数据库不存在：${database}`);
     if (fs.realpathSync((await run("git", ["rev-parse", "--show-toplevel"], project, commandEnv)).trim()) !== project) throw new Error("部署目录不是 Git 仓库根目录");
@@ -219,7 +227,7 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
       moved.push(artifact);
     }
     const buildEnv = { ...commandEnv, BLOG_ROOT: stateRoot, BLOG_DB_PATH: database, BLOG_ENV_FILE: environmentFile, BLOG_BUILD_READONLY: "true", DEPLOY_BUILD_COMMIT: commit };
-    await run(npmCommand, ["ci", "--include=dev", "--no-audit", "--no-fund"], project, buildEnv, 300_000);
+    await run(npmCommand, ["ci", "--cache", npmCache, "--include=dev", "--no-audit", "--no-fund"], project, buildEnv, 300_000);
     await run(npmCommand, ["run", "build"], project, buildEnv, 300_000);
     // Use the normal startup wrapper for asset preparation and a read-only smoke.
     const port = await reservePort();

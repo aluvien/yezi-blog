@@ -110,7 +110,7 @@ else { process.exit(2); }
   fs.writeFileSync(path.join(bin, "npm"), `#!/usr/bin/env node
 const fs=require("node:fs"),path=require("node:path");
 const args=process.argv.slice(2), root=process.cwd();
-fs.appendFileSync(process.env.TEST_EVENTS,JSON.stringify({command:"npm",args,readonly:process.env.BLOG_BUILD_READONLY})+"\\n");
+fs.appendFileSync(process.env.TEST_EVENTS,JSON.stringify({command:"npm",args,readonly:process.env.BLOG_BUILD_READONLY,cache:process.env.npm_config_cache,upperCache:process.env.NPM_CONFIG_CACHE})+"\\n");
 if(args[1]==="backup") {
  fs.mkdirSync(process.env.BLOG_BACKUP_DIR,{recursive:true});fs.copyFileSync(process.env.BLOG_DB_PATH,path.join(process.env.BLOG_BACKUP_DIR,"blog-test.db"));
 } else if(args[0]==="ci") {
@@ -148,11 +148,38 @@ test("terminal update fast-forwards main, rebuilds in place and restarts the exi
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "data", "deploy-status.json"))).status, "success");
   assert.equal(fs.readFileSync(path.join(f.root, ".well-known", "challenge"), "utf8"), "keep");
   const events = f.events();
-  assert.deepEqual(events.filter((e) => e.command === "npm").map((e) => e.args.slice(0, 2)), [["run", "backup"], ["ci", "--include=dev"], ["run", "build"]]);
+  assert.deepEqual(events.filter((e) => e.command === "npm").map((e) => e.args.slice(0, 2)), [["run", "backup"], ["ci", "--cache"], ["run", "build"]]);
   assert.equal(events.find((e) => e.args[1] === "build").readonly, "true");
   assert.deepEqual(events.filter((e) => e.command === "pm2" && e.args[0] !== "jlist").map((e) => e.args[0]), ["stop", "restart", "save"]);
   assert.ok(events.filter((e) => e.command === "pm2").every((e) => e.home === f.env.PM2_HOME));
   assert.ok(!fs.readdirSync(path.join(f.root, "data")).some((name) => name.startsWith(".deploy")));
+});
+
+test("all deployment npm commands override a root-owned panel cache with the private project cache", async (t) => {
+  const f = await fixture(t);
+  const sharedCache = path.join(path.dirname(f.root), "shared-panel-cache");
+  fs.mkdirSync(sharedCache);
+  fs.writeFileSync(path.join(sharedCache, "preserved"), "panel state");
+  fs.chmodSync(sharedCache, 0o500);
+  try {
+    await deploy({ ...f.env, npm_config_cache: sharedCache, NPM_CONFIG_CACHE: sharedCache });
+    const cache = path.join(f.root, "data", "npm-cache");
+    const npmEvents = f.events().filter((event) => event.command === "npm");
+    assert.ok(npmEvents.every((event) => event.cache === cache && event.upperCache === cache));
+    assert.deepEqual(npmEvents.find((event) => event.args[0] === "ci").args.slice(0, 3), ["ci", "--cache", cache]);
+    assert.equal(fs.statSync(cache).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(sharedCache).mode & 0o777, 0o500);
+    assert.equal(fs.readFileSync(path.join(sharedCache, "preserved"), "utf8"), "panel state");
+  } finally { fs.chmodSync(sharedCache, 0o700); }
+});
+
+test("a cache-path failure is reported before stopping PM2 or changing source", async (t) => {
+  const f = await fixture(t);
+  fs.writeFileSync(path.join(f.root, "data", "npm-cache"), "not a directory");
+  await assert.rejects(deploy(f.env), /EEXIST|ENOTDIR/);
+  assert.equal(f.git("rev-parse", "HEAD"), f.old);
+  assert.equal(fs.existsSync(path.join(path.dirname(f.root), "events.jsonl")), false);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "data", "deploy-status.json"))).status, "failed");
 });
 
 for (const failure of ["TEST_INSTALL_FAIL", "TEST_BUILD_FAIL", "TEST_RESTART_FAIL", "TEST_HEALTH_FAIL"]) {

@@ -361,6 +361,8 @@ pm2 save && pm2 startup         # 开机自启
 
 以网站所属用户执行更新，配置固定的 `DEPLOY_PM2_NAME` 和该用户的 `PM2_HOME`；环境文件须为 `0600` 且该用户可读。项目（包括 `.git`）、数据库及数据目录须可写。数据库、上传和 `.env.local` 继续使用原路径，未跟踪的 `.well-known/` 不会被清理。无需配置 `DEPLOY_RELEASES_DIR`、`DEPLOY_CURRENT_LINK`；旧 release 脚本仅保留给已采用该模式的部署，不是默认更新入口。
 
+更新任务的 npm 缓存固定为 `BLOG_ROOT/data/npm-cache`（默认项目 `data/npm-cache`），权限 `0700`，停站前检查可写性。该路径通过 npm 环境变量和安装参数传入，覆盖宝塔等面板配置的共享缓存；无需修改 `/www/server/nodejs/cache` 的所有权或全局 npm 配置。
+
 本地使用 PM2 运行的生产实例和服务器均执行同一条命令（开发模式继续使用 `npm run dev`）：
 
 ```bash
