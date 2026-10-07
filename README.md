@@ -355,15 +355,26 @@ pm2 start ecosystem.config.js   # standalone server，端口 3030
 pm2 save && pm2 startup         # 开机自启
 ```
 
-后台“同步 GitHub”会把 `origin/main` 构建到独立的版本化 Git worktree，使用回环临时端口完成健康、首页 CSP/commit 和真实 JS chunk 检查，再停止旧进程、建立经校验的 SQLite 快照、原子切换 `current` 软链并启动新 release。最终健康失败时会先恢复与旧 release 匹配的数据库快照，再切回旧代码。浏览器不会再额外触发第二次 PM2 重启。
+后台“同步 GitHub”和终端 `npm run deploy` 共用 `scripts/deploy-in-place.mjs`：在原项目目录 fetch 并快进 main，停止现有 PM2 网站进程，备份数据库及旧依赖/构建，再执行 `npm ci` 和 `npm run build`，检查构建后以 `pm2 restart <原进程名> --update-env` 重启。保留现有 PM2 进程的名称、工作目录和启动脚本，不创建 release worktree 或切换软链。**安装依赖和构建期间网站会暂停服务**，避免运行中的旧网站读取被替换的依赖/产物。
 
-生产环境应把 `BLOG_ROOT`、`BLOG_DB_PATH` 和 `BLOG_ENV_FILE` 放在 release 之外的稳定目录；`BLOG_ENV_FILE` 权限必须为 `0600`。同时设置固定的 `DEPLOY_PM2_NAME`，并按 `.env.local.example` 配置 `DEPLOY_RELEASES_DIR`、`DEPLOY_CURRENT_LINK` 等路径。部署前置检查会在拉代码前确认 PM2 进程、环境文件权限和互斥锁，避免误管其他 PM2 namespace。
+新构建先使用临时回环端口做只读健康、首页 CSP 和真实 JS chunk 检查，原进程重启后再次检查。通过后才更新 `BLOG_ROOT/data/deploy-commit`。失败时尝试恢复旧依赖/构建和已停止网站的数据库快照，重启原进程；源码 main 保留已拉取的提交，版本记录仍指向旧构建，可重新部署。若恢复失败，状态文件会给出保留的备份路径。
 
-后台部署会在当前 Node 安装目录、进程 PATH 和 npm 全局安装目录中定位 PM2，并将确定的路径传给部署和回滚任务。若 PM2 安装在其他目录，在环境文件中设置 `DEPLOY_PM2_BIN` 为服务器终端执行 `command -v pm2` 返回的绝对路径。出现 `spawn pm2 ENOENT` 时，先在能够执行 PM2 的服务器终端运行 `pm2 restart yezi-blog --update-env`（替换为实际进程名），让网站进程加载终端的 PATH，再重试后台同步。
+以网站所属用户执行更新，配置固定的 `DEPLOY_PM2_NAME` 和该用户的 `PM2_HOME`；环境文件须为 `0600` 且该用户可读。项目（包括 `.git`）、数据库及数据目录须可写。数据库、上传和 `.env.local` 继续使用原路径，未跟踪的 `.well-known/` 不会被清理。无需配置 `DEPLOY_RELEASES_DIR`、`DEPLOY_CURRENT_LINK`；旧 release 脚本仅保留给已采用该模式的部署，不是默认更新入口。
+
+本地使用 PM2 运行的生产实例和服务器均执行同一条命令（开发模式继续使用 `npm run dev`）：
+
+```bash
+cd /实际项目目录
+DEPLOY_PM2_NAME=实际进程名 PM2_HOME=/实际PM2目录 npm run deploy
+```
+
+已有仓库首次获取该脚本时，先在网站所属用户下执行 `git pull --ff-only origin main`，然后 `npm run deploy`。脚本需要项目已有依赖和生产构建，不能用于首次安装。运行结果为 `data/deploy-status.json`（或配置的 `BLOG_ROOT/data`）；后台任务输出为同目录的 `deploy.log`。
+
+后台部署会在当前 Node 安装目录、进程 PATH 和 npm 全局安装目录中定位 PM2，并将确定的路径传给更新任务。若 PM2 安装在其他目录，在环境文件中设置 `DEPLOY_PM2_BIN` 为服务器终端执行 `command -v pm2` 返回的绝对路径。未设置 `PM2_HOME` 时使用运行用户的 `~/.pm2`。出现 `spawn pm2 ENOENT` 时，在网站所属用户下确认 `pm2 list` 能找到实际进程，再执行 `pm2 restart <实际进程名> --update-env` 以加载正确的 PATH 和配置。
 
 如果没有设置 `BLOG_DB_PATH`，程序会固定使用项目根目录下的 `data/blog.db`；`start-standalone.mjs` 会在 PM2 工作目录变化时仍把默认路径指回项目根目录。若数据库放在项目外部，再显式填写绝对路径。
 
-生产构建命令已固定使用 Next 的 webpack 路径（`npm run build`），适合宝塔/PM2 的非交互部署。PM2 进程的工作目录必须是项目根目录，且建议设置 `DEPLOY_PM2_NAME=yezi-blog`；未设置时程序会按 PM2 的 `pm_cwd` 自动查找同目录进程。
+生产构建命令已固定使用 Next 的 webpack 路径（`npm run build`），适合宝塔/PM2 的非交互部署。现有 PM2 工作目录支持项目根目录或该项目的 `.next/standalone`；建议设置 `DEPLOY_PM2_NAME=yezi-blog`，后台未设置时会尝试按 `pm_cwd` 匹配。启用了 PM2 watch 或实际运行在其他 release 目录的实例会在修改前停止更新并给出提示。
 
 PM2/裸机默认 `HOSTNAME=127.0.0.1`，操作系统防火墙和安全组也应阻断公网 3030。站点放在 Nginx 后面时设置 `TRUST_PROXY=true`（后台「同步 GitHub」部署会前置检查该项与 `SESSION_COOKIE_SECURE=true`，直连 HTTP 部署可用 `DEPLOY_DIRECT_HTTP=true` 豁免），并确认 Nginx覆盖而不是拼接客户端传入的 `X-Real-IP` / `X-Forwarded-For`。若确实直连 Node，则保持 `TRUST_PROXY=false`；容器内部显式监听 `0.0.0.0`，但 Docker 只把宿主端口映射到 `127.0.0.1`。
 
