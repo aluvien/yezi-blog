@@ -269,6 +269,13 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
     await run(npmCommand, ["ci", "--cache", npmCache, "--include=dev", "--no-audit", "--no-fund"], staging, buildEnv, 300_000);
     writeStatus("building", { stage: "building", step: 3, message: "正在构建新版本，旧站保持在线" });
     await run(npmCommand, ["run", "build"], staging, buildEnv, 300_000);
+    // The running standalone server keeps optimized images here. Carry that
+    // cache into the candidate to avoid re-encoding every image after updates.
+    // Copy before the stop boundary: any copy failure leaves the live site up.
+    const imageCache = path.join(project, ".next", "standalone", ".next", "cache", "images");
+    if (fs.existsSync(imageCache)) {
+      fs.cpSync(imageCache, path.join(staging, ".next", "standalone", ".next", "cache", "images"), { recursive: true, force: false });
+    }
     writeStatus("building", { stage: "verifying", step: 4, message: "正在预检新版本，旧站保持在线" });
     // Use the normal startup wrapper for asset preparation and a read-only smoke.
     const port = await reservePort();
