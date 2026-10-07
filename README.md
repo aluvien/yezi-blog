@@ -359,6 +359,8 @@ pm2 save && pm2 startup         # 开机自启
 
 生产环境应把 `BLOG_ROOT`、`BLOG_DB_PATH` 和 `BLOG_ENV_FILE` 放在 release 之外的稳定目录；`BLOG_ENV_FILE` 权限必须为 `0600`。同时设置固定的 `DEPLOY_PM2_NAME`，并按 `.env.local.example` 配置 `DEPLOY_RELEASES_DIR`、`DEPLOY_CURRENT_LINK` 等路径。部署前置检查会在拉代码前确认 PM2 进程、环境文件权限和互斥锁，避免误管其他 PM2 namespace。
 
+后台部署会在当前 Node 安装目录、进程 PATH 和 npm 全局安装目录中定位 PM2，并将确定的路径传给部署和回滚任务。若 PM2 安装在其他目录，在环境文件中设置 `DEPLOY_PM2_BIN` 为服务器终端执行 `command -v pm2` 返回的绝对路径。出现 `spawn pm2 ENOENT` 时，先在能够执行 PM2 的服务器终端运行 `pm2 restart yezi-blog --update-env`（替换为实际进程名），让网站进程加载终端的 PATH，再重试后台同步。
+
 如果没有设置 `BLOG_DB_PATH`，程序会固定使用项目根目录下的 `data/blog.db`；`start-standalone.mjs` 会在 PM2 工作目录变化时仍把默认路径指回项目根目录。若数据库放在项目外部，再显式填写绝对路径。
 
 生产构建命令已固定使用 Next 的 webpack 路径（`npm run build`），适合宝塔/PM2 的非交互部署。PM2 进程的工作目录必须是项目根目录，且建议设置 `DEPLOY_PM2_NAME=yezi-blog`；未设置时程序会按 PM2 的 `pm_cwd` 自动查找同目录进程。

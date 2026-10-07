@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { resolvePm2Command } from "./pm2-command.mjs";
 
 const processName = process.argv[2]?.trim();
 if (!processName) process.exit(1);
@@ -25,7 +26,8 @@ await new Promise((resolve) => setTimeout(resolve, 2000));
 try {
   const pm2Env = { ...process.env };
   delete pm2Env.DEPLOY_STATUS_FILE;
-  execFileSync("pm2", ["restart", processName, "--update-env"], { cwd: process.cwd(), stdio: "ignore", env: pm2Env });
+  const pm2 = resolvePm2Command({ env: pm2Env });
+  execFileSync(pm2.command, [...pm2.args, "restart", processName, "--update-env"], { cwd: process.cwd(), stdio: "ignore", env: pm2.env });
   writeStatus("success");
 } catch (error) {
   writeStatus("failed", { error: error instanceof Error ? error.message : String(error) });
