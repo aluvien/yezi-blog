@@ -128,7 +128,6 @@ export default function SyncGithubButton({ trailingAction }: Props) {
         {!checkingVersion && version?.status === "outdated" && <p className="font-medium text-amber-600">GitHub 有新版本（本地 {version.localCommit} · 最新 {version.remoteCommit}）</p>}
         {!checkingVersion && version?.status === "dirty" && <p className="font-medium text-red-600">服务器有未提交源码改动，暂不能安全同步</p>}
         {!checkingVersion && version?.status === "unavailable" && <p className="text-neutral-400">{version.error || "暂时无法检查 GitHub 最新版本"}</p>}
-        <button type="button" onClick={() => void checkVersion()} disabled={pending || checkingVersion} className="mt-1 text-neutral-500 underline disabled:opacity-50">检查版本</button>
       </div>
     </div>
   );

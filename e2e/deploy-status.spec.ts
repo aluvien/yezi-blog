@@ -23,12 +23,13 @@ test("update stays disabled until a newer version is confirmed, and a raced no-o
   await expect(page.getByText("代码已是最新 · aaaaaaa")).toBeVisible();
   await expect(button).toBeDisabled();
   expect(syncRequests).toBe(0);
+  await expect(page.getByRole("button", { name: "检查版本", exact: true })).toHaveCount(0);
   state = "unavailable";
-  await page.getByRole("button", { name: "检查版本", exact: true }).click();
+  await page.reload();
   await expect(page.getByText("暂时无法检查 GitHub 最新版本", { exact: true })).toBeVisible();
   await expect(button).toBeDisabled();
   state = "outdated";
-  await page.getByRole("button", { name: "检查版本", exact: true }).click();
+  await page.reload();
   await expect(button).toBeEnabled();
   await button.click();
   await expect(page.getByText("代码已是最新，无需更新，网站继续正常运行。")).toBeVisible();
