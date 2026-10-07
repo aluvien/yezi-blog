@@ -12,11 +12,18 @@ function setup(context, payload = [{ name: "yezi-blog" }]) {
   const bin = path.join(root, "bin", "pm2");
   fs.mkdirSync(path.dirname(bin));
   fs.writeFileSync(bin, `#!/usr/bin/env node\nconsole.log(${JSON.stringify(JSON.stringify(payload))});\n`, { mode: 0o700 });
+  fs.writeFileSync(path.join(root, "bin", "git"), `#!/usr/bin/env node
+const args=process.argv.slice(2);
+if(args[0]==="rev-parse") console.log(args[1]==="--show-toplevel"?${JSON.stringify(root)}:"${"a".repeat(40)}");
+else if(args[0]==="branch") console.log("main");
+else if(args[0]==="ls-remote") console.log((process.env.TEST_REMOTE_COMMIT||"${"b".repeat(40)}")+" refs/heads/main");
+else if(args[0]!=="status") process.exit(1);
+`, { mode: 0o700 });
   const previousEnv = { ...process.env };
   process.env.DEPLOY_PROJECT_DIR = root;
   process.env.DEPLOY_PM2_NAME = "yezi-blog";
   process.env.DEPLOY_PM2_BIN = bin;
-  process.env.PATH = "/missing/shell/path";
+  process.env.PATH = `${path.dirname(bin)}${path.delimiter}/missing/shell/path`;
   process.env.BLOG_ENV_FILE = path.join(root, "private.env");
   process.env.BLOG_ROOT = root;
   process.env.DEPLOY_RELEASES_DIR = path.join(root, "releases");
@@ -83,4 +90,27 @@ test("invalid deployment directories fail before any PM2 or deployment operation
   const { root } = setup(context);
   process.env.DEPLOY_PROJECT_DIR = path.join(root, "missing");
   assert.match((await syncLatestGithub()).error, /部署目录无效/);
+});
+
+test("an unchanged version never writes a queued task or starts the launcher", async (context) => {
+  const { root } = setup(context);
+  process.env.TEST_REMOTE_COMMIT = "a".repeat(40);
+  fs.writeFileSync(process.env.BLOG_ENV_FILE, "ADMIN_PASSWORD=test\n", { mode: 0o600 });
+  fs.mkdirSync(path.join(root, "data"));
+  const statusFile = path.join(root, "data", "deploy-status.json");
+  fs.writeFileSync(statusFile, JSON.stringify({ status: "success", updatedAt: "unchanged" }));
+  const before = fs.readFileSync(statusFile, "utf8");
+  const result = await syncLatestGithub();
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, false);
+  assert.match(result.message, /无需更新/);
+  assert.equal(fs.readFileSync(statusFile, "utf8"), before);
+});
+
+test("unknown remote state rejects a deployment before a queued task is written", async (context) => {
+  const { root } = setup(context);
+  process.env.TEST_REMOTE_COMMIT = "invalid";
+  fs.writeFileSync(process.env.BLOG_ENV_FILE, "ADMIN_PASSWORD=test\n", { mode: 0o600 });
+  assert.equal((await syncLatestGithub()).ok, false);
+  assert.equal(fs.existsSync(path.join(root, "data", "deploy-status.json")), false);
 });

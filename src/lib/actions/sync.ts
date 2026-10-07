@@ -9,7 +9,7 @@ import {
 } from "@/lib/admin/deploy";
 
 export type SyncGithubActionResult =
-  | { ok: true; message: string }
+  | { ok: true; message: string; changed?: boolean; taskId?: string }
   | { ok: false; error: string };
 
 export type ScheduleGithubRestartActionResult =
@@ -19,6 +19,12 @@ export type ScheduleGithubRestartActionResult =
 export type GithubDeployStatus = {
   status: "unknown" | "queued" | "building" | "switching" | "checking" | "rolling_back" | "success" | "failed";
   updatedAt?: string;
+  startedAt?: string;
+  taskId?: string;
+  stage?: string;
+  message?: string;
+  step?: number;
+  totalSteps?: number;
   error?: string;
 };
 

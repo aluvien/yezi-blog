@@ -6,14 +6,14 @@ import net from "node:net";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import test from "node:test";
-import { deployInPlace, runDeploymentCommand } from "../scripts/deploy-in-place.mjs";
+import { deployInPlace, runDeploymentCommand, retainPreviousStaticAssets } from "../scripts/deploy-in-place.mjs";
 
 const fakeServer = `
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 const project = process.env.BLOG_ROOT;
-const broken = process.env.TEST_HEALTH_FAIL === "true" && process.env.PORT === process.env.TEST_PUBLIC_PORT && fs.readFileSync(path.join(project, ".next", "version"), "utf8") === "new";
+const broken = (process.env.TEST_PREFLIGHT_FAIL === "true" && process.env.PORT !== process.env.TEST_PUBLIC_PORT) || (process.env.TEST_HEALTH_FAIL === "true" && process.env.PORT === process.env.TEST_PUBLIC_PORT && fs.readFileSync(path.join(project, ".next", "version"), "utf8") === "new");
 http.createServer((req, res) => {
   if (req.url === "/api/health/deploy") {
     res.setHeader("content-type", "application/json");
@@ -110,13 +110,17 @@ else { process.exit(2); }
   fs.writeFileSync(path.join(bin, "npm"), `#!/usr/bin/env node
 const fs=require("node:fs"),path=require("node:path");
 const args=process.argv.slice(2), root=process.cwd();
-fs.appendFileSync(process.env.TEST_EVENTS,JSON.stringify({command:"npm",args,readonly:process.env.BLOG_BUILD_READONLY,cache:process.env.npm_config_cache,upperCache:process.env.NPM_CONFIG_CACHE})+"\\n");
+fs.appendFileSync(process.env.TEST_EVENTS,JSON.stringify({command:"npm",args,cwd:root,readonly:process.env.BLOG_BUILD_READONLY,cache:process.env.npm_config_cache,upperCache:process.env.NPM_CONFIG_CACHE})+"\\n");
+if(args[0]==="ci" || args[1]==="build") {
+ fetch(process.env.DEPLOY_HEALTH_URL).then(r=>fs.appendFileSync(process.env.TEST_EVENTS,JSON.stringify({command:"availability",phase:args[0]==="ci"?"installing":"building",status:r.status})+"\\n")).catch(()=>process.exitCode=1);
+}
 if(args[1]==="backup") {
  fs.mkdirSync(process.env.BLOG_BACKUP_DIR,{recursive:true});fs.copyFileSync(process.env.BLOG_DB_PATH,path.join(process.env.BLOG_BACKUP_DIR,"blog-test.db"));
 } else if(args[0]==="ci") {
  if(process.env.TEST_INSTALL_FAIL==="true") process.exit(1);
  fs.mkdirSync(path.join(root,"node_modules"));fs.writeFileSync(path.join(root,"node_modules","version"),"new");
 } else if(args[1]==="build") {
+ if(process.env.TEST_CONCURRENT_WRITE==="true") fs.writeFileSync(process.env.BLOG_DB_PATH,"user write during build");
  if(process.env.TEST_BUILD_FAIL==="true") process.exit(1);
  fs.mkdirSync(path.join(root,".next","standalone"),{recursive:true});
  fs.copyFileSync(path.join(root,"scripts","start-standalone.mjs"),path.join(root,".next","standalone","server.js"));
@@ -148,8 +152,8 @@ test("terminal update fast-forwards main, rebuilds in place and restarts the exi
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "data", "deploy-status.json"))).status, "success");
   assert.equal(fs.readFileSync(path.join(f.root, ".well-known", "challenge"), "utf8"), "keep");
   const events = f.events();
-  assert.deepEqual(events.filter((e) => e.command === "npm").map((e) => e.args.slice(0, 2)), [["run", "backup"], ["ci", "--cache"], ["run", "build"]]);
-  assert.equal(events.find((e) => e.args[1] === "build").readonly, "true");
+  assert.deepEqual(events.filter((e) => e.command === "npm").map((e) => e.args.slice(0, 2)), [["ci", "--cache"], ["run", "build"], ["run", "backup"]]);
+  assert.equal(events.find((e) => e.command === "npm" && e.args[1] === "build").readonly, "true");
   assert.deepEqual(events.filter((e) => e.command === "pm2" && e.args[0] !== "jlist").map((e) => e.args[0]), ["stop", "restart", "save"]);
   assert.ok(events.filter((e) => e.command === "pm2").every((e) => e.home === f.env.PM2_HOME));
   assert.ok(!fs.readdirSync(path.join(f.root, "data")).some((name) => name.startsWith(".deploy")));
@@ -182,7 +186,7 @@ test("a cache-path failure is reported before stopping PM2 or changing source", 
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "data", "deploy-status.json"))).status, "failed");
 });
 
-for (const failure of ["TEST_INSTALL_FAIL", "TEST_BUILD_FAIL", "TEST_RESTART_FAIL", "TEST_HEALTH_FAIL"]) {
+for (const failure of ["TEST_RESTART_FAIL", "TEST_HEALTH_FAIL"]) {
   test(`${failure} restores old artifacts and version, preserving database and untracked files`, async (t) => {
     const f = await fixture(t);
     await assert.rejects(deploy({ ...f.env, [failure]: "true", TEST_MIGRATE: "true" }), /已恢复旧构建/);
@@ -250,7 +254,7 @@ test("a PM2 save failure after successful activation never rolls back user write
   await deploy({ ...f.env, TEST_SAVE_FAIL: "true" });
   assert.equal(fs.readFileSync(path.join(f.root, "data", "deploy-commit"), "utf8").trim(), f.latest);
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "data", "deploy-status.json"))).status, "success");
-  assert.equal(f.events().filter((e) => e.args[0] === "restart").length, 1);
+  assert.equal(f.events().filter((e) => e.command === "pm2" && e.args[0] === "restart").length, 1);
 });
 
 test("a timed-out build kills descendants before rollback can restore artifacts", async (t) => {
@@ -265,4 +269,63 @@ test("a timed-out build kills descendants before rollback can restore artifacts"
   await new Promise((resolve) => setTimeout(resolve, 550));
   assert.equal(fs.existsSync(lateWrite), false);
   assert.equal(fs.existsSync(childPid), true);
+});
+
+for (const failure of ["TEST_INSTALL_FAIL", "TEST_BUILD_FAIL", "TEST_PREFLIGHT_FAIL"]) {
+  test(`${failure} keeps the existing site and database online without stopping PM2`, async (t) => {
+    const f = await fixture(t);
+    const pid = JSON.parse(fs.readFileSync(f.env.TEST_STATE)).pid;
+    await assert.rejects(deploy({ ...f.env, [failure]: "true" }));
+    assert.equal((await fetch(f.env.DEPLOY_HEALTH_URL)).status, 200);
+    assert.equal(JSON.parse(fs.readFileSync(f.env.TEST_STATE)).pid, pid);
+    assert.ok(!f.events().some(e => e.command === "pm2" && e.args[0] !== "jlist"));
+    assert.equal(fs.readFileSync(path.join(f.root, "data", "blog.db"), "utf8"), "original database");
+    assert.equal(f.git("rev-parse", "HEAD"), f.old);
+    assert.ok(!fs.readdirSync(f.root).some(name => name.startsWith(".deploy-work-")));
+  });
+}
+
+test("an unchanged terminal deployment never installs, builds or restarts", async (t) => {
+  const f = await fixture(t);
+  f.git("merge", "--ff-only", "origin/main");
+  fs.writeFileSync(path.join(f.root, "data", "deploy-commit"), f.latest);
+  const pid = JSON.parse(fs.readFileSync(f.env.TEST_STATE)).pid;
+  const result = await deploy(f.env);
+  assert.equal(result.changed, false);
+  assert.ok(f.events().every(e => e.command === "pm2" && e.args[0] === "jlist"));
+  assert.equal(JSON.parse(fs.readFileSync(f.env.TEST_STATE)).pid, pid);
+});
+
+test("the live site serves HTTP throughout installing and building", async (t) => {
+  const f = await fixture(t);
+  await deploy(f.env);
+  assert.deepEqual(f.events().filter(e => e.command === "availability").map(e => [e.phase, e.status]), [["installing", 200], ["building", 200]]);
+  const npm = f.events().filter(e => e.command === "npm");
+  assert.ok(npm.every(e => e.cwd !== f.root && e.cwd.startsWith(path.join(f.root, ".deploy-work-"))));
+  assert.ok(!fs.readdirSync(f.root).some(name => name.startsWith(".deploy-work-")));
+});
+
+
+test("static retention keeps the previous build without accumulating older assets", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-static-retention-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const project = path.join(root, "current"), staging = path.join(root, "candidate");
+  for (const directory of [path.join(project, ".next", "static", "chunks"), path.join(staging, ".next", "static", "chunks")]) fs.mkdirSync(directory, { recursive: true });
+  for (const name of ["previous.js", "older.js", "shared.js"]) fs.writeFileSync(path.join(project, ".next", "static", "chunks", name), "old");
+  fs.writeFileSync(path.join(project, ".next", "deploy-retained-static.json"), JSON.stringify([path.join("chunks", "older.js")]));
+  fs.writeFileSync(path.join(staging, ".next", "static", "chunks", "shared.js"), "new");
+  retainPreviousStaticAssets(project, staging);
+  assert.equal(fs.readFileSync(path.join(staging, ".next", "static", "chunks", "shared.js"), "utf8"), "new");
+  assert.equal(fs.existsSync(path.join(staging, ".next", "static", "chunks", "older.js")), false);
+  assert.equal(fs.readFileSync(path.join(staging, ".next", "standalone", ".next", "static", "chunks", "previous.js"), "utf8"), "old");
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(staging, ".next", "deploy-retained-static.json"))), [path.join("chunks", "previous.js")]);
+});
+
+
+test("a build failure preserves writes made by the live site during preparation", async (t) => {
+  const f = await fixture(t);
+  await assert.rejects(deploy({ ...f.env, TEST_BUILD_FAIL: "true", TEST_CONCURRENT_WRITE: "true" }));
+  assert.equal(fs.readFileSync(path.join(f.root, "data", "blog.db"), "utf8"), "user write during build");
+  assert.equal((await fetch(f.env.DEPLOY_HEALTH_URL)).status, 200);
+  assert.ok(!f.events().some(e => e.command === "pm2" && e.args[0] !== "jlist"));
 });

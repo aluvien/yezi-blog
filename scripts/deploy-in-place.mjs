@@ -109,6 +109,14 @@ async function verifyHttp(url, { attempts, interval, commit, token }) {
       if (!chunk) throw new Error("首页缺少 JS chunk");
       const asset = await fetch(`${origin}${chunk}`, { signal: AbortSignal.timeout(2_000) });
       if (!asset.ok || !(asset.headers.get("content-type") || "").includes("javascript")) throw new Error("JS chunk 校验失败");
+      const image = html.match(/<img[^>]+src="(\/image\?[^"<>]+)"/)?.[1];
+      if (image) {
+        // Exercise the HTTPS reverse-proxy path as well as direct loopback.
+        const optimized = await fetch(`${origin}${image.replaceAll("&amp;", "&")}`, {
+          signal: AbortSignal.timeout(5_000), headers: { "x-forwarded-proto": "https" },
+        });
+        if (!optimized.ok || !(optimized.headers.get("content-type") || "").startsWith("image/")) throw new Error("图片优化/HTTPS 代理校验失败");
+      }
       return;
     } catch (error) {
       detail = error.message;
@@ -116,6 +124,33 @@ async function verifyHttp(url, { attempts, interval, commit, token }) {
     }
   }
   throw new Error(`健康检查失败：${detail}`);
+}
+
+// Keep one previous build's own assets, excluding anything it already retained.
+// This supports open pages without accumulating every historical build forever.
+export function retainPreviousStaticAssets(project, staging) {
+  const oldStatic = path.join(project, ".next", "static");
+  if (!fs.existsSync(oldStatic)) return;
+  const manifestName = "deploy-retained-static.json";
+  const previousManifest = path.join(project, ".next", manifestName);
+  const previousRetained = new Set(fs.existsSync(previousManifest) ? JSON.parse(fs.readFileSync(previousManifest, "utf8")) : []);
+  const retained = [];
+  function visit(directory, relative = "") {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const name = path.join(relative, entry.name);
+      if (entry.isDirectory()) { visit(path.join(directory, entry.name), name); continue; }
+      if (!entry.isFile() || previousRetained.has(name)) continue;
+      const destination = path.join(staging, ".next", "static", name);
+      if (fs.existsSync(destination)) continue;
+      for (const target of [destination, path.join(staging, ".next", "standalone", ".next", "static", name)]) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.copyFileSync(path.join(oldStatic, name), target, fs.constants.COPYFILE_EXCL);
+      }
+      retained.push(name);
+    }
+  }
+  visit(oldStatic);
+  fs.writeFileSync(path.join(staging, ".next", manifestName), JSON.stringify(retained), { mode: 0o600 });
 }
 
 /** The terminal and dashboard share this project-directory update workflow. */
@@ -134,7 +169,7 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
       fs.mkdirSync(data, { recursive: true, mode: 0o700 });
       const status = path.resolve(env.DEPLOY_STATUS_FILE || path.join(data, "deploy-status.json"));
       fs.mkdirSync(path.dirname(status), { recursive: true, mode: 0o700 });
-      atomicWrite(status, `${JSON.stringify({ status: "failed", updatedAt: new Date().toISOString(), error: error.message })}\n`);
+      atomicWrite(status, `${JSON.stringify({ status: "failed", taskId: env.DEPLOY_TASK_ID, startedAt: env.DEPLOY_STARTED_AT, updatedAt: new Date().toISOString(), error: error.message })}\n`);
     }
     throw error;
   }
@@ -159,14 +194,20 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
   const token = crypto.randomBytes(32).toString("hex");
   const health = { attempts: healthAttempts, interval: healthInterval, token };
   const healthUrl = commandEnv.DEPLOY_HEALTH_URL || "http://127.0.0.1:3030/api/health/deploy";
-  const backup = path.join(data, `.deploy-backup-${process.pid}-${crypto.randomBytes(4).toString("hex")}`);
+  // Build and artifact moves stay on the project's filesystem. Durable state
+  // can live on another mount; never move uploads or the live SQLite file.
+  const workspace = path.join(project, `.deploy-work-${process.pid}-${crypto.randomBytes(4).toString("hex")}`);
+  const staging = path.join(workspace, "source");
+  const backup = path.join(workspace, "previous");
+  const taskId = commandEnv.DEPLOY_TASK_ID || crypto.randomUUID();
+  const startedAt = commandEnv.DEPLOY_STARTED_AT || new Date().toISOString();
   const guard = path.join(data, `.deploy-write-hold-${process.pid}`);
   const moved = [];
   let lockFd, stopped = false, started = false, activated = false, recovered = false;
   let snapshot, previousCommit, originalMarker;
   const writeStatus = (status, extra = {}) => {
     fs.mkdirSync(path.dirname(statusFile), { recursive: true, mode: 0o700 });
-    atomicWrite(statusFile, `${JSON.stringify({ status, updatedAt: new Date().toISOString(), ...extra })}\n`);
+    atomicWrite(statusFile, `${JSON.stringify({ status, taskId, startedAt, updatedAt: new Date().toISOString(), totalSteps: 6, ...extra })}\n`);
     console.log(`[deploy] ${status}${extra.error ? `: ${extra.error}` : ""}`);
   };
   let pm2;
@@ -208,31 +249,31 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
     }
     previousCommit = (await run("git", ["rev-parse", "HEAD"], project, commandEnv)).trim();
     originalMarker = fs.existsSync(marker) ? fs.readFileSync(marker, "utf8") : null;
+    writeStatus("building", { stage: "fetching", step: 1, message: "正在检查并准备新版本，旧站保持在线" });
     await run("git", ["fetch", "origin", "main"], project, commandEnv, 120_000);
-    // FETCH_HEAD avoids reliance on a custom origin fetch refspec.
-    await run("git", ["merge", "--ff-only", "FETCH_HEAD"], project, commandEnv, 60_000);
-    const commit = (await run("git", ["rev-parse", "HEAD"], project, commandEnv)).trim();
-    console.log(`[deploy] main ${commit.slice(0, 7)}; restarting existing PM2 process ${processName}`);
-    fs.mkdirSync(backup, { mode: 0o700 });
-    writeStatus("building");
-    stopped = true;
-    await runPm2(["stop", processName]);
-    // Snapshot the stopped app before changing dependencies or allowing migrations.
-    await run(npmCommand, ["run", "backup"], project, { ...commandEnv, BLOG_ROOT: stateRoot, BLOG_DB_PATH: database, BLOG_BACKUP_DIR: path.join(backup, "database"), BLOG_BUILD_READONLY: "false" }, 120_000);
-    const snapshots = fs.readdirSync(path.join(backup, "database")).filter((name) => /^blog-.*\.db$/.test(name));
-    if (snapshots.length !== 1) throw new Error("部署前数据库快照未生成");
-    snapshot = path.join(backup, "database", snapshots[0]);
-    for (const artifact of [".next", "node_modules"]) {
-      fs.renameSync(path.join(project, artifact), path.join(backup, artifact));
-      moved.push(artifact);
+    const commit = (await run("git", ["rev-parse", "FETCH_HEAD"], project, commandEnv)).trim();
+    await run("git", ["merge-base", "--is-ancestor", previousCommit, commit], project, commandEnv);
+    if (originalMarker?.trim() === commit) {
+      writeStatus("success", { stage: "complete", step: 6, commit: commit.slice(0, 7), noop: true, message: "代码已是最新，无需构建或重启" });
+      return { commit, changed: false };
     }
+    console.log(`[deploy] main ${commit.slice(0, 7)}; preparing while ${processName} stays online`);
+    fs.mkdirSync(workspace, { mode: 0o700 });
+    fs.mkdirSync(staging, { mode: 0o700 });
+    fs.mkdirSync(backup, { mode: 0o700 });
+    const archive = path.join(workspace, "source.tar");
+    await run("git", ["archive", "--format=tar", "--output", archive, commit], project, commandEnv, 60_000);
+    await run("tar", ["-xf", archive, "-C", staging], project, commandEnv, 60_000);
     const buildEnv = { ...commandEnv, BLOG_ROOT: stateRoot, BLOG_DB_PATH: database, BLOG_ENV_FILE: environmentFile, BLOG_BUILD_READONLY: "true", DEPLOY_BUILD_COMMIT: commit };
-    await run(npmCommand, ["ci", "--cache", npmCache, "--include=dev", "--no-audit", "--no-fund"], project, buildEnv, 300_000);
-    await run(npmCommand, ["run", "build"], project, buildEnv, 300_000);
+    writeStatus("building", { stage: "installing", step: 2, message: "正在工作目录安装依赖，旧站保持在线" });
+    await run(npmCommand, ["ci", "--cache", npmCache, "--include=dev", "--no-audit", "--no-fund"], staging, buildEnv, 300_000);
+    writeStatus("building", { stage: "building", step: 3, message: "正在构建新版本，旧站保持在线" });
+    await run(npmCommand, ["run", "build"], staging, buildEnv, 300_000);
+    writeStatus("building", { stage: "verifying", step: 4, message: "正在预检新版本，旧站保持在线" });
     // Use the normal startup wrapper for asset preparation and a read-only smoke.
     const port = await reservePort();
-    const candidate = spawn(process.execPath, [path.join(project, "scripts", "start-standalone.mjs")], {
-      cwd: project, env: { ...buildEnv, PORT: String(port), HOSTNAME: "127.0.0.1" }, stdio: "ignore",
+    const candidate = spawn(process.execPath, [path.join(staging, "scripts", "start-standalone.mjs")], {
+      cwd: staging, env: { ...buildEnv, PORT: String(port), HOSTNAME: "127.0.0.1" }, stdio: "ignore",
     });
     let candidateError;
     candidate.on("error", (error) => { candidateError = error; });
@@ -249,15 +290,35 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
         if (candidate.exitCode === null && candidate.signalCode === null) { candidate.kill("SIGKILL"); await exited; }
       }
     }
+    // Reject changes made outside the deployment lock while we were building.
+    if ((await run("git", ["rev-parse", "HEAD"], project, commandEnv)).trim() !== previousCommit
+      || (await run("git", ["status", "--porcelain=v1", "--untracked-files=no"], project, commandEnv)).trim()) {
+      throw new Error("构建期间服务器源码发生改动，已取消切换；旧站继续运行");
+    }
+    await run("git", ["merge", "--ff-only", commit], project, commandEnv, 60_000);
+    retainPreviousStaticAssets(project, staging);
+    writeStatus("switching", { stage: "switching", step: 5, message: "构建已通过，正在备份并切换版本，网站将短暂重启" });
+    stopped = true;
+    await runPm2(["stop", processName]);
+    // Take the final snapshot only after writes have stopped. A build failure
+    // above never stops the site or rolls back data written during the build.
+    await run(npmCommand, ["run", "backup"], staging, { ...buildEnv, BLOG_BUILD_READONLY: "false", BLOG_BACKUP_DIR: path.join(backup, "database") }, 120_000);
+    const snapshots = fs.readdirSync(path.join(backup, "database")).filter((name) => /^blog-.*\.db$/.test(name));
+    if (snapshots.length !== 1) throw new Error("部署前数据库快照未生成");
+    snapshot = path.join(backup, "database", snapshots[0]);
+    for (const artifact of [".next", "node_modules"]) {
+      fs.renameSync(path.join(project, artifact), path.join(backup, artifact));
+      moved.push(artifact);
+      fs.renameSync(path.join(staging, artifact), path.join(project, artifact));
+    }
     atomicWrite(guard, `${process.pid}\n`);
     const runtimeEnv = { ...buildEnv, BLOG_BUILD_READONLY: "false", BLOG_DEPLOY_WRITE_HOLD: "true", BLOG_DEPLOY_WRITE_GUARD_FILE: guard, DEPLOY_PROBE_TOKEN: token };
-    writeStatus("switching");
     started = true;
     await runPm2(["restart", processName, "--update-env"], runtimeEnv);
     const current = await readProcess();
     if (current?.pm2_env?.status !== "online" || !current.pid || current.pid === original.pid
       || current.pm2_env.pm_cwd !== original.pm2_env.pm_cwd || current.pm2_env.pm_exec_path !== original.pm2_env.pm_exec_path) throw new Error("PM2 未按原启动配置重启项目");
-    writeStatus("checking");
+    writeStatus("checking", { stage: "checking", step: 6, message: "正在检查新版本和静态资源" });
     await verifyHttp(healthUrl, health);
     atomicWrite(marker, `${commit}\n`);
     await verifyHttp(healthUrl, { ...health, commit });
@@ -266,14 +327,14 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
     fs.rmSync(guard);
     activated = true;
     try { await runPm2(["save"], runtimeEnv); } catch (error) { console.warn(`[deploy] PM2 save: ${error.message}`); }
-    writeStatus("success", { commit: commit.slice(0, 7) });
+    writeStatus("success", { stage: "complete", step: 6, commit: commit.slice(0, 7), message: "更新完成，网站正常运行" });
     recovered = true;
-    return { commit };
+    return { commit, changed: true };
   } catch (error) {
     let detail = error.message;
     if (stopped && !activated) {
       try {
-        writeStatus("rolling_back", { error: detail });
+        writeStatus("rolling_back", { stage: "rolling_back", message: "正在恢复旧构建", error: detail });
         await runPm2(["stop", processName]);
         for (const artifact of moved) {
           fs.rmSync(path.join(project, artifact), { recursive: true, force: true });
@@ -306,9 +367,9 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
     throw new Error(detail);
   } finally {
     if (lockFd !== undefined) { fs.closeSync(lockFd); fs.rmSync(lock, { force: true }); }
-    if (recovered) {
+    if (recovered || !stopped) {
       fs.rmSync(guard, { force: true });
-      fs.rmSync(backup, { recursive: true, force: true });
+      fs.rmSync(workspace, { recursive: true, force: true });
     }
   }
 }

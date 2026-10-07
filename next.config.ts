@@ -135,6 +135,11 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["localhost", "127.0.0.1", "192.168.31.31", "yezi.biaozhu.me", "yezi.me", "www.yezi.me"],
   // 历史经典版路径只保留兼容性；公开链接与站点地图统一使用内容语义稳定的
   // 规范地址。配置层重定向会在渲染前直接返回 HTTP 308。
+  // Path-only rewrites stay inside Next. A Proxy URL clone can inherit the
+  // public HTTPS scheme and accidentally proxy HTTPS to the HTTP Node port.
+  async rewrites() {
+    return { beforeFiles: [{ source: "/image", destination: "/_next/image" }], afterFiles: [], fallback: [] };
+  },
   async redirects() {
     return [
       { source: "/essay/rss.xml", destination: "/rss.xml", permanent: true },
