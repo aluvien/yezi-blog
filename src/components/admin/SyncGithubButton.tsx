@@ -1,174 +1,134 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState, useTransition } from "react";
-import {
-  syncLatestGithubAction,
-  type GithubDeployStatus,
-  type GithubVersionStatus,
-} from "@/lib/actions/sync";
+import { useEffect, useState } from "react";
+import type { GithubDeployStatus, GithubVersionStatus } from "@/lib/actions/sync";
 
-type Props = {
-  trailingAction?: ReactNode;
-};
+type Props = { trailingAction?: ReactNode };
+type AdminApiResponse<T> = { data?: T; error?: { message?: string } };
+type StartResult = { changed?: boolean; taskId?: string; message: string };
 
-type AdminApiResponse<T> = {
-  data?: T;
-  error?: { message?: string };
-};
-
-async function fetchAdminStatus<T>(path: string): Promise<T> {
-  const separator = path.includes("?") ? "&" : "?";
-  const response = await fetch(`${path}${separator}_=${Date.now()}`, {
-    cache: "no-store",
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
+async function fetchAdminStatus<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${path}?_=${Date.now()}`, {
+    ...init, cache: "no-store", credentials: "same-origin",
+    headers: { Accept: "application/json", ...init?.headers },
   });
   const payload = await response.json().catch(() => null) as AdminApiResponse<T> | null;
-  if (!response.ok || !payload?.data) {
-    throw new Error(payload?.error?.message || `请求失败（HTTP ${response.status}）`);
-  }
+  if (!response.ok || !payload?.data) throw new Error(payload?.error?.message || `请求失败（HTTP ${response.status}）`);
   return payload.data;
 }
 
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+async function readVersionStatus(): Promise<GithubVersionStatus> {
+  try { return await fetchAdminStatus<GithubVersionStatus>("/api/admin/v1/deploy/version"); }
+  catch { return { status: "unavailable", error: "暂时无法检查 GitHub 最新版本，请稍后重试" }; }
 }
 
-async function readVersionStatus(): Promise<GithubVersionStatus> {
-  try {
-    return await fetchAdminStatus<GithubVersionStatus>("/api/admin/v1/deploy/version");
-  } catch {
-    return { status: "unavailable", error: "暂时无法检查 GitHub 最新版本，请稍后重试" };
-  }
+function isActive(deploy: GithubDeployStatus | null): boolean {
+  return Boolean(deploy && ["queued", "building", "switching", "checking", "rolling_back"].includes(deploy.status));
 }
 
 export default function SyncGithubButton({ trailingAction }: Props) {
-  const [pending, startTransition] = useTransition();
+  const [starting, setStarting] = useState(false);
+  const [deploy, setDeploy] = useState<GithubDeployStatus | null>(null);
   const [status, setStatus] = useState<{ kind: "pending" | "success" | "error"; text: string } | null>(null);
   const [version, setVersion] = useState<GithubVersionStatus | null>(null);
   const [checkingVersion, setCheckingVersion] = useState(true);
+  const deploying = isActive(deploy);
+  const pending = starting || deploying;
+  const canUpdate = !pending && !checkingVersion && version?.status === "outdated";
 
-  async function confirmLatestVersion() {
-    // PM2 重启成功时，当前页面仍可能运行旧构建的客户端代码。使用
-    // 稳定 JSON API（而不是旧 Server Action 标识）轮询新进程，直到活动
-    // 构建与 GitHub 一致，避免用户再手动刷新页面。
+  async function checkVersion() {
     setCheckingVersion(true);
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const result = await readVersionStatus();
-      setVersion(result);
-      if (result.status === "up-to-date") {
-        setCheckingVersion(false);
-        return;
-      }
-      await wait(1_500);
-    }
+    setVersion(await readVersionStatus());
     setCheckingVersion(false);
   }
 
   useEffect(() => {
     let active = true;
-    void readVersionStatus()
-      .then((result) => {
-        if (active) setVersion(result);
-      })
-      .catch(() => {
-        if (active) setVersion({ status: "unavailable", error: "暂时无法检查 GitHub 最新版本，请稍后重试" });
-      })
-      .finally(() => {
-        if (active) setCheckingVersion(false);
-      });
-
-    return () => {
-      active = false;
-    };
+    void Promise.all([
+      readVersionStatus(),
+      fetchAdminStatus<GithubDeployStatus>("/api/admin/v1/deploy/status").catch(() => null),
+    ]).then(([result, task]) => {
+      if (!active) return;
+      setVersion(result);
+      setCheckingVersion(false);
+      if (isActive(task)) setDeploy(task);
+    });
+    return () => { active = false; };
   }, []);
 
-  function sync() {
-    // Server Action 会依次执行备份、拉取、构建和 PM2 重启，可能持续几十秒。
-    // 先更新本地状态，让用户能立即确认点击已经生效，不把反馈留到请求结束后。
-    setStatus({ kind: "pending", text: "正在启动更新任务，安装依赖和构建期间网站会暂停服务…" });
-    startTransition(async () => {
+  // Keep reading the durable task after refresh and across the brief PM2 restart.
+  // Stable JSON endpoints continue to work when this page has an old JS bundle.
+  useEffect(() => {
+    if (!deploying) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
       try {
-        const result = await syncLatestGithubAction();
-        if (!result.ok) {
-          setStatus({ kind: "error", text: result.error });
-          return;
-        }
-        setStatus({ kind: "pending", text: result.message });
-        for (let attempt = 0; attempt < 600; attempt += 1) {
-          await wait(2_000);
-          let deploy: GithubDeployStatus;
-          try {
-            deploy = await fetchAdminStatus<GithubDeployStatus>("/api/admin/v1/deploy/status");
-          } catch {
-            setStatus({ kind: "pending", text: "网站正在停止、构建或重启，暂时无法读取状态；更新任务仍在服务器运行…" });
-            continue;
-          }
-          if (deploy.status === "success") {
-            setStatus({ kind: "success", text: "同步、构建和 PM2 重启均已成功。" });
-            await confirmLatestVersion();
+        const current = await fetchAdminStatus<GithubDeployStatus>("/api/admin/v1/deploy/status");
+        if (!active) return;
+        if (!deploy?.taskId || current.taskId === deploy.taskId) {
+          if (current.status === "success" || current.status === "failed") {
+            const result = await readVersionStatus();
+            if (!active) return;
+            setVersion(result);
+            setDeploy(current);
+            setStatus({ kind: current.status === "success" ? "success" : "error", text: current.status === "success" ? (current.message || "更新完成，网站正常运行。") : `部署失败：${current.error || "未知错误"}` });
             return;
           }
-          if (deploy.status === "failed") {
-            setStatus({ kind: "error", text: `部署失败：${deploy.error || "未知错误"}` });
-            return;
-          }
-          const stage = deploy.status === "queued" ? "等待部署任务启动"
-            : deploy.status === "building" ? "网站暂时停止，正在项目目录安装依赖并构建"
-            : deploy.status === "switching" ? "正在重启原 PM2 进程"
-            : deploy.status === "checking" ? "新构建已启动，正在执行健康检查"
-            : deploy.status === "rolling_back" ? "更新失败，正在恢复旧构建"
-            : "正在部署";
-          setStatus({ kind: "pending", text: stage });
+          setDeploy(current);
+          setStatus({ kind: "pending", text: current.message || "更新任务正在运行…" });
         }
-        setStatus({ kind: "pending", text: "部署仍在服务器后台运行，可稍后刷新此页查看最终状态。" });
-        await confirmLatestVersion();
-      } catch (error) {
-        setStatus({
-          kind: "error",
-          text: error instanceof Error ? `同步请求未完成：${error.message}` : "同步请求未完成，请刷新后重试",
-        });
+      } catch {
+        if (active) setStatus({ kind: "pending", text: "正在切换版本或暂时无法连接，恢复后会继续显示进度…" });
       }
-    });
+      if (active) timer = setTimeout(poll, 2_000);
+    };
+    void poll();
+    return () => { active = false; clearTimeout(timer); };
+  }, [deploying, deploy?.taskId]);
+
+  async function sync() {
+    if (!canUpdate) return;
+    setStarting(true);
+    setStatus({ kind: "pending", text: "正在再次检查版本并启动更新…" });
+    try {
+      const result = await fetchAdminStatus<StartResult>("/api/admin/v1/deploy/sync", {
+        method: "POST", headers: { "Content-Type": "application/json", "x-yezi-csrf": "1" }, body: "{}",
+      });
+      if (result.changed === false) {
+        setStatus({ kind: "success", text: result.message });
+        await checkVersion();
+      } else {
+        setDeploy({ status: "queued", taskId: result.taskId, message: result.message });
+        setStatus({ kind: "pending", text: result.message });
+      }
+    } catch (error) {
+      setStatus({ kind: "error", text: error instanceof Error ? error.message : "无法启动更新" });
+      await checkVersion();
+    } finally { setStarting(false); }
   }
 
   return (
     <div className="w-full min-w-0 sm:w-[24rem]">
       <div className="flex items-start gap-2">
-        <button
-          type="button"
-          onClick={sync}
-          disabled={pending}
-          className="admin-button admin-button-secondary inline-flex h-10 w-[6rem] min-w-0 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-neutral-300 px-2 text-sm text-neutral-700 transition-colors hover:border-neutral-900 hover:text-neutral-900 disabled:cursor-wait disabled:opacity-50"
-        >
-          {pending ? "同步中…" : "同步 GitHub"}
+        <button type="button" onClick={() => void sync()} disabled={!canUpdate}
+          className="admin-button admin-button-secondary inline-flex h-10 w-[6rem] min-w-0 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-neutral-300 px-2 text-sm text-neutral-700 transition-colors hover:border-neutral-900 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50">
+          {pending ? "更新中…" : "同步 GitHub"}
         </button>
-        <div className="h-10 min-w-0 flex-1 overflow-hidden text-left text-xs leading-5" aria-live="polite">
-          {status && <p className={`line-clamp-2 ${status.kind === "success" ? "text-green-600" : status.kind === "pending" ? "text-amber-600" : "text-red-600"}`}>{status.text}</p>}
+        <div className="min-h-10 min-w-0 flex-1 text-left text-xs leading-5" aria-live="polite">
+          {status && <p className={status.kind === "success" ? "text-green-600" : status.kind === "pending" ? "text-amber-600" : "text-red-600"}>{status.text}</p>}
+          {deploying && deploy?.step && deploy.totalSteps && <p className="text-neutral-500">更新步骤 {deploy.step}/{deploy.totalSteps}</p>}
         </div>
         {trailingAction}
       </div>
       <div className="mt-2 min-h-10 w-full text-left text-xs leading-5" aria-live="polite">
-        {checkingVersion && <p className="line-clamp-2 text-neutral-400">正在检查 GitHub 最新版本…</p>}
-        {!checkingVersion && version?.status === "up-to-date" && (
-          <p className="line-clamp-2 text-neutral-400">代码已是最新 · {version.localCommit}</p>
-        )}
-        {!checkingVersion && version?.status === "outdated" && (
-          <p className="line-clamp-2 font-medium text-amber-600">
-            GitHub 有新版本（本地 {version.localCommit} · 最新 {version.remoteCommit}），请点击同步
-          </p>
-        )}
-        {!checkingVersion && version?.status === "dirty" && (
-          <p className="line-clamp-2 font-medium text-red-600">
-            服务器有未提交源码改动，暂不能安全同步
-          </p>
-        )}
-        {!checkingVersion && version?.status === "unavailable" && (
-          <p className="line-clamp-2 text-neutral-400">
-            {version.error || "暂时无法检查 GitHub 最新版本"}
-          </p>
-        )}
+        {checkingVersion && <p className="text-neutral-400">正在检查 GitHub 最新版本…</p>}
+        {!checkingVersion && version?.status === "up-to-date" && <p className="text-neutral-400">代码已是最新 · {version.localCommit}</p>}
+        {!checkingVersion && version?.status === "outdated" && <p className="font-medium text-amber-600">GitHub 有新版本（本地 {version.localCommit} · 最新 {version.remoteCommit}）</p>}
+        {!checkingVersion && version?.status === "dirty" && <p className="font-medium text-red-600">服务器有未提交源码改动，暂不能安全同步</p>}
+        {!checkingVersion && version?.status === "unavailable" && <p className="text-neutral-400">{version.error || "暂时无法检查 GitHub 最新版本"}</p>}
+        <button type="button" onClick={() => void checkVersion()} disabled={pending || checkingVersion} className="mt-1 text-neutral-500 underline disabled:opacity-50">检查版本</button>
       </div>
     </div>
   );

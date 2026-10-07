@@ -69,16 +69,6 @@ export function proxy(request: NextRequest) {
     return applySecurityHeaders(response, security);
   }
 
-  // 对外隐藏 Next 图片优化器的内部路径；参数和响应仍由 /_next/image 处理。
-  if (pathname === "/image") {
-    const target = request.nextUrl.clone();
-    target.pathname = "/_next/image";
-    return applySecurityHeaders(
-      NextResponse.rewrite(target, security.requestHeaders ? { request: { headers: security.requestHeaders } } : undefined),
-      security,
-    );
-  }
-
   // Next 在动态 catch-all 路由解析前可能无法处理非法百分号编码；提前返回 404，
   // 避免恶意请求把上传路由变成 500。正常上传路径继续直接放行。
   if (pathname.startsWith("/uploads/")) {

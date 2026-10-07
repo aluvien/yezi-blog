@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { deploymentCommandEnv, resolvePm2Command } from "../../../scripts/pm2-command.mjs";
 import { readDeployedBuildCommit } from "@/lib/deploy-build";
@@ -181,12 +182,17 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
     if ((fs.statSync(envFile).mode & 0o077) !== 0) return { ok: false, error: "外部环境文件权限必须为 0600" };
     const statusFile = path.join(process.env.BLOG_ROOT?.trim() || projectDir, "data", "deploy-status.json");
     if (fs.existsSync(path.join(path.dirname(statusFile), ".deploy.lock"))) return { ok: false, error: "已有一次部署正在执行，请等待完成" };
+    const version = await getGithubVersionStatus({ bypassCache: true });
+    if (version.status === "up-to-date") return { ok: true, changed: false, message: "代码已是最新，无需更新，网站继续正常运行。" };
+    if (version.status !== "outdated") return { ok: false, error: version.error || "无法确认有新版本，已取消更新" };
     const runner = path.join(projectDir, "scripts", "deploy-in-place.mjs");
     const launcher = path.join(projectDir, "scripts", "launch-detached-deploy.mjs");
     if (!fs.existsSync(runner)) return { ok: false, error: "缺少项目目录更新脚本 deploy-in-place.mjs" };
     if (!fs.existsSync(launcher)) return { ok: false, error: "缺少独立部署启动器" };
+    const taskId = crypto.randomUUID();
+    const startedAt = new Date().toISOString();
     fs.mkdirSync(path.dirname(statusFile), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(statusFile, `${JSON.stringify({ status: "queued", updatedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
+    fs.writeFileSync(statusFile, `${JSON.stringify({ status: "queued", taskId, startedAt, updatedAt: startedAt, message: "正在准备更新，旧站保持在线" })}\n`, { mode: 0o600 });
     const logFile = path.join(path.dirname(statusFile), "deploy.log");
     const launchEnv = deploymentCommandEnv({
       ...deploymentEnv(),
@@ -195,6 +201,8 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
       DEPLOY_PM2_BIN: supervisor.pm2Bin,
       DEPLOY_RESTART_MODE: "pm2",
       DEPLOY_STATUS_FILE: statusFile,
+      DEPLOY_TASK_ID: taskId,
+      DEPLOY_STARTED_AT: startedAt,
       DEPLOY_LOG_FILE: logFile,
       DEPLOY_REQUIRE_ORPHAN: "1",
       BLOG_ENV_FILE: envFile,
@@ -209,12 +217,14 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
       await runCommand(process.execPath, [launcher, runner], projectDir, 10_000, launchEnv);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      fs.writeFileSync(statusFile, `${JSON.stringify({ status: "failed", updatedAt: new Date().toISOString(), error: `无法启动独立部署任务：${detail}` })}\n`, { mode: 0o600 });
+      fs.writeFileSync(statusFile, `${JSON.stringify({ status: "failed", taskId, startedAt, updatedAt: new Date().toISOString(), error: `无法启动独立部署任务：${detail}` })}\n`, { mode: 0o600 });
       throw error;
     }
     return {
       ok: true,
-      message: "已启动项目目录更新任务；安装依赖和构建期间会暂停网站，随后重启原 PM2 进程并检查结果。",
+      changed: true,
+      taskId,
+      message: "已启动更新；安装、构建和预检期间旧站保持在线，切换版本时短暂重启。",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "同步或部署异常";
@@ -241,7 +251,11 @@ export async function getGithubDeployStatus(): Promise<GithubDeployStatus> {
   try {
     const value = JSON.parse(fs.readFileSync(statusFile, "utf8")) as Partial<GithubDeployStatus>;
     if (["queued", "building", "switching", "checking", "rolling_back", "success", "failed"].includes(value.status ?? "")) {
-      return { status: value.status as GithubDeployStatus["status"], updatedAt: value.updatedAt, error: value.error };
+      return {
+        status: value.status as GithubDeployStatus["status"], updatedAt: value.updatedAt,
+        startedAt: value.startedAt, taskId: value.taskId, stage: value.stage,
+        message: value.message, step: value.step, totalSteps: value.totalSteps, error: value.error,
+      };
     }
   } catch {
     // 状态文件还未生成或正在被重启脚本替换。

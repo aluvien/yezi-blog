@@ -311,7 +311,7 @@ POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 | POST | `/api/admin/v1/deploy/sync` | `{}` 或无 body | `{ "status": "success", "message": "…" }` |
 | POST | `/api/admin/v1/deploy/restart` | `{}` 或无 body | 已禁用独立重启；部署只能通过受健康检查和回滚保护的同步状态机执行 |
 
-重复同步返回 HTTP `409` 与 `DEPLOY_IN_PROGRESS`；失败返回统一 `error` envelope。API 与网页端同步按钮使用同一套固定的 `DEPLOY_PROJECT_DIR`、`DEPLOY_PM2_NAME`、部署锁及状态文件配置，不接受客户端传入命令、路径、分支或进程名。
+任务进行中重复同步返回 HTTP `409` 与 `DEPLOY_IN_PROGRESS`；没有新版本返回 `changed: false` 与 `status: "unchanged"`，不会启动任务。状态端点返回持久化的任务 ID、步骤编号和阶段说明，网页每两秒读取；刷新页面后继续显示进行中的任务，最终切换时短暂断连会自动重试。失败返回统一 `error` envelope。API 与网页端同步按钮使用同一套固定的 `DEPLOY_PROJECT_DIR`、`DEPLOY_PM2_NAME`、部署锁及状态文件配置，不接受客户端传入命令、路径、分支或进程名。
 
 ## 数据与上传文件
 
@@ -355,13 +355,15 @@ pm2 start ecosystem.config.js   # standalone server，端口 3030
 pm2 save && pm2 startup         # 开机自启
 ```
 
-后台“同步 GitHub”和终端 `npm run deploy` 共用 `scripts/deploy-in-place.mjs`：在原项目目录 fetch 并快进 main，停止现有 PM2 网站进程，备份数据库及旧依赖/构建，再执行 `npm ci` 和 `npm run build`，检查构建后以 `pm2 restart <原进程名> --update-env` 重启。保留现有 PM2 进程的名称、工作目录和启动脚本，不创建 release worktree 或切换软链。**安装依赖和构建期间网站会暂停服务**，避免运行中的旧网站读取被替换的依赖/产物。
+后台“同步 GitHub”和终端 `npm run deploy` 共用 `scripts/deploy-in-place.mjs`：先检查 GitHub main 与已部署版本，相同提交直接结束，不安装、不构建、不重启。按钮仅在确认有新版本时可用；版本检查失败、源码有改动或任务运行中时禁用。服务端和更新脚本会再次确认版本，防止重复点击导致重复部署。
 
-新构建先使用临时回环端口做只读健康、首页 CSP 和真实 JS chunk 检查，原进程重启后再次检查。通过后才更新 `BLOG_ROOT/data/deploy-commit`。失败时尝试恢复旧依赖/构建和已停止网站的数据库快照，重启原进程；源码 main 保留已拉取的提交，版本记录仍指向旧构建，可重新部署。若恢复失败，状态文件会给出保留的备份路径。
+更新在原项目内的临时 `.deploy-work-*` 目录安装依赖、构建并预检，**准备期间旧站继续服务**。通过后才快进 main、短暂停止原 PM2 进程、备份最终数据库、替换原目录的依赖与构建，以 `pm2 restart <原进程名> --update-env` 重启。保留原 PM2 名称、工作目录、启动脚本和数据路径，不创建 release worktree 或切换软链。现有单进程 PM2 在最终切换期间仍有短暂停顿，不能保证零中断。
+
+新构建先使用临时回环端口做只读健康、首页 CSP、真实 JS chunk 及 HTTPS 代理图片检查，原进程重启后再次检查。安装、构建或预检失败时不停止旧站；保留上一版本静态资源，供已打开旧页面的浏览器继续加载。通过后才更新 `BLOG_ROOT/data/deploy-commit`。失败时尝试恢复旧依赖/构建和已停止网站的数据库快照，重启原进程；源码 main 保留已拉取的提交，版本记录仍指向旧构建，可重新部署。若恢复失败，状态文件会给出保留的备份路径。
 
 以网站所属用户执行更新，配置固定的 `DEPLOY_PM2_NAME` 和该用户的 `PM2_HOME`；环境文件须为 `0600` 且该用户可读。项目（包括 `.git`）、数据库及数据目录须可写。数据库、上传和 `.env.local` 继续使用原路径，未跟踪的 `.well-known/` 不会被清理。无需配置 `DEPLOY_RELEASES_DIR`、`DEPLOY_CURRENT_LINK`；旧 release 脚本仅保留给已采用该模式的部署，不是默认更新入口。
 
-更新任务的 npm 缓存固定为 `BLOG_ROOT/data/npm-cache`（默认项目 `data/npm-cache`），权限 `0700`，停站前检查可写性。该路径通过 npm 环境变量和安装参数传入，覆盖宝塔等面板配置的共享缓存；无需修改 `/www/server/nodejs/cache` 的所有权或全局 npm 配置。
+更新任务的 npm 缓存固定为 `BLOG_ROOT/data/npm-cache`（默认项目 `data/npm-cache`），权限 `0700`，短暂切换前检查可写性。该路径通过 npm 环境变量和安装参数传入，覆盖宝塔等面板配置的共享缓存；无需修改 `/www/server/nodejs/cache` 的所有权或全局 npm 配置。
 
 本地使用 PM2 运行的生产实例和服务器均执行同一条命令（开发模式继续使用 `npm run dev`）：
 

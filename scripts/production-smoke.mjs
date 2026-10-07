@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import sharp from "sharp";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -54,10 +55,19 @@ async function stop(child) {
 }
 
 const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-production-smoke-"));
+// Production artifacts must work after moving out of the build directory.
+const runtimeRoot = path.join(smokeRoot, "runtime");
+fs.mkdirSync(path.join(runtimeRoot, ".next"), { recursive: true });
+fs.mkdirSync(path.join(runtimeRoot, "scripts"));
+fs.cpSync(path.join(root, ".next", "standalone"), path.join(runtimeRoot, ".next", "standalone"), { recursive: true });
+fs.cpSync(path.join(root, ".next", "static"), path.join(runtimeRoot, ".next", "static"), { recursive: true });
+if (fs.existsSync(path.join(root, "public"))) fs.cpSync(path.join(root, "public"), path.join(runtimeRoot, "public"), { recursive: true });
+for (const name of ["start-standalone.mjs", "maintain-db.mjs"]) fs.copyFileSync(path.join(root, "scripts", name), path.join(runtimeRoot, "scripts", name));
+fs.symlinkSync(path.join(runtimeRoot, ".next", "standalone", "node_modules"), path.join(runtimeRoot, "node_modules"), "dir");
 const port = await reserveLoopbackPort();
 const output = [];
-const child = spawn(process.execPath, [path.join(root, "scripts", "start-standalone.mjs")], {
-  cwd: root,
+const child = spawn(process.execPath, [path.join(runtimeRoot, "scripts", "start-standalone.mjs")], {
+  cwd: runtimeRoot,
   env: {
     ...process.env,
     NODE_ENV: "production",
@@ -90,6 +100,18 @@ try {
   if (!nonce) throw new Error("生产 CSP 缺少 per-request nonce");
   const pageHtml = await page.text();
   if (!pageHtml.includes(`nonce=\"${nonce}\"`)) throw new Error("页面主题脚本或框架脚本未携带 CSP nonce");
+
+  // Public HTTPS terminates at Nginx while Node speaks HTTP. Test the same
+  // forwarded scheme that previously turned /image into an HTTPS loopback proxy.
+  const uploads = path.join(smokeRoot, "data", "uploads");
+  fs.mkdirSync(uploads, { recursive: true });
+  fs.writeFileSync(path.join(uploads, "deployment-smoke.png"), await sharp({ create: { width: 16, height: 16, channels: 3, background: "#2176ff" } }).png().toBuffer());
+  const optimized = await fetch(`${baseUrl}/image?url=%2Fuploads%2Fdeployment-smoke.png&w=64&q=72`, {
+    headers: { "x-forwarded-proto": "https", "x-forwarded-host": "blog.example.invalid" },
+  });
+  if (!optimized.ok || !(optimized.headers.get("content-type") || "").startsWith("image/")) {
+    throw new Error(`HTTPS 代理图片优化失败：HTTP ${optimized.status}`);
+  }
 
   const api = await waitForResponse(`${baseUrl}/api/v1/search?q=standalone-smoke`, () => output.join(""));
   const body = await api.json();
@@ -193,7 +215,7 @@ try {
   if (!siteBody?.data || typeof siteBody.data.name !== "string" || !Array.isArray(siteBody.data.navigation)) {
     throw new Error("standalone App API 站点配置异常");
   }
-  console.log(`production smoke passed: standalone + SQLite + FTS + CSP on ${baseUrl}`);
+  console.log(`production smoke passed: relocated standalone + SQLite + FTS + CSP + HTTPS images on ${baseUrl}`);
 } finally {
   await stop(child);
   fs.rmSync(smokeRoot, { recursive: true, force: true });

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   try {
     const result = await syncLatestGithub();
     if (!result.ok) return adminError("DEPLOY_SYNC_FAILED", result.error, 400);
-    return adminSuccess({ status: "success", message: result.message });
+    return adminSuccess({ status: result.changed === false ? "unchanged" : "queued", message: result.message, changed: result.changed, taskId: result.taskId });
   } catch (error) {
     return adminInternalError("sync deploy", error);
   } finally {
