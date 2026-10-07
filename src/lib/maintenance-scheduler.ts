@@ -1,3 +1,4 @@
+import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import { cleanupExpiredAuthState } from "@/lib/db/session-auth";
 import { deleteExpiredViewInteractions } from "@/lib/db/metrics";
 import { tryAcquireMaintenanceLease } from "@/lib/db/maintenance";
@@ -8,6 +9,7 @@ const MAINTENANCE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 type SchedulerGlobal = typeof globalThis & { __yeziMaintenanceTimer?: ReturnType<typeof setInterval> };
 
 export function runScheduledMaintenance(referenceTime = Date.now()): boolean {
+  if (isCloudRestoreActive()) return false;
   if (!tryAcquireMaintenanceLease("transient-data-cleanup", referenceTime, MAINTENANCE_INTERVAL_MS)) return false;
   cleanupExpiredAuthState(referenceTime);
   deleteExpiredViewInteractions(referenceTime);

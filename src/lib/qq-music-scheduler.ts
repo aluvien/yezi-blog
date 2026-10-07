@@ -1,3 +1,4 @@
+import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import { getSiteSettings } from "@/lib/db";
 import { checkAndNotifyQQMusicHealth } from "@/lib/qq-music-health";
 
@@ -44,7 +45,7 @@ function schedule(current: SchedulerState, delayMs: number): void {
 async function runScheduledCheck(): Promise<void> {
   const current = state();
   current.timer = undefined;
-  if (current.running) return;
+  if (current.running || isCloudRestoreActive()) { schedule(current, 60_000); return; }
 
   const config = qqMusicHealthSchedulerConfig();
   if (!config.enabled) return;

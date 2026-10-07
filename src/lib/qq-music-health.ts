@@ -1,3 +1,4 @@
+import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import fs from "node:fs";
 import path from "node:path";
 import { getQQMusicSession } from "@/lib/qq-music-session";
@@ -151,6 +152,7 @@ function shouldRepeatAlert(state: QQMusicHealthAlertState, status: QQMusicHealth
  */
 export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult & { notified: boolean }> {
   const result = await inspectQQMusicHealth();
+  if (isCloudRestoreActive()) return { ...result, notified: false };
   const previous = getQQMusicHealthAlertState();
   const next: QQMusicHealthAlertState = {
     ...previous,
@@ -192,7 +194,7 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
     }
   }
 
-  saveQQMusicHealthAlertState(next);
+  if (!isCloudRestoreActive()) saveQQMusicHealthAlertState(next);
   return { ...result, notified };
 }
 

@@ -40,7 +40,7 @@ test("one click produces a verified downloadable backup and the website remains 
   const created = await page.request.post("/api/admin/v1/posts", { data: { title: "备份恢复测试", slug: `backup-${Date.now()}`, content: "需要恢复的文章内容", cover: null, category: "", tags: "", status: "draft", attachmentIds: [], referenceSnapshots: [] } });
   expect(created.status()).toBe(200);
   const postId = (await created.json()).data.id;
-  await page.goto("/admin/settings");
+  await page.goto("/admin/settings/backups");
   const panel = page.getByRole("region", { name: "数据备份" });
   await expect(panel.getByRole("button", { name: "备份并下载" })).toBeEnabled();
   await expect(panel.getByText(/下载包未加密/)).toBeVisible();
@@ -83,7 +83,7 @@ test("backup progress survives refresh and an interrupted backup offers retry", 
   let phase = "files";
   let failed = false;
   await page.route("**/api/admin/v1/backups", route => route.fulfill({ json: { data: { id: "00000000-0000-4000-8000-000000000000", status: failed ? "failed" : "running", phase, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...(failed ? { error: "网站进程重启，备份已中断，请重新备份。" } : {}) } } }));
-  await page.goto("/admin/settings");
+  await page.goto("/admin/settings/backups");
   const panel = page.getByRole("region", { name: "数据备份" });
   await expect(panel.getByText(/复制上传文件/)).toBeVisible();
   await expect(panel.getByRole("button", { name: "正在备份…" })).toBeDisabled();
