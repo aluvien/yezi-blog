@@ -193,7 +193,7 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
     fs.mkdirSync(path.dirname(statusFile), { recursive: true, mode: 0o700 });
     fs.writeFileSync(statusFile, `${JSON.stringify({ status: "queued", updatedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
     const logFile = path.join(path.dirname(statusFile), "deploy-release.log");
-    const launchEnv = {
+    const launchEnv = deploymentCommandEnv({
       ...deploymentEnv(),
       DEPLOY_PROJECT_DIR: projectDir,
       ...(supervisor.mode === "pm2"
@@ -203,7 +203,7 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
       DEPLOY_LOG_FILE: logFile,
       DEPLOY_REQUIRE_ORPHAN: "1",
       BLOG_ENV_FILE: envFile,
-    };
+    });
 
     // A merely `detached` child still has this Next process as its parent.
     // PM2 recursively kills that child tree when switching the managed app,

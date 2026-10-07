@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 
 export function deploymentCommandEnv(env = process.env, execPath = process.execPath) {
-  const directories = [path.dirname(execPath), ...(env.PATH || "").split(path.delimiter)].filter(Boolean);
+  const pm2Bin = env.DEPLOY_PM2_BIN?.trim();
+  const directories = [
+    path.dirname(execPath),
+    ...(pm2Bin && path.isAbsolute(pm2Bin) ? [path.dirname(pm2Bin)] : []),
+    ...(env.PATH || "").split(path.delimiter),
+  ].filter(Boolean);
   return { ...env, PATH: [...new Set(directories)].join(path.delimiter) };
 }
 
@@ -38,7 +43,12 @@ export function resolvePm2Command({ env = process.env, execPath = process.execPa
       }
       const useNode = nodeScript(bin);
       if (!useNode) fs.accessSync(bin, fs.constants.X_OK);
-      return { bin, command: useNode ? execPath : bin, args: useNode ? [bin] : [], env: commandEnv };
+      return {
+        bin,
+        command: useNode ? execPath : bin,
+        args: useNode ? [bin] : [],
+        env: deploymentCommandEnv({ ...commandEnv, DEPLOY_PM2_BIN: bin }, execPath),
+      };
     } catch (error) {
       if (error.code !== "ENOENT" && error.code !== "ENOTDIR") unusableCandidate = true;
       continue;

@@ -9,8 +9,9 @@ const { syncLatestGithub, getGithubDeployStatus } = await import("../src/lib/adm
 function setup(context, payload = [{ name: "yezi-blog" }]) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-pm2-preflight-"));
   fs.writeFileSync(path.join(root, "package.json"), "{}");
-  const bin = path.join(root, "pm2-cli");
-  fs.writeFileSync(bin, `#!/usr/bin/env node\nconsole.log(${JSON.stringify(JSON.stringify(payload))});\n`, { mode: 0o600 });
+  const bin = path.join(root, "bin", "pm2");
+  fs.mkdirSync(path.dirname(bin));
+  fs.writeFileSync(bin, `#!/usr/bin/env node\nconsole.log(${JSON.stringify(JSON.stringify(payload))});\n`, { mode: 0o700 });
   const previousEnv = { ...process.env };
   process.env.DEPLOY_PROJECT_DIR = root;
   process.env.DEPLOY_PM2_NAME = "yezi-blog";
@@ -56,12 +57,14 @@ test("the discovered PM2 CLI and Node PATH are forwarded to the detached deploym
   fs.writeFileSync(path.join(root, "scripts", "deploy-release.mjs"), "");
   fs.writeFileSync(path.join(root, "scripts", "launch-detached-deploy.mjs"), `
     import fs from "node:fs";
+    import { execFileSync } from "node:child_process";
     fs.writeFileSync(${JSON.stringify(captured)}, JSON.stringify({
       bin: process.env.DEPLOY_PM2_BIN,
       name: process.env.DEPLOY_PM2_NAME,
       mode: process.env.DEPLOY_RESTART_MODE,
       path: process.env.PATH,
       orphan: process.env.DEPLOY_REQUIRE_ORPHAN,
+      legacyPm2List: JSON.parse(execFileSync("pm2", ["jlist"], { encoding: "utf8" })),
     }));
   `);
   const result = await syncLatestGithub();
@@ -72,6 +75,7 @@ test("the discovered PM2 CLI and Node PATH are forwarded to the detached deploym
   assert.equal(launchEnv.mode, "pm2");
   assert.equal(launchEnv.path.split(path.delimiter)[0], path.dirname(process.execPath));
   assert.equal(launchEnv.orphan, "1");
+  assert.deepEqual(launchEnv.legacyPm2List, [{ name: "yezi-blog" }]);
   assert.equal((await getGithubDeployStatus()).status, "queued");
 });
 
