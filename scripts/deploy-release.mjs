@@ -5,6 +5,7 @@ import net from "node:net";
 import path from "node:path";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
+import { deploymentCommandEnv, resolvePm2Command } from "./pm2-command.mjs";
 
 const sourceRoot = path.resolve(process.env.DEPLOY_PROJECT_DIR || process.cwd());
 const stateRoot = path.resolve(process.env.BLOG_ROOT || sourceRoot);
@@ -124,6 +125,19 @@ function run(command, args, cwd = sourceRoot, timeout = 300_000, env = process.e
       resolve({ stdout: String(stdout), stderr: String(stderr) });
     });
   });
+}
+
+let deploymentPm2Command;
+
+function runPm2(args, cwd = sourceRoot, timeout = 30_000, env = process.env) {
+  deploymentPm2Command ??= resolvePm2Command({ cwd: sourceRoot });
+  const pm2 = deploymentPm2Command;
+  const commandEnv = deploymentCommandEnv({
+    ...env,
+    DEPLOY_PM2_BIN: pm2.bin,
+    ...(pm2.env.PM2_HOME ? { PM2_HOME: pm2.env.PM2_HOME } : {}),
+  });
+  return run(pm2.command, [...pm2.args, ...args], cwd, timeout, commandEnv);
 }
 
 async function reservePort() {
@@ -292,7 +306,7 @@ function parsePm2ProcessList(output) {
 }
 
 async function readPm2Process(name) {
-  const result = await run("pm2", ["jlist"], sourceRoot, 15_000);
+  const result = await runPm2(["jlist"], sourceRoot, 15_000);
   return parsePm2ProcessList(result.stdout).find((item) => item?.name === name) || null;
 }
 
@@ -310,7 +324,7 @@ async function verifyPm2Release(target) {
 
 async function removePm2Process() {
   try {
-    await run("pm2", ["delete", processName], sourceRoot, 30_000);
+    await runPm2(["delete", processName], sourceRoot, 30_000);
   } catch (error) {
     // A failed first start can leave no PM2 record. Let rollback recreate the
     // previous release, but never ignore an error while the process remains.
@@ -380,9 +394,9 @@ async function restartRelease(target, env) {
     // the exact immutable release we just built. A failure stays in PM2 mode;
     // never fall back to direct port killing.
     await removePm2Process();
-    await run("pm2", ["start", path.join(releaseRoot, "ecosystem.config.js"), "--only", processName, "--update-env"], releaseRoot, 30_000, env);
+    await runPm2(["start", path.join(releaseRoot, "ecosystem.config.js"), "--only", processName, "--update-env"], releaseRoot, 30_000, env);
     await verifyPm2Release(releaseRoot);
-    await run("pm2", ["save"], releaseRoot, 30_000, env);
+    await runPm2(["save"], releaseRoot, 30_000, env);
     return;
   }
   await stopDirectServer();

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { deploymentCommandEnv, resolvePm2Command } from "../../../scripts/pm2-command.mjs";
 import { readDeployedBuildCommit } from "@/lib/deploy-build";
 import type {
   GithubDeployStatus,
@@ -44,7 +45,7 @@ function runCommand(command: string, args: string[], cwd: string, timeout: numbe
 type Pm2Process = { name?: string; pm2_env?: { pm_cwd?: string } };
 
 type DeploymentSupervisor =
-  | { mode: "pm2"; processName: string }
+  | { mode: "pm2"; processName: string; pm2Bin: string }
   | { mode: "direct" }
   | { mode: "unavailable"; error: string };
 
@@ -83,12 +84,12 @@ function deploymentEnv(): NodeJS.ProcessEnv {
     delete env[key];
   }
 
-  return {
+  return deploymentCommandEnv({
     ...env,
     // 同步按钮不能等待 Git 询问账号密码，否则 Server Action 会一直挂起。
     GIT_TERMINAL_PROMPT: "0",
     PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2",
-  };
+  });
 }
 
 function deploymentProjectDir(): string {
@@ -149,21 +150,22 @@ async function resolveDeploymentSupervisor(projectDir: string): Promise<Deployme
   const explicitlyDirect = process.env.DEPLOY_RESTART_MODE === "direct";
   if (explicitlyDirect && !configuredName) return { mode: "direct" };
   try {
-    const result = await runCommand("pm2", ["jlist"], projectDir, 15_000, deploymentEnv());
+    const pm2 = resolvePm2Command({ env: deploymentEnv(), cwd: projectDir });
+    const result = await runCommand(pm2.command, [...pm2.args, "jlist"], projectDir, 15_000, pm2.env);
     const processes = parsePm2ProcessList(result.stdout);
     if (configuredName) {
-      if (processes.some((item) => item.name === configuredName)) return { mode: "pm2", processName: configuredName };
+      if (processes.some((item) => item.name === configuredName)) return { mode: "pm2", processName: configuredName, pm2Bin: pm2.bin };
       return { mode: "unavailable", error: `PM2 中未找到配置的进程 ${configuredName}，已取消部署以避免误停 3030 端口` };
     }
     const expectedDirectories = managedProjectDirectories(projectDir);
     const match = processes.find((item) => item.name && item.pm2_env?.pm_cwd && expectedDirectories.has(path.resolve(item.pm2_env.pm_cwd)));
-    if (match?.name) return { mode: "pm2", processName: match.name };
+    if (match?.name) return { mode: "pm2", processName: match.name, pm2Bin: pm2.bin };
     if (explicitlyDirect) return { mode: "direct" };
     return { mode: "unavailable", error: "未识别到当前项目的 PM2 进程；如确为非 PM2 直启部署，请显式设置 DEPLOY_RESTART_MODE=direct" };
   } catch (error) {
     // A machine without PM2 is the only implicit direct-deployment case. Any
     // other failure could mean the PM2 daemon is still supervising 3030.
-    if (!configuredName && isPm2CommandMissing(error)) return { mode: "direct" };
+    if (!configuredName && !process.env.DEPLOY_PM2_BIN?.trim() && process.env.pm_id === undefined && isPm2CommandMissing(error)) return { mode: "direct" };
     const detail = error instanceof Error ? error.message : "未知错误";
     return { mode: "unavailable", error: `无法确认 PM2 进程状态（${detail}）；已取消部署以避免误停 3030 端口` };
   }
@@ -195,7 +197,7 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
       ...deploymentEnv(),
       DEPLOY_PROJECT_DIR: projectDir,
       ...(supervisor.mode === "pm2"
-        ? { DEPLOY_PM2_NAME: supervisor.processName, DEPLOY_RESTART_MODE: "pm2" }
+        ? { DEPLOY_PM2_NAME: supervisor.processName, DEPLOY_PM2_BIN: supervisor.pm2Bin, DEPLOY_RESTART_MODE: "pm2" }
         : { DEPLOY_RESTART_MODE: "direct" }),
       DEPLOY_STATUS_FILE: statusFile,
       DEPLOY_LOG_FILE: logFile,
