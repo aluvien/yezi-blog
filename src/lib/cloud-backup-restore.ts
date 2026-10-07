@@ -148,7 +148,7 @@ export async function applyCloudRestore(id: string, confirmation: string): Promi
     }
     for (const state of external) {
       const source = path.join(fromRoot, state.name);
-      if (fs.existsSync(source)) plan.push({ target: state.target, source });
+      if (fs.existsSync(source) || fs.existsSync(state.target)) plan.push({ target: state.target, source });
     }
     for (const item of plan) {
       if (fs.existsSync(item.target) && fs.lstatSync(item.target).isSymbolicLink()) throw new Error("恢复失败：目标包含软链接，请先核对数据目录。");

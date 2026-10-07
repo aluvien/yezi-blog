@@ -147,6 +147,8 @@ test("restore preview validates all files, then restores into the live WAL datab
   fs.writeFileSync(path.join(root, "data", "uploads", "photo.jpg"), "changed-photo");
   fs.writeFileSync(path.join(root, "data", "uploads", "later.jpg"), "later-photo");
   fs.writeFileSync(process.env.QQ_MUSIC_SESSION_PATH, '{"cookie":"changed-cookie"}');
+  const lateBotState = path.join(root, "data", "telegram-bot-state.json");
+  fs.writeFileSync(lateBotState, '{"offset":12345}');
   fs.writeFileSync(path.join(root, ".env.local"), "ADMIN_PASSWORD=host-current\nPM2_HOME=/host-current\n");
   fs.writeFileSync(path.join(root, "data", "deploy-commit"), "current-host-commit");
   const session = crypto.randomBytes(32).toString("hex");
@@ -162,6 +164,7 @@ test("restore preview validates all files, then restores into the live WAL datab
   assert.equal(db.pragma("integrity_check", { simple: true }), "ok");
   assert.equal(fs.readFileSync(path.join(root, "data", "uploads", "photo.jpg"), "utf8"), "original-photo");
   assert.equal(fs.existsSync(path.join(root, "data", "uploads", "later.jpg")), false);
+  assert.equal(fs.existsSync(lateBotState), false, "state created after the backup must not survive restoration");
   assert.equal(fs.readFileSync(process.env.QQ_MUSIC_SESSION_PATH, "utf8"), '{"cookie":"original-cookie"}');
   assert.equal(fs.readFileSync(path.join(root, ".env.local"), "utf8"), "ADMIN_PASSWORD=host-current\nPM2_HOME=/host-current\n");
   assert.equal(fs.readFileSync(path.join(root, "data", "deploy-commit"), "utf8"), "current-host-commit");
