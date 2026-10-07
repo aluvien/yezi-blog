@@ -23,7 +23,7 @@ export interface DbBackupResult {
  * 后台每日调度（backup-scheduler.ts）与手动命令（scripts/backup.mts）使用同一
  * 目标格式与校验规则；手动脚本为不依赖应用路径别名的运维入口，改动时应保持两者行为一致。
  */
-export async function runDbBackup(options: { keep?: number; dbPath?: string } = {}): Promise<DbBackupResult> {
+export async function runDbBackup(options: { keep?: number; dbPath?: string; backupDir?: string } = {}): Promise<DbBackupResult> {
   const root = getProjectRoot();
   const source = path.resolve(
     options.dbPath ?? process.env.BLOG_DB_PATH?.trim() ?? path.join(root, "data", "blog.db"),
@@ -34,7 +34,7 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string } = 
   // BLOG_ROOT are different; otherwise retain the historical project-root
   // fallback used by daily backups and local commands.
   const backupDir = path.resolve(
-    process.env.BLOG_BACKUP_DIR?.trim() || path.join(root, "data", "backups"),
+    options.backupDir || process.env.BLOG_BACKUP_DIR?.trim() || path.join(root, "data", "backups"),
   );
   fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(backupDir, 0o700);

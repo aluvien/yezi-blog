@@ -320,6 +320,18 @@ POST /api/v1/comments       # 提交评论，沿用前台审核与限频规则
 - 引用阅读归档与图片：`data/reference-archives/`、`data/ref/`
 - QQ/Telegram 本地状态：`data/qq-music-session.json`、`data/telegram-bot-state.json`
 
+### 后台一键备份与下载
+
+进入 **后台 → 站点设置 → 数据备份**，点击 **备份并下载**。任务在后台生成 SQLite 在线快照、复制持久化文件和应用配置、压缩并校验，完成后自动下载 `.tar.gz`。刷新页面可继续查看处理步骤，也可以再次下载最近一份完成的备份。
+
+备份包含数据库（包括 WAL 中已提交的数据）、上传图片与附件、引用归档、QQ/Telegram 本地状态；同时保存项目中存在的 `.env*` 环境文件、`BLOG_ENV_FILE` 指定的外部环境文件、PM2/Next 配置及依赖版本文件。`config/runtime.env` 额外记录应用环境变量，覆盖仅由 PM2 注入的配置；不会导出整个操作系统环境。`manifest.json` 记录文件 SHA-256、数据库版本和原始位置，`RESTORE.md` 说明恢复步骤及迁移时需要调整的路径。
+
+**下载包未加密，可能包含后台密码、API 密钥和 QQ Cookie，只能由已登录管理员下载，必须妥善保存，不要放进公开仓库或公开网盘。** 手动下载不要求设置 `DATA_BACKUP_KEY`，与下面的自动加密归档分别保存。手动归档放在 `BLOG_ROOT/data/backups/admin`，目录权限 0700、文件权限 0600，保留最近 3 份；请将下载包另外保存到电脑或独立存储，服务器上的副本无法防止服务器磁盘故障。
+
+备份无需停止网站。数据库是一致快照，但文件与配置复制不是整个文件系统的原子快照，备份期间请避免删除附件或修改配置。排除历史备份、临时文件和可再生成的 QQ 音频缓存；不包含 Node 依赖、构建产物或服务器 Nginx/证书/系统级 PM2 配置。需要服务器整体恢复时，请另外保存这些系统配置。进程重启中断的任务会显示失败并允许重试；校验失败的归档不会供下载。
+
+### 数据库快照与自动加密归档
+
 整个 `data/` 都必须持久化。`npm run backup` 生成 SQLite online snapshot，并执行 `integrity_check`、`foreign_key_check` 与核心表校验。配置 `DATA_BACKUP_KEY` 后，自动任务和 `npm run backup:data` 还会生成 AES-256-GCM 加密的完整归档；归档包含一份经过校验的 DB snapshot、上传、引用归档和本地状态，明确排除在线 `blog.db-wal`/`blog.db-shm` 与备份目录。`DATA_BACKUP_MIRROR_DIR` 应指向异机挂载或独立故障域；程序拒绝把它放进 `BLOG_ROOT`。备份目录不得暴露到 Web，密钥不得写进 Git 或日志。
 
 恢复演练或实际恢复前，先校验目标文件：
