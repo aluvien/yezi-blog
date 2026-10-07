@@ -54,7 +54,7 @@ const RESTORE_GUIDE = `# 叶子博客完整数据备份
 
 type Lock = { id: string; pid: number; bootId: string };
 type FileEntry = { path: string; sizeBytes: number; sha256: string };
-type Manifest = {
+export type AdminBackupManifest = {
   format: number;
   createdAt: string;
   sourceCommit: string | null;
@@ -184,10 +184,10 @@ async function sourceCommit(root: string): Promise<string | null> {
   });
 }
 
-async function copyConfiguration(stage: string, root: string): Promise<Manifest["configuration"]> {
+async function copyConfiguration(stage: string, root: string): Promise<AdminBackupManifest["configuration"]> {
   const config = path.join(stage, "config");
   await fs.promises.mkdir(config, { recursive: true, mode: 0o700 });
-  const sources: Manifest["configuration"] = [];
+  const sources: AdminBackupManifest["configuration"] = [];
   const copy = async (source: string, relative: string, required = false) => {
     if (!fs.existsSync(source)) {
       if (required) throw new Error("已配置的环境文件不存在");
@@ -203,6 +203,7 @@ async function copyConfiguration(stage: string, root: string): Promise<Manifest[
   const project = path.resolve(process.env.DEPLOY_PROJECT_DIR?.trim() || root);
   for (const name of CONFIG_NAMES) await copy(path.join(project, name), `config/project/${name}`);
   if (project !== root) for (const name of CONFIG_NAMES) await copy(path.join(root, name), `config/state-root/${name}`);
+  await copy(path.join(root, "data", "backups", "cloud", "settings.json"), "config/cloud-backup.json");
   const external = process.env.BLOG_ENV_FILE?.trim();
   if (external) await copy(path.resolve(external), "config/external.env", true);
   const environment = ENV_NAMES.filter((name) => process.env[name] !== undefined).map((name) => `${name}=${JSON.stringify(process.env[name])}`).join("\n");
@@ -212,7 +213,7 @@ async function copyConfiguration(stage: string, root: string): Promise<Manifest[
 
 function runTar(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn("tar", args, { stdio: ["ignore", "ignore", "ignore"] });
+    const child = spawn("tar", args, { stdio: ["ignore", "ignore", "ignore"], env: { ...process.env, COPYFILE_DISABLE: "1" } });
     child.once("error", reject);
     child.once("close", (code) => code === 0 ? resolve() : reject(new Error("归档处理失败")));
   });
@@ -221,7 +222,11 @@ function runTar(args: string[]): Promise<void> {
 /** Verifies only a server-created archive; never accepts user-uploaded archives. */
 export async function verifyAdminBackupArchive(archive: string, extractRoot: string): Promise<{ files: number; schemaVersion: number }> {
   await runTar(["-xzf", archive, "-C", extractRoot]);
-  const manifest = readJson<Manifest>(path.join(extractRoot, "manifest.json"));
+  return verifyAdminBackupContents(extractRoot);
+}
+
+export async function verifyAdminBackupContents(extractRoot: string): Promise<{ files: number; schemaVersion: number }> {
+  const manifest = readJson<AdminBackupManifest>(path.join(extractRoot, "manifest.json"));
   if (manifest?.format !== 1 || !Array.isArray(manifest.files)) throw new Error("备份清单无效");
   const files = (await listFiles(extractRoot)).filter((file) => file.path !== "manifest.json");
   if (JSON.stringify(files) !== JSON.stringify(manifest.files)) throw new Error("备份文件校验失败");
@@ -230,7 +235,7 @@ export async function verifyAdminBackupArchive(archive: string, extractRoot: str
   return { files: files.length, schemaVersion: verified.schemaVersion };
 }
 
-export async function executeAdminBackup(id: string): Promise<void> {
+export async function executeAdminBackup(id: string, onProgress?: (phase: AdminBackupPhase) => void): Promise<void> {
   if (!ID_PATTERN.test(id)) return;
   const root = backupDirectory();
   const lock = readJson<Lock>(path.join(root, ".lock"));
@@ -242,6 +247,7 @@ export async function executeAdminBackup(id: string): Promise<void> {
   let phase: AdminBackupPhase = "database";
   const progress = (next: AdminBackupPhase) => {
     phase = next;
+    onProgress?.(next);
     writeStatus(root, { ...initial, phase, updatedAt: new Date().toISOString() });
   };
   try {
@@ -269,7 +275,7 @@ export async function executeAdminBackup(id: string): Promise<void> {
     const configuration = await copyConfiguration(stage, stateRoot);
     await fs.promises.writeFile(path.join(stage, "RESTORE.md"), RESTORE_GUIDE, { mode: 0o600 });
     const commit = fs.existsSync(path.join(stateRoot, "data", "deploy-commit")) ? fs.readFileSync(path.join(stateRoot, "data", "deploy-commit"), "utf8").trim() : "";
-    const manifest: Manifest = {
+    const manifest: AdminBackupManifest = {
       format: 1, createdAt: initial.createdAt,
       sourceCommit: await sourceCommit(stateRoot) || (/^[a-f0-9]{40}$/.test(process.env.DEPLOY_BUILD_COMMIT || commit) ? (process.env.DEPLOY_BUILD_COMMIT || commit) : null),
       schemaVersion: snapshot.verification.schemaVersion,

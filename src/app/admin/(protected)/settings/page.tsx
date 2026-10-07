@@ -3,7 +3,6 @@ import LogoutButton from "@/components/admin/LogoutButton";
 import SiteSettingsForm from "@/components/admin/SiteSettingsForm";
 import SyncGithubButton from "@/components/admin/SyncGithubButton";
 import AdminPageHeader from "@/components/admin/AdminPageHeader";
-import DataBackupPanel from "@/components/admin/DataBackupPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +16,6 @@ export default function AdminSettingsPage() {
         actions={<SyncGithubButton trailingAction={<LogoutButton />} />}
       />
       <SiteSettingsForm initialValues={getSiteSettings()} section="site" />
-      <DataBackupPanel />
     </div>
   );
 }

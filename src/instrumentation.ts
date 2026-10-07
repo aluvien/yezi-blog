@@ -8,6 +8,9 @@ export async function register(): Promise<void> {
     if (process.env.NODE_ENV === "production" && !["true", "false"].includes(process.env.TRUST_PROXY ?? "")) {
       console.warn("[security] 生产环境请显式设置 TRUST_PROXY=true（仅可信反代）或 false（直连）；未设置会让访客共用 unknown 限频键。");
     }
+    const { recoverInterruptedCloudRestore } = await import("./lib/cloud-backup-restore");
+    await recoverInterruptedCloudRestore();
+    const { isCloudRestoreActive } = await import("./lib/cloud-restore-guard");
     const startBackgroundWork = async (): Promise<void> => {
       const [{ enforceAdminPasswordFingerprint }, { startQQMusicHealthScheduler }, { startTelegramBotScheduler }, { resumeArticleReferenceArchiveJobs }, { startBackupScheduler }, { startMaintenanceScheduler }] = await Promise.all([
         import("./lib/db"),
@@ -35,7 +38,7 @@ export async function register(): Promise<void> {
     };
 
     const { isDeploymentWriteHoldActive } = await import("./lib/deploy-write-guard");
-    if (!isDeploymentWriteHoldActive()) {
+    if (!isDeploymentWriteHoldActive() && !isCloudRestoreActive()) {
       await startBackgroundWork();
       return;
     }
@@ -44,7 +47,7 @@ export async function register(): Promise<void> {
     // passed.  Polling a file is intentional: Proxy and this runtime do not
     // share a reliable global state, and a restart would reopen a write race.
     const timer = setInterval(() => {
-      if (isDeploymentWriteHoldActive()) return;
+      if (isDeploymentWriteHoldActive() || isCloudRestoreActive()) return;
       clearInterval(timer);
       void startBackgroundWork().catch((error) => console.error("[deployment] 启动后台任务失败", error));
     }, 200);

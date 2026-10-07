@@ -1,7 +1,10 @@
+import { currentDataEpoch, isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import { promises as fs } from "node:fs";
 
 /** Write the file first, then remove it again if the database transaction cannot create its record. */
 export async function writeUploadWithRecord<T>(absolutePath: string, contents: Buffer, createRecord: () => T): Promise<T> {
+  if (isCloudRestoreActive()) throw new Error("正在恢复数据，请稍后上传文件");
+  const epoch = currentDataEpoch();
   try {
     await fs.writeFile(absolutePath, contents, { mode: 0o640 });
   } catch (error) {
@@ -10,6 +13,7 @@ export async function writeUploadWithRecord<T>(absolutePath: string, contents: B
     throw error;
   }
   try {
+    if (isCloudRestoreActive() || currentDataEpoch() !== epoch) throw new Error("数据已进入恢复流程，请重新上传文件");
     return createRecord();
   } catch (error) {
     await fs.unlink(absolutePath).catch(() => undefined);

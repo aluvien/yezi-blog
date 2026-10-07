@@ -27,6 +27,7 @@ const SETTINGS_NAV = [
   { href: "/admin/settings", label: "站点设置", exact: true },
   { href: "/admin/settings/music", label: "音乐设置" },
   { href: "/admin/settings/appearance", label: "外观主题" },
+  { href: "/admin/settings/backups", label: "备份恢复" },
 ];
 
 type MenuKey = "life" | "data" | "settings";

@@ -1,3 +1,4 @@
+import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import { runDbBackup, lastBackupTimestamp } from "@/lib/backup";
 import { runCompleteDataBackup } from "@/lib/data-backup";
 
@@ -61,7 +62,7 @@ function schedule(current: SchedulerState, delayMs: number): void {
 async function runScheduledBackup(): Promise<void> {
   const current = state();
   current.timer = undefined;
-  if (current.running) return;
+  if (current.running || isCloudRestoreActive()) { schedule(current, INITIALIZATION_RETRY_MS); return; }
   current.running = true;
   let nextDelay = msUntilNextBackup();
   try {
@@ -72,6 +73,7 @@ async function runScheduledBackup(): Promise<void> {
       const result = await runDbBackup();
       console.log(`[backup-scheduler] 每日数据库备份完成：${result.path}；未配置 DATA_BACKUP_KEY，完整数据归档未启用`);
     }
+    await (await import("@/lib/cloud-backup")).runDailyCloudBackup();
   } catch (error) {
     nextDelay = backupRetryDelay(error, nextDelay);
     if (isDatabaseNotInitializedError(error)) {

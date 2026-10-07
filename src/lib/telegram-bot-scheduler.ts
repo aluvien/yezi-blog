@@ -1,3 +1,4 @@
+import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import { isTelegramConfigured, registerTelegramBotCommands } from "@/lib/telegram";
 import { processTelegramBotUpdates } from "@/lib/telegram-bot";
 
@@ -28,7 +29,7 @@ function schedule(current: SchedulerState, delayMs: number): void {
 async function run(): Promise<void> {
   const current = state();
   current.timer = undefined;
-  if (current.running) return;
+  if (current.running || isCloudRestoreActive()) { schedule(current, POLL_INTERVAL_MS); return; }
   current.running = true;
   try {
     await processTelegramBotUpdates();

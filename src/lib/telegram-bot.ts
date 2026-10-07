@@ -1,3 +1,4 @@
+import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -476,10 +477,11 @@ export async function processTelegramBotUpdates(): Promise<void> {
   const state = readState();
   const firstPoll = !state.offset;
   const updates = await getTelegramUpdates(state.offset);
-  if (!updates.ok) return;
+  if (!updates.ok || isCloudRestoreActive()) return;
   const nowSeconds = Math.floor(Date.now() / 1_000);
 
   for (const raw of updates.updates) {
+    if (isCloudRestoreActive()) return;
     if (!isRecord(raw)) continue;
     const updateId = numberValue(raw.update_id);
     if (updateId !== null) state.offset = Math.max(state.offset ?? 0, updateId + 1);
@@ -490,6 +492,7 @@ export async function processTelegramBotUpdates(): Promise<void> {
     else if (isRecord(raw.message)) await handleMessage(state, raw.message);
   }
 
+  if (isCloudRestoreActive()) return;
   await pollPendingQQLogin(state);
-  saveState(state);
+  if (!isCloudRestoreActive()) saveState(state);
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { productionContentSecurityPolicy } from "@/lib/csp";
+import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import { isDeploymentWriteHoldActive } from "@/lib/deploy-write-guard";
 
 type ProxySecurityContext = {
@@ -49,6 +50,13 @@ export function proxy(request: NextRequest) {
       warningState.__yeziProxyHeaderWarning = true;
       console.warn("[security] 收到代理 IP 头但 TRUST_PROXY 未开启；所有访客会共用 unknown 限流桶");
     }
+  }
+
+  if (isCloudRestoreActive() && !(request.method === "GET" && pathname === "/api/admin/v1/backups/cloud")) {
+    const response = pathname.startsWith("/api/")
+      ? NextResponse.json({ error: "正在恢复数据，请稍后重试" }, { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } })
+      : new NextResponse("正在恢复数据，请稍后重试", { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } });
+    return applySecurityHeaders(response, security);
   }
 
   // A candidate release has already migrated the live SQLite file, but has
