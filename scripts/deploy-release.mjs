@@ -17,7 +17,8 @@ const processName = process.env.DEPLOY_PM2_NAME?.trim() || "yezi-blog";
 const restartMode = process.env.DEPLOY_RESTART_MODE === "direct" ? "direct" : "pm2";
 const envFile = path.resolve(process.env.BLOG_ENV_FILE?.trim() || path.join(sourceRoot, ".env.local"));
 const statusFile = path.resolve(process.env.DEPLOY_STATUS_FILE || path.join(stateRoot, "data", "deploy-status.json"));
-const lockFile = path.join(releasesRoot, ".deploy.lock");
+// Both update workflows share the same lock, including explicitly invoked legacy deployments.
+const lockFile = path.join(stateRoot, "data", ".deploy.lock");
 const finalHealthUrl = process.env.DEPLOY_HEALTH_URL?.trim() || "http://127.0.0.1:3030/api/health/deploy";
 const keepReleases = Math.max(2, Math.min(10, Number.parseInt(process.env.DEPLOY_KEEP_RELEASES || "3", 10) || 3));
 // 一次性写探针 token：只有本 worker 拉起的进程环境里有它，健康检查才会
@@ -438,6 +439,7 @@ try {
   stableEnvironment = readStableEnvironment(envFile);
   if (!fs.existsSync(databasePath)) throw new Error(`数据库不存在：${databasePath}`);
   fs.mkdirSync(releasesRoot, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(path.dirname(lockFile), { recursive: true, mode: 0o700 });
   try {
     lockFd = fs.openSync(lockFile, "wx", 0o600);
   } catch (error) {

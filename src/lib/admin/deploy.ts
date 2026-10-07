@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { execFile } from "node:child_process";
 import { deploymentCommandEnv, resolvePm2Command } from "../../../scripts/pm2-command.mjs";
 import { readDeployedBuildCommit } from "@/lib/deploy-build";
@@ -11,7 +12,7 @@ import type {
 } from "@/lib/actions/sync";
 
 /**
- * GitHub 同步与 release 部署的业务核心。鉴权由调用方（Server Action 或已鉴权 Route Handler）负责。
+ * GitHub 同步与项目目录更新的业务核心。鉴权由调用方负责。
  */
 
 type CommandResult = { stdout: string; stderr: string };
@@ -88,7 +89,7 @@ function deploymentEnv(): NodeJS.ProcessEnv {
     ...env,
     // 同步按钮不能等待 Git 询问账号密码，否则 Server Action 会一直挂起。
     GIT_TERMINAL_PROMPT: "0",
-    PM2_HOME: process.env.PM2_HOME?.trim() || "/root/.pm2",
+    PM2_HOME: process.env.PM2_HOME?.trim() || path.join(os.homedir(), ".pm2"),
   });
 }
 
@@ -131,14 +132,9 @@ function isPm2CommandMissing(error: unknown): boolean {
 }
 
 function managedProjectDirectories(projectDir: string): Set<string> {
-  const directories = new Set([path.resolve(projectDir)]);
-  const currentLink = path.resolve(process.env.DEPLOY_CURRENT_LINK?.trim() || path.join(path.dirname(projectDir), "yezi-blog-current"));
-  try {
-    directories.add(fs.realpathSync(currentLink));
-  } catch {
-    // The initial deployment may not have created the release symlink yet.
-  }
-  return directories;
+  return new Set([projectDir, path.join(projectDir, ".next", "standalone")].map((directory) => {
+    try { return fs.realpathSync(directory); } catch { return path.resolve(directory); }
+  }));
 }
 
 /**
@@ -171,7 +167,7 @@ async function resolveDeploymentSupervisor(projectDir: string): Promise<Deployme
   }
 }
 
-/** 在服务端直接拉取 GitHub main 并部署，不再依赖外部 hook。 */
+/** 后台和终端共用项目目录更新脚本。 */
 export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
   invalidateGithubVersionCache();
   try {
@@ -179,26 +175,25 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
     if (!fs.existsSync(path.join(projectDir, "package.json"))) return { ok: false, error: `部署目录无效：${projectDir}` };
     const supervisor = await resolveDeploymentSupervisor(projectDir);
     if (supervisor.mode === "unavailable") return { ok: false, error: supervisor.error };
+    if (supervisor.mode !== "pm2") return { ok: false, error: "项目目录更新需要现有 PM2 进程；请配置 DEPLOY_PM2_NAME" };
     const envFile = path.resolve(process.env.BLOG_ENV_FILE?.trim() || path.join(projectDir, ".env.local"));
     if (!fs.existsSync(envFile)) return { ok: false, error: `缺少稳定外部环境文件：${envFile}` };
     if ((fs.statSync(envFile).mode & 0o077) !== 0) return { ok: false, error: "外部环境文件权限必须为 0600" };
-    const releasesRoot = path.resolve(process.env.DEPLOY_RELEASES_DIR?.trim() || path.join(path.dirname(projectDir), "yezi-blog-releases"));
-    if (fs.existsSync(path.join(releasesRoot, ".deploy.lock"))) return { ok: false, error: "已有一次部署正在执行，请等待健康检查或回滚完成" };
-
     const statusFile = path.join(process.env.BLOG_ROOT?.trim() || projectDir, "data", "deploy-status.json");
-    const runner = path.join(projectDir, "scripts", "deploy-release.mjs");
+    if (fs.existsSync(path.join(path.dirname(statusFile), ".deploy.lock"))) return { ok: false, error: "已有一次部署正在执行，请等待完成" };
+    const runner = path.join(projectDir, "scripts", "deploy-in-place.mjs");
     const launcher = path.join(projectDir, "scripts", "launch-detached-deploy.mjs");
-    if (!fs.existsSync(runner)) return { ok: false, error: "缺少 release 部署脚本" };
+    if (!fs.existsSync(runner)) return { ok: false, error: "缺少项目目录更新脚本 deploy-in-place.mjs" };
     if (!fs.existsSync(launcher)) return { ok: false, error: "缺少独立部署启动器" };
     fs.mkdirSync(path.dirname(statusFile), { recursive: true, mode: 0o700 });
     fs.writeFileSync(statusFile, `${JSON.stringify({ status: "queued", updatedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
-    const logFile = path.join(path.dirname(statusFile), "deploy-release.log");
+    const logFile = path.join(path.dirname(statusFile), "deploy.log");
     const launchEnv = deploymentCommandEnv({
       ...deploymentEnv(),
       DEPLOY_PROJECT_DIR: projectDir,
-      ...(supervisor.mode === "pm2"
-        ? { DEPLOY_PM2_NAME: supervisor.processName, DEPLOY_PM2_BIN: supervisor.pm2Bin, DEPLOY_RESTART_MODE: "pm2" }
-        : { DEPLOY_RESTART_MODE: "direct" }),
+      DEPLOY_PM2_NAME: supervisor.processName,
+      DEPLOY_PM2_BIN: supervisor.pm2Bin,
+      DEPLOY_RESTART_MODE: "pm2",
       DEPLOY_STATUS_FILE: statusFile,
       DEPLOY_LOG_FILE: logFile,
       DEPLOY_REQUIRE_ORPHAN: "1",
@@ -219,9 +214,7 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
     }
     return {
       ok: true,
-      message: supervisor.mode === "pm2"
-        ? "已启动独立 release 部署任务；构建、切换、健康检查与失败回滚将在服务器端完成。"
-        : "已启动独立 release 部署任务；将替换 3030 端口上的旧 Next 进程并完成健康检查。",
+      message: "已启动项目目录更新任务；安装依赖和构建期间会暂停网站，随后重启原 PM2 进程并检查结果。",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "同步或部署异常";
@@ -236,14 +229,14 @@ export async function syncLatestGithub(): Promise<SyncGithubActionResult> {
  * 正在传输的 Server Action Flight 响应，导致前端第一次点击显示通用网络错误。
  */
 export async function scheduleGithubRestart(): Promise<ScheduleGithubRestartActionResult> {
-  return { ok: false, error: "release 部署已由服务器任务统一负责重启，不再接受独立重启请求" };
+  return { ok: false, error: "更新任务会统一负责重启，不再接受独立重启请求" };
 }
 
-/** 查询后台 release 部署任务写入的状态，供设置页确认部署与健康检查结果。 */
+/** 查询项目更新任务写入的状态，供设置页确认健康检查结果。 */
 export async function getGithubDeployStatus(): Promise<GithubDeployStatus> {
   const projectDir = deploymentProjectDir();
   // 必须与 syncLatestGithub 使用同一根目录，否则 BLOG_ROOT 与部署目录不同时，
-  // 后台会持续读到旧状态，App 也无法获知 release 部署的真实进度。
+  // 后台会持续读到旧状态，App 也无法获知更新任务的真实进度。
   const statusFile = path.join(process.env.BLOG_ROOT?.trim() || projectDir, "data", "deploy-status.json");
   try {
     const value = JSON.parse(fs.readFileSync(statusFile, "utf8")) as Partial<GithubDeployStatus>;
@@ -257,7 +250,7 @@ export async function getGithubDeployStatus(): Promise<GithubDeployStatus> {
 }
 
 /**
- * 检查服务器当前已部署 release 是否与 GitHub origin/main 一致。
+ * 检查服务器当前已部署构建是否与 GitHub origin/main 一致。
  * 只执行只读 Git 命令，不会拉取代码、构建项目或修改数据库。
  */
 export async function getGithubVersionStatus(options?: { bypassCache?: boolean }): Promise<GithubVersionStatus> {
@@ -289,10 +282,9 @@ export async function getGithubVersionStatus(options?: { bypassCache?: boolean }
     const sourceCommit = local.stdout.trim().split(/\s+/)[0] || "";
     if (!/^[0-9a-f]{40}$/i.test(sourceCommit)) throw new Error("无法读取服务器源码提交");
 
-    // Release 部署只 fetch origin/main 并切换 yezi-blog-current，不会推进稳定
-    // 源码目录的 main。版本提示必须优先比较持久化的活动 release 标记，
-    // 否则每次成功部署后仍会把旧源码 HEAD 误报为“本地版本”。首次部署或
-    // 开发环境没有标记时，才回退到源码 HEAD。
+    // 拉取后的源码不代表运行中的构建。构建失败并恢复旧产物时，main
+    // 已推进但网站仍是旧版本，必须优先比较健康检查后保存的部署记录。
+    // 首次部署或开发环境没有记录时，才回退到源码 HEAD。
     const localCommit = readDeployedBuildCommit(process.env.BLOG_ROOT?.trim() || projectDir) || sourceCommit;
 
     const changes = await runCommand("git", ["status", "--porcelain=v1", "--untracked-files=no"], projectDir, 5_000, env);

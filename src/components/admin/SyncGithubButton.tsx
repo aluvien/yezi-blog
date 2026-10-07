@@ -50,9 +50,9 @@ export default function SyncGithubButton({ trailingAction }: Props) {
   const [checkingVersion, setCheckingVersion] = useState(true);
 
   async function confirmLatestVersion() {
-    // PM2 切换成功时，当前页面仍可能运行旧 release 的客户端代码。使用
+    // PM2 重启成功时，当前页面仍可能运行旧构建的客户端代码。使用
     // 稳定 JSON API（而不是旧 Server Action 标识）轮询新进程，直到活动
-    // release 与 GitHub 一致，避免用户再手动刷新页面。
+    // 构建与 GitHub 一致，避免用户再手动刷新页面。
     setCheckingVersion(true);
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const result = await readVersionStatus();
@@ -87,7 +87,7 @@ export default function SyncGithubButton({ trailingAction }: Props) {
   function sync() {
     // Server Action 会依次执行备份、拉取、构建和 PM2 重启，可能持续几十秒。
     // 先更新本地状态，让用户能立即确认点击已经生效，不把反馈留到请求结束后。
-    setStatus({ kind: "pending", text: "正在备份数据库并同步 GitHub，构建完成后自动重启…" });
+    setStatus({ kind: "pending", text: "正在启动更新任务，安装依赖和构建期间网站会暂停服务…" });
     startTransition(async () => {
       try {
         const result = await syncLatestGithubAction();
@@ -96,22 +96,15 @@ export default function SyncGithubButton({ trailingAction }: Props) {
           return;
         }
         setStatus({ kind: "pending", text: result.message });
-        let statusReadFailures = 0;
-        for (let attempt = 0; attempt < 180; attempt += 1) {
+        for (let attempt = 0; attempt < 600; attempt += 1) {
           await wait(2_000);
           let deploy: GithubDeployStatus;
           try {
             deploy = await fetchAdminStatus<GithubDeployStatus>("/api/admin/v1/deploy/status");
           } catch {
-            statusReadFailures += 1;
-            if (statusReadFailures >= 5) {
-              setStatus({ kind: "error", text: "连续无法读取部署状态，服务可能未正常启动；请刷新页面查看失败详情。" });
-            } else {
-              setStatus({ kind: "pending", text: "服务正在重启，暂时无法读取部署状态…" });
-            }
+            setStatus({ kind: "pending", text: "网站正在停止、构建或重启，暂时无法读取状态；更新任务仍在服务器运行…" });
             continue;
           }
-          statusReadFailures = 0;
           if (deploy.status === "success") {
             setStatus({ kind: "success", text: "同步、构建和 PM2 重启均已成功。" });
             await confirmLatestVersion();
@@ -122,10 +115,10 @@ export default function SyncGithubButton({ trailingAction }: Props) {
             return;
           }
           const stage = deploy.status === "queued" ? "等待部署任务启动"
-            : deploy.status === "building" ? "正在独立 release 中安装依赖并构建"
-            : deploy.status === "switching" ? "正在停止旧进程、备份数据库并切换 release"
-            : deploy.status === "checking" ? "新 release 已启动，正在执行健康检查"
-            : deploy.status === "rolling_back" ? "健康检查失败，正在自动回滚"
+            : deploy.status === "building" ? "网站暂时停止，正在项目目录安装依赖并构建"
+            : deploy.status === "switching" ? "正在重启原 PM2 进程"
+            : deploy.status === "checking" ? "新构建已启动，正在执行健康检查"
+            : deploy.status === "rolling_back" ? "更新失败，正在恢复旧构建"
             : "正在部署";
           setStatus({ kind: "pending", text: stage });
         }

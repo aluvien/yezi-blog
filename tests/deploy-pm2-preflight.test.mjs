@@ -54,7 +54,7 @@ test("the discovered PM2 CLI and Node PATH are forwarded to the detached deploym
   const captured = path.join(root, "launcher.json");
   fs.writeFileSync(process.env.BLOG_ENV_FILE, "ADMIN_PASSWORD=test\n", { mode: 0o600 });
   fs.mkdirSync(path.join(root, "scripts"));
-  fs.writeFileSync(path.join(root, "scripts", "deploy-release.mjs"), "");
+  fs.writeFileSync(path.join(root, "scripts", "deploy-in-place.mjs"), "");
   fs.writeFileSync(path.join(root, "scripts", "launch-detached-deploy.mjs"), `
     import fs from "node:fs";
     import { execFileSync } from "node:child_process";

@@ -11,6 +11,7 @@
     "dev:qq-music": "node scripts/start-local-qq-music-api.mjs",
     "build": "node scripts/build.mjs",
     "start": "node scripts/start-standalone.mjs",
+    "deploy": "node scripts/deploy-in-place.mjs",
     "seed": "node scripts/seed.mjs",
     "demo:taxonomy": "node scripts/demo-taxonomy.mjs",
     "backup": "node --experimental-strip-types scripts/backup.mts",
