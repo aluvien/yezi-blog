@@ -1,9 +1,10 @@
+import { getSiteUrl } from "@/lib/site-config";
 import { getSiteSettings, listPosts, listMoments, parseMomentImages } from "@/lib/db";
 import { stripMarkdown } from "@/lib/markdown";
 import { site } from "@/lib/site";
 
 export const runtime = "nodejs";
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 function escapeXml(s: string): string {
   return s
@@ -15,11 +16,13 @@ function escapeXml(s: string): string {
 }
 
 export function GET() {
-  const classic = getSiteSettings().layout_theme === "classic";
+  const settings = getSiteSettings();
+  const siteUrl = getSiteUrl(settings);
+  const classic = settings.layout_theme === "classic";
   const items = [
     ...listPosts().map((post) => ({
       title: post.title,
-      link: `${site.url}${classic ? "/essay" : "/posts"}/${post.slug}`,
+      link: `${siteUrl}${classic ? "/essay" : "/posts"}/${post.slug}`,
       description: stripMarkdown(post.content, 200),
       pubDate: new Date(post.created_at).toUTCString(),
       guid: `post-${post.id}`,
@@ -29,7 +32,7 @@ export function GET() {
       const images = parseMomentImages(moment);
       return {
         title: text.length > 40 ? text.slice(0, 40) + "…" : text,
-        link: `${site.url}${classic ? "/bits" : "/moments"}#moment-${moment.id}`,
+        link: `${siteUrl}${classic ? "/bits" : "/moments"}#moment-${moment.id}`,
         description: moment.content + (images.length ? `\n图片：${images.join(" ")}` : ""),
         pubDate: new Date(moment.created_at).toUTCString(),
         guid: `moment-${moment.id}`,
@@ -41,7 +44,7 @@ export function GET() {
 <rss version="2.0">
   <channel>
     <title>${escapeXml(site.name)}</title>
-    <link>${escapeXml(site.url)}</link>
+    <link>${escapeXml(siteUrl)}</link>
     <description>${escapeXml(site.description)}</description>
     <language>zh-CN</language>
 ${items
@@ -59,6 +62,6 @@ ${items
 </rss>`;
 
   return new Response(xml, {
-    headers: { "Content-Type": "application/rss+xml; charset=utf-8" },
+    headers: { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "no-store" },
   });
 }

@@ -1,6 +1,9 @@
+import { getBackupSiteIdentity } from "@/lib/site-config";
+import { normalizeSiteUrl } from "@/lib/site-url";
 import { revalidatePath } from "next/cache";
 import {
   createCategory,
+  db,
   deleteCategory,
   deleteTag as deleteTagInDb,
   getSiteSettings,
@@ -22,6 +25,7 @@ import type { SettingsActionResult } from "@/lib/actions/settings";
 
 export const SETTING_KEYS = [
   "site_name",
+  "site_url",
   "site_subtitle",
   "site_logo",
   "site_logo_no_border",
@@ -76,6 +80,11 @@ export async function updateSiteSettings(values: Record<string, string>): Promis
       safeValues[key] = existing[key] ?? "";
       continue;
     }
+    if (key === "site_url") {
+      try { safeValues[key] = normalizeSiteUrl(String(values[key] ?? "")); }
+      catch (error) { return { ok: false, error: error instanceof Error ? error.message : "网站地址格式无效" }; }
+      continue;
+    }
     const limit = key === "about_content" ? 20000 : 2000;
     const value = String(values[key] ?? "").trim().slice(0, limit);
     if (key === "about_content") {
@@ -86,13 +95,22 @@ export async function updateSiteSettings(values: Record<string, string>): Promis
   }
   const schedulerChanged = ["qq_music_health_check_enabled", "qq_music_health_check_interval_hours"]
     .some((key) => safeValues[key] !== (existing[key] ?? ""));
-  setSiteSettings(safeValues);
+  // Remember the previous domain before replacing it, for pre-ID cloud backups.
+  const siteUrlChanged = safeValues.site_url !== (existing.site_url ?? "");
+  db.transaction(() => {
+    if (siteUrlChanged) getBackupSiteIdentity();
+    setSiteSettings(safeValues);
+    if (siteUrlChanged) getBackupSiteIdentity();
+  })();
   if (schedulerChanged) refreshQQMusicHealthScheduler();
   if (safeValues.about_content !== (existing.about_content ?? "") || safeValues.default_music !== (existing.default_music ?? "")) {
     invalidateQQMusicAccessCache();
   }
   revalidatePath("/", "layout");
   revalidatePath("/about");
+  revalidatePath("/sitemap.xml");
+  revalidatePath("/robots.txt");
+  revalidatePath("/rss.xml");
   revalidatePath("/admin/attachments");
   return { ok: true };
 }

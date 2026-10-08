@@ -1,3 +1,4 @@
+import { getSiteUrl } from "@/lib/site-config";
 import { getAuthorAvatar } from "@/lib/author";
 import { apiJson, apiOptions } from "@/lib/api";
 import { getSiteSettings } from "@/lib/db";
@@ -19,6 +20,7 @@ export function GET() {
   return apiJson({
     data: {
       name,
+      url: getSiteUrl(settings),
       subtitle,
       description: site.description,
       logo: settings.site_logo?.trim() || null,
@@ -31,7 +33,7 @@ export function GET() {
       social_links: parseSocialLinks(settings.social_links, 6),
       navigation: getVisibleNavItems(settings).map(({ href, label }) => ({ href, label })),
     },
-  }, 200, { cache: "short" });
+  }, 200);
 }
 
 export function OPTIONS() {

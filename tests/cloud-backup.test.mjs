@@ -14,9 +14,10 @@ process.env.BLOG_DB_PATH = path.join(root, "data", "custom.db");
 process.env.QQ_MUSIC_SESSION_PATH = path.join(external, "qq.json");
 process.env.ADMIN_PASSWORD = "cloud-admin-private";
 process.env.NEXT_PUBLIC_SITE_URL = "https://blog.yezi.me";
-const { db, createPost, createSession, getSessionByToken } = await import("../src/lib/db.ts");
+const { db, createPost, createSession, getSessionByToken, setSiteSettings } = await import("../src/lib/db.ts");
 const { cloudBackupRoot, saveCloudSettings, publicCloudSettings, readCloudSettings } = await import("../src/lib/cloud-backup-config.ts");
 const { CLOUD_FILE_PATTERN, WebDavClient, normalizeWebDavLocation, parseDavResponses } = await import("../src/lib/webdav.ts");
+const { getBackupSiteIdentity } = await import("../src/lib/site-config.ts");
 const { cloudBackupSiteLabel } = await import("../src/lib/cloud-backup-name.ts");
 const { encryptCloudArchive, decryptCloudArchive, extractAndVerifyCloudArchive } = await import("../src/lib/cloud-backup-archive.ts");
 const { acquireCloudLock, releaseCloudLock, isCloudBusy, downloadCloudBackup, deleteCloudBackup, startCloudTask, executeCloudTask, getCloudTask, cloudStage, preparedCloudDownload, writeCloudTask } = await import("../src/lib/cloud-backup.ts");
@@ -121,6 +122,7 @@ test("cloud backups include WAL data, files and config, are encrypted, and round
   const task = getCloudTask(); assert.equal(task.status, "completed", task.error);
   selected = task.name;
   assert.match(selected, /-blog\.yezi\.me-/);
+  assert.ok(selected.includes(`-site-${getBackupSiteIdentity().siteId}-`));
   assert.ok(remote.has(selected));
   assert.equal(task.transfer.totalBytes, remote.get(selected).length);
   assert.equal(task.transfer.transferredBytes, task.transfer.totalBytes);
@@ -175,6 +177,7 @@ test("restore preview validates all files, then restores into the live WAL datab
   assert.equal(db.prepare("SELECT count(*) AS count FROM posts").get().count, 1);
   assert.equal(db.prepare("SELECT content FROM posts WHERE id = ?").get(originalPost.id).content, "已提交 WAL 内容");
   assert.equal(db.pragma("integrity_check", { simple: true }), "ok");
+  assert.ok(selected.includes(`-site-${getBackupSiteIdentity().siteId}-`), "complete restore retains the archived website identity");
   assert.equal(fs.readFileSync(path.join(root, "data", "uploads", "photo.jpg"), "utf8"), "original-photo");
   assert.equal(fs.existsSync(path.join(root, "data", "uploads", "later.jpg")), false);
   assert.equal(fs.existsSync(lateBotState), false, "state created after the backup must not survive restoration");
@@ -338,4 +341,25 @@ test("cloud backup downloads stream the original encrypted bytes without changin
   await assert.rejects(downloadCloudBackup(`yezi-complete-20261008T000000Z-missing.example-${crypto.randomUUID()}.tar.gz.enc`), /不存在/);
   await assert.rejects(new WebDavClient(readCloudSettings()).streamDownload(name, encrypted.length + 1), /大小发生变化/);
   remote.delete(name);
+});
+
+
+test("retention follows a stable site ID across domain changes and preserves same-domain foreign and legacy files", async () => {
+  const identity = getBackupSiteIdentity();
+  const oldOwn = `yezi-complete-20251007T000000Z-blog.yezi.me-site-${identity.siteId}-${crypto.randomUUID()}.tar.gz.enc`;
+  const foreign = `yezi-complete-20251007T000000Z-yezi.me-site-${crypto.randomUUID()}-${crypto.randomUUID()}.tar.gz.enc`;
+  const legacy = `yezi-complete-20251007T000000Z-yezi.me-${crypto.randomUUID()}.tar.gz.enc`;
+  remote.set(oldOwn, Buffer.from("old own archive"));
+  remote.set(foreign, Buffer.from("foreign archive"));
+  remote.set(legacy, Buffer.from("legacy archive"));
+  setSiteSettings({ site_url: "https://yezi.me" });
+  saveCloudSettings({ ...settings, password: "", keep: 1 });
+  const task = startCloudTask("backup"); await executeCloudTask(task.task.id);
+  const completed = getCloudTask(); assert.equal(completed.status, "completed", completed.error);
+  const files = await new WebDavClient(readCloudSettings()).list();
+  assert.equal(files.filter(file => file.siteId === identity.siteId).length, 1);
+  assert.equal(files.find(file => file.name === completed.name).site, "yezi.me");
+  assert.equal(remote.has(oldOwn), false);
+  assert.equal(remote.has(foreign), true); assert.equal(remote.has(legacy), true);
+  assert.equal(getBackupSiteIdentity().siteId, identity.siteId);
 });

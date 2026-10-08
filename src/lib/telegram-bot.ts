@@ -1,3 +1,4 @@
+import { getSiteUrl } from "@/lib/site-config";
 import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import fs from "node:fs";
 import path from "node:path";
@@ -20,7 +21,6 @@ import { inspectQQMusicHealth, qqMusicHealthStatusLabel } from "@/lib/qq-music-h
 import { cancelNativeQQMusicQr, createNativeQQMusicQr, pollNativeQQMusicQr } from "@/lib/qq-music-native-login";
 import { saveQQMusicSession } from "@/lib/qq-music-session";
 import { QQ_LOGIN_SOURCE, QQ_MUSIC_APP_SOURCE, TELEGRAM_SOURCE, withSource } from "@/lib/service-source";
-import { site } from "@/lib/site";
 import {
   answerTelegramCallback,
   getTelegramUpdates,
@@ -202,7 +202,7 @@ async function sendDashboard(chatId: string): Promise<void> {
     `<b>待审评论</b>　${countPendingComments()}　　<b>引用</b>　${countArticleReferences()}`,
     `<b>附件</b>　${countAttachments()}`,
     "",
-    `<a href=\"${site.url}/admin\">打开网页后台 →</a>`,
+    `<a href=\"${getSiteUrl()}/admin\">打开网页后台 →</a>`,
   ].join("\n"), { chatId, parseMode: "HTML", replyMarkup: BOT_MENU });
 }
 
