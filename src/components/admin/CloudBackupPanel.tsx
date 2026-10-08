@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { isCurrentSiteBackup } from "@/lib/cloud-backup-filter";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CloudUpload, Download, LoaderCircle, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import type { CloudBackupFile, CloudBackupSettings, CloudBackupTask, CloudBackupPhase } from "@/lib/cloud-backup-types";
@@ -128,7 +129,7 @@ export default function CloudBackupPanel() {
     finally { setRestoring(false); applying.current = false; }
   }
   const visibleFiles = files.filter(file => {
-    const matches = file.siteId ? file.siteId === settings.siteId : Boolean(file.site && settings.siteLabels.includes(file.site));
+    const matches = isCurrentSiteBackup(file, settings);
     return otherSites ? !matches : matches;
   });
   const transfer = task?.transfer;
@@ -185,7 +186,8 @@ export default function CloudBackupPanel() {
           <h3 className="text-sm font-semibold text-neutral-900">选择备份恢复</h3>
           <button type="button" onClick={() => setOtherSites(current => !current)} className={buttonClass}>{otherSites ? "返回本站备份" : "浏览其他备份"}</button>
         </div>
-        <p className="mt-2 text-xs text-neutral-600">{otherSites ? "其他网站及未标识的旧备份" : `当前网站：${settings.siteLabel}`} · {visibleFiles.length} 份备份</p>
+        <p className="mt-2 text-xs text-neutral-600">{otherSites ? "其他域名、历史域名及未标识的备份" : `当前网站：${settings.siteLabel}`} · {visibleFiles.length} 份备份</p>
+        <p className="mt-1 text-xs leading-5 text-neutral-600">默认按完整域名区分，子域名与主域名分别显示。改域名前的备份可在“浏览其他备份”中查看。</p>
         <p className="mt-1 text-xs leading-5 text-neutral-600">点击“恢复此备份”先校验并预览内容，再确认恢复。下载备份为原始加密包，恢复时需要对应密钥。</p>
         <ul className="mt-2 divide-y divide-neutral-100">
           {visibleFiles.map(file => <li key={file.name} className="flex flex-wrap items-center justify-between gap-3 py-3">

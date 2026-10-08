@@ -3,7 +3,7 @@ import { db } from "@/lib/db/core";
 import { getSiteSettings, setSiteSettings } from "@/lib/db/settings";
 import { normalizeSiteUrl } from "@/lib/site-url";
 import { cloudBackupSiteLabel } from "@/lib/cloud-backup-name";
-import type { CloudBackupFile } from "@/lib/cloud-backup-types";
+export { isCurrentSiteBackup } from "@/lib/cloud-backup-filter";
 
 /** Runtime database setting wins over the installation fallback. Never inline NEXT_PUBLIC here. */
 export function getSiteUrl(settings = getSiteSettings()): string {
@@ -32,9 +32,4 @@ export function getBackupSiteIdentity(): BackupSiteIdentity {
     }
     return { siteId, siteLabel, siteLabels };
   })();
-}
-
-/** Legacy archives have no ID: recognize previously saved domains without renaming remote files. */
-export function isCurrentSiteBackup(file: CloudBackupFile, identity: BackupSiteIdentity): boolean {
-  return file.siteId ? file.siteId === identity.siteId : Boolean(file.site && identity.siteLabels.includes(file.site));
 }

@@ -137,3 +137,28 @@ test("custom WebDAV settings, connection test, encrypted backup and verified one
   await expect(panel.getByRole("button", { name: `删除备份 ${filename}` })).toHaveCount(0);
   expect((await page.request.get("/")).status()).toBe(200);
 });
+
+
+test("backup list separates root and subdomains even when they share a website ID or historical alias", async ({ page }) => {
+  await login(page); await stubDeploy(page);
+  const siteId = "11111111-1111-4111-8111-111111111111";
+  const backupSettings = { siteId, siteLabel: "yezi.me", siteLabels: ["yezi.me", "blog.yezi.me"], endpoint: "https://dav.example", username: "test", directory: "backup", keep: 14, dailyEnabled: false, hasPassword: true, hasKey: true };
+  const files = [
+    { name: "current-root.enc", site: "yezi.me", siteId },
+    { name: "current-legacy-root.enc", site: "yezi.me" },
+    { name: "historical-blog.enc", site: "blog.yezi.me", siteId },
+    { name: "legacy-blog.enc", site: "blog.yezi.me" },
+    { name: "foreign-root.enc", site: "yezi.me", siteId: "22222222-2222-4222-8222-222222222222" },
+  ].map(file => ({ ...file, createdAt: "2026-10-08T00:00:00Z", sizeBytes: 1024 }));
+  await page.route("**/api/admin/v1/backups/cloud", route => route.fulfill({ json: { data: { settings: backupSettings, task: null } } }));
+  await page.route("**/api/admin/v1/backups/cloud/files", route => route.fulfill({ json: { data: files } }));
+  await page.goto("/admin/settings/backups");
+  const panel = page.getByRole("region", { name: "云备份与恢复" });
+  for (const name of ["current-root.enc", "current-legacy-root.enc"]) await expect(panel.getByRole("link", { name: `下载备份 ${name}`, exact: true })).toBeVisible();
+  for (const name of ["historical-blog.enc", "legacy-blog.enc", "foreign-root.enc"]) await expect(panel.getByRole("link", { name: `下载备份 ${name}`, exact: true })).toHaveCount(0);
+  await panel.getByRole("button", { name: "浏览其他备份" }).click();
+  for (const name of ["historical-blog.enc", "legacy-blog.enc", "foreign-root.enc"]) await expect(panel.getByRole("link", { name: `下载备份 ${name}`, exact: true })).toBeVisible();
+  for (const name of ["current-root.enc", "current-legacy-root.enc"]) await expect(panel.getByRole("link", { name: `下载备份 ${name}`, exact: true })).toHaveCount(0);
+  await panel.getByRole("button", { name: "返回本站备份" }).click();
+  await expect(panel.getByRole("link", { name: "下载备份 current-root.enc", exact: true })).toBeVisible();
+});
