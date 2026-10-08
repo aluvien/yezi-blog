@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CloudUpload, LoaderCircle, ShieldCheck } from "lucide-react";
+import { CloudUpload, LoaderCircle, RotateCcw, ShieldCheck } from "lucide-react";
 import type { CloudBackupFile, CloudBackupSettings, CloudBackupTask, CloudBackupPhase } from "@/lib/cloud-backup-types";
 
 const API = "/api/admin/v1/backups/cloud";
 const PHASES: Record<CloudBackupPhase, string> = {
-  snapshot: "生成完整备份", encrypt: "加密备份包", upload: "上传到 WebDAV", verify: "回读校验", download: "下载云备份",
-  decrypt: "解密备份包", validate: "校验数据库与文件", ready: "校验通过，等待选择恢复", safety: "保存恢复前完整备份", restore: "恢复数据库与文件", complete: "已完成",
+  snapshot: "生成完整备份", encrypt: "加密备份包", upload: "上传到 WebDAV", verify: "回读校验", download: "读取待恢复备份",
+  decrypt: "解密备份包", validate: "校验数据库与文件", ready: "校验通过，请确认恢复", safety: "保存恢复前完整备份", restore: "恢复数据库与文件", complete: "已完成",
 };
 const EMPTY: CloudBackupSettings = { endpoint: "", username: "", directory: "backup", dailyEnabled: false, keep: 14, hasPassword: false, hasKey: false };
 async function jsonRequest<T>(url: string, init: RequestInit = {}): Promise<T> {
@@ -136,9 +136,21 @@ export default function CloudBackupPanel() {
         <button type="button" onClick={() => void start("backup")} disabled={loading || Boolean(busy) || !configured || dirty} className="inline-flex items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><CloudUpload size={16} />备份到云端</button>
         <button type="button" onClick={() => void list()} disabled={Boolean(busy) || listing || !configured || dirty} className={buttonClass}>{listing ? "正在读取…" : "刷新云备份列表"}</button>
       </div>
-      {files.length > 0 ? <ul className="mt-4 divide-y divide-neutral-100">
-        {files.map(file => <li key={file.name} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="text-sm text-neutral-800">{new Date(file.createdAt).toLocaleString("zh-CN")} · {(file.sizeBytes / 1024 / 1024).toFixed(2)} MB</p><p className="mt-1 break-all text-xs text-neutral-500">{file.name}</p></div><button type="button" disabled={Boolean(busy) || dirty} onClick={() => void start("prepare", file.name)} className={buttonClass} aria-label={`下载并校验 ${file.name}`}>下载并校验</button></li>)}
-      </ul> : configured && !listing && <p className="mt-3 text-sm text-neutral-500">当前列表没有完整云备份，可先测试连接并创建备份。</p>}
+      {files.length > 0 ? <div className="mt-5">
+        <h3 className="text-sm font-semibold text-neutral-900">选择备份恢复</h3>
+        <p className="mt-1 text-xs leading-5 text-neutral-600">点击“恢复此备份”先校验并预览内容，再确认恢复。</p>
+        <ul className="mt-2 divide-y divide-neutral-100">
+          {files.map(file => <li key={file.name} className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="text-sm text-neutral-800">{new Date(file.createdAt).toLocaleString("zh-CN")} · {(file.sizeBytes / 1024 / 1024).toFixed(2)} MB</p>
+              <p className="mt-1 break-all text-xs text-neutral-500">{file.name}</p>
+            </div>
+            <button type="button" disabled={Boolean(busy) || dirty} onClick={() => void start("prepare", file.name)} className={`inline-flex items-center gap-2 ${buttonClass}`} aria-label={`恢复此备份 ${file.name}`}>
+              <RotateCcw size={16} />恢复此备份
+            </button>
+          </li>)}
+        </ul>
+      </div> : configured && !listing && <p className="mt-3 text-sm text-neutral-500">当前列表没有完整云备份，可先测试连接并创建备份。</p>}
       {ready && <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
         <h3 className="text-sm font-semibold text-neutral-900">恢复预览 · 校验通过</h3>
         <p className="mt-2 break-all text-xs text-neutral-500">{task.name}</p>
@@ -146,7 +158,7 @@ export default function CloudBackupPanel() {
         <p className="mt-2 text-xs leading-5 text-neutral-600">恢复会覆盖当前数据库和持久化文件。执行前自动保存当前完整备份，执行期间网站进入维护状态，成功后需重新登录。云端连接设置、服务器路径与 PM2 配置保留；{task.preview!.configurationFiles} 个配置文件包含在完整下载包中，迁移机器时请核对后恢复。校验预览有效期为 30 分钟。</p>
         <a href={`${API}/download?id=${encodeURIComponent(task.id)}`} download className="mt-3 inline-block text-sm text-neutral-700 underline underline-offset-4">下载完整包（含配置，解密后未加密，请妥善保存）</a>
         <label className="mt-4 block text-sm text-neutral-700">填写“恢复数据”确认覆盖<input value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={Boolean(busy)} className={inputClass} autoComplete="off" /></label>
-        <button type="button" onClick={() => void restore()} disabled={Boolean(busy) || dirty || confirmation !== "恢复数据"} className="mt-3 rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{restoring ? "正在恢复…" : "恢复数据库与文件"}</button>
+        <button type="button" onClick={() => void restore()} disabled={Boolean(busy) || dirty || confirmation !== "恢复数据"} className="mt-3 rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{restoring ? "正在恢复…" : "确认恢复数据库与文件"}</button>
       </div>}
       {task?.safetyBackup && <a href={`${API}/download?safety=${encodeURIComponent(task.id)}`} download className="mt-4 inline-block text-sm text-neutral-700 underline underline-offset-4">下载恢复前的完整备份</a>}
     </section>

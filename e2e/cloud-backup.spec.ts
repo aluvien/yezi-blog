@@ -74,12 +74,12 @@ test("custom WebDAV settings, connection test, encrypted backup and verified one
   expect(remote.get(filename)!.subarray(0, 10).toString()).toBe("YEZICLOUD1");
   const created = await page.request.post("/api/admin/v1/posts", { data: { title: "云备份后新增", slug: `cloud-after-${Date.now()}`, content: "恢复后应不存在", status: "draft", cover: null, category: "", tags: "", attachmentIds: [], referenceSnapshots: [] } });
   expect(created.status()).toBe(200); const id = (await created.json()).data.id;
-  await panel.getByRole("button", { name: `下载并校验 ${filename}` }).click();
+  await panel.getByRole("button", { name: `恢复此备份 ${filename}` }).click();
   await expect(panel.getByText("恢复预览 · 校验通过")).toBeVisible({ timeout: 25_000 });
-  await expect(panel.getByRole("button", { name: "恢复数据库与文件", exact: true })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: "确认恢复数据库与文件", exact: true })).toBeDisabled();
   await panel.getByLabel("填写“恢复数据”确认覆盖").fill("恢复数据");
   const applied = page.waitForResponse(response => response.url().endsWith("/backups/cloud/restore") && response.request().method() === "POST");
-  await panel.getByRole("button", { name: "恢复数据库与文件", exact: true }).click();
+  await panel.getByRole("button", { name: "确认恢复数据库与文件", exact: true }).click();
   const result = await applied; expect(result.status()).toBe(200);
   await expect(panel.getByText(/数据恢复完成/)).toBeVisible();
   expect((await page.request.get("/api/admin/v1/backups/cloud")).status()).toBe(401);
