@@ -7,7 +7,7 @@ export type CloudBackupSettings = {
   hasPassword: boolean;
   hasKey: boolean;
 };
-export type CloudBackupFile = { name: string; sizeBytes: number; createdAt: string };
+export type CloudBackupFile = { name: string; sizeBytes: number; createdAt: string; site?: string };
 export type CloudBackupPhase = "snapshot" | "encrypt" | "upload" | "verify" | "download" | "decrypt" | "validate" | "ready" | "safety" | "restore" | "complete";
 export type CloudRestorePreview = {
   createdAt: string;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CloudUpload, LoaderCircle, RotateCcw, ShieldCheck } from "lucide-react";
+import { CloudUpload, LoaderCircle, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import type { CloudBackupFile, CloudBackupSettings, CloudBackupTask, CloudBackupPhase } from "@/lib/cloud-backup-types";
 
 const API = "/api/admin/v1/backups/cloud";
@@ -28,6 +28,7 @@ export default function CloudBackupPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [listing, setListing] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [restored, setRestored] = useState(false);
   const [confirmation, setConfirmation] = useState("");
@@ -40,7 +41,7 @@ export default function CloudBackupPanel() {
   const completedRestore = useRef(false);
   const lastCompleted = useRef("");
   const applying = useRef(false);
-  const busy = saving || restoring || task?.status === "running";
+  const busy = saving || restoring || Boolean(deleting) || task?.status === "running";
   const configured = settings.hasPassword && settings.hasKey;
   const list = useCallback(async () => {
     setListing(true);
@@ -90,6 +91,16 @@ export default function CloudBackupPanel() {
       setTask(started); setRestored(false);
     } catch (issue) { setError(issue instanceof Error ? issue.message : "操作启动失败。"); }
   }
+  async function remove(file: CloudBackupFile) {
+    if (!window.confirm(`确定永久删除这份云端备份？\n网站：${file.site || "旧备份（未记录网站）"}\n${file.name}\n删除后无法恢复，本地网站数据不受影响。`)) return;
+    setDeleting(file.name); setError(""); setMessage("");
+    try {
+      const result = await jsonRequest<{ name: string; task: CloudBackupTask | null }>(`${API}/files`, { method: "DELETE", body: JSON.stringify({ name: file.name, confirmation: "删除备份" }) });
+      setFiles(current => current.filter(item => item.name !== result.name)); setTask(result.task);
+      setConfirmation(""); setMessage("云端备份已删除，本地网站数据不受影响。");
+    } catch (issue) { setError(issue instanceof Error ? issue.message : "删除云备份失败。"); }
+    finally { setDeleting(null); }
+  }
   async function restore() {
     if (!task || confirmation !== "恢复数据") return;
     setRestoring(true); applying.current = true; setError(""); setMessage("");
@@ -110,7 +121,7 @@ export default function CloudBackupPanel() {
         <label className="text-sm text-neutral-700">备份目录<input aria-label="备份目录" value={settings.directory} onChange={event => edit("directory", event.target.value)} placeholder="backup" className={inputClass} /><span className="mt-1 block text-xs text-neutral-500">相对于地址的目录；留空使用地址本身。飞牛可填写 backup。</span></label>
         <label className="text-sm text-neutral-700">WebDAV 账号<input value={settings.username} onChange={event => edit("username", event.target.value)} className={inputClass} autoComplete="off" /></label>
         <label className="text-sm text-neutral-700">WebDAV 密码<input type="password" value={password} onChange={event => { setPassword(event.target.value); setDirty(true); }} placeholder={settings.hasPassword ? "已保存，留空保留原密码" : "请输入密码"} className={inputClass} autoComplete="new-password" /></label>
-        <label className="text-sm text-neutral-700">云端保留份数<input type="number" min={1} max={100} value={settings.keep} onChange={event => edit("keep", Number(event.target.value))} className={inputClass} /><span className="mt-1 block text-xs text-neutral-500">新备份回读校验成功后清理超出的旧备份。</span></label>
+        <label className="text-sm text-neutral-700">云端保留份数<input type="number" min={1} max={100} value={settings.keep} onChange={event => edit("keep", Number(event.target.value))} className={inputClass} /><span className="mt-1 block text-xs text-neutral-500">新备份校验成功后，仅清理相同网站标识的超额备份；其他网站和未标识的旧备份保留。</span></label>
         <label className="text-sm text-neutral-700">导入恢复密钥（换机恢复时填写）<input type="password" value={recoveryKey} onChange={event => { setRecoveryKey(event.target.value); setDirty(true); }} placeholder="粘贴之前导出的恢复密钥，平时留空" className={inputClass} autoComplete="new-password" /></label>
         <label className="flex items-center gap-2 text-sm text-neutral-700 sm:col-span-2"><input type="checkbox" checked={settings.dailyEnabled} onChange={event => edit("dailyEnabled", event.target.checked)} />每天自动备份到云端（跟随网站每日备份任务，服务器当地时间 04:17）</label>
       </fieldset>
@@ -143,11 +154,17 @@ export default function CloudBackupPanel() {
           {files.map(file => <li key={file.name} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="min-w-0">
               <p className="text-sm text-neutral-800">{new Date(file.createdAt).toLocaleString("zh-CN")} · {(file.sizeBytes / 1024 / 1024).toFixed(2)} MB</p>
+              <p className="mt-1 break-all text-xs text-neutral-600">网站：{file.site || "旧备份（未记录网站）"}</p>
               <p className="mt-1 break-all text-xs text-neutral-500">{file.name}</p>
             </div>
-            <button type="button" disabled={Boolean(busy) || dirty} onClick={() => void start("prepare", file.name)} className={`inline-flex items-center gap-2 ${buttonClass}`} aria-label={`恢复此备份 ${file.name}`}>
-              <RotateCcw size={16} />恢复此备份
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" disabled={Boolean(busy) || dirty} onClick={() => void start("prepare", file.name)} className={`inline-flex items-center gap-2 ${buttonClass}`} aria-label={`恢复此备份 ${file.name}`}>
+                <RotateCcw size={16} />恢复此备份
+              </button>
+              <button type="button" disabled={Boolean(busy) || dirty} onClick={() => void remove(file)} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50" aria-label={`删除备份 ${file.name}`}>
+                <Trash2 size={16} />{deleting === file.name ? "正在删除…" : "删除"}
+              </button>
+            </div>
           </li>)}
         </ul>
       </div> : configured && !listing && <p className="mt-3 text-sm text-neutral-500">当前列表没有完整云备份，可先测试连接并创建备份。</p>}
