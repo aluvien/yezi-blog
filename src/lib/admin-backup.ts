@@ -118,6 +118,28 @@ export function getAdminBackupStatus(): AdminBackupStatus | null {
   return readJson<AdminBackupStatus>(path.join(root, "status.json"));
 }
 
+/** Share the producer lock with synchronous local archive maintenance. */
+export function withAdminBackupMaintenanceLock<T>(run: () => T): T {
+  const root = prepareDirectory();
+  reconcileInterrupted(root);
+  const id = crypto.randomUUID();
+  let fd: number;
+  try { fd = fs.openSync(path.join(root, ".lock"), "wx", 0o600); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("本地备份任务正在执行，请稍后再删除。");
+    throw error;
+  }
+  try {
+    fs.writeFileSync(fd, JSON.stringify({ id, pid: process.pid, bootId: runtime.yeziBackupBootId }));
+    return run();
+  } finally { fs.closeSync(fd); fs.rmSync(path.join(root, ".lock"), { force: true }); }
+}
+export function clearDeletedAdminBackupStatus(id: string): void {
+  const file = path.join(backupDirectory(), "status.json");
+  const status = readJson<AdminBackupStatus>(file);
+  if (status?.id === id && status.status === "completed") fs.rmSync(file, { force: true });
+}
+
 export function startAdminBackup(): { status: AdminBackupStatus; started: boolean } {
   const root = prepareDirectory();
   reconcileInterrupted(root);

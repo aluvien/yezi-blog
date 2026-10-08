@@ -10,3 +10,18 @@ export type AdminBackupStatus = {
   fileCount?: number;
   error?: string;
 };
+
+export type LocalBackupKind = "admin" | "database" | "data" | "restore";
+export type LocalBackupFile = {
+  kind: LocalBackupKind;
+  name: string;
+  createdAt: string;
+  sizeBytes: number;
+  encrypted: boolean;
+};
+export type LocalBackupList = {
+  files: LocalBackupFile[];
+  totalBytes: number;
+  count: number;
+  busy: boolean;
+};
