@@ -5,7 +5,7 @@ import { pipeline } from "node:stream/promises";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { CloudBackupFile } from "@/lib/cloud-backup-types";
 
-export const CLOUD_FILE_PATTERN = /^yezi-complete-(\d{8}T\d{6}Z)-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.tar\.gz\.enc$/;
+export const CLOUD_FILE_PATTERN = /^yezi-complete-(\d{8}T\d{6}Z)-(?:([a-z0-9][a-z0-9.-]{0,99})-)?([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.tar\.gz\.enc$/;
 export const MAX_CLOUD_BYTES = 2 * 1024 * 1024 * 1024;
 const XML_LIMIT = 8 * 1024 * 1024;
 const ALL_PROPERTIES = '<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:allprop/></d:propfind>';
@@ -109,7 +109,7 @@ export class WebDavClient {
       const stamp = match[1];
       const createdAt = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`;
       if (!Number.isFinite(Date.parse(createdAt))) continue;
-      files.push({ name, sizeBytes, createdAt });
+      files.push({ name, sizeBytes, createdAt, ...(match[2] ? { site: match[2] } : {}) });
     }
     return files.sort((a, b) => b.name.localeCompare(a.name));
   }

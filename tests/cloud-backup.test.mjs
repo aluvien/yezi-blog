@@ -13,11 +13,13 @@ process.env.BLOG_ROOT = root;
 process.env.BLOG_DB_PATH = path.join(root, "data", "custom.db");
 process.env.QQ_MUSIC_SESSION_PATH = path.join(external, "qq.json");
 process.env.ADMIN_PASSWORD = "cloud-admin-private";
+process.env.NEXT_PUBLIC_SITE_URL = "https://blog.yezi.me";
 const { db, createPost, createSession, getSessionByToken } = await import("../src/lib/db.ts");
 const { cloudBackupRoot, saveCloudSettings, publicCloudSettings, readCloudSettings } = await import("../src/lib/cloud-backup-config.ts");
-const { WebDavClient, normalizeWebDavLocation, parseDavResponses } = await import("../src/lib/webdav.ts");
+const { CLOUD_FILE_PATTERN, WebDavClient, normalizeWebDavLocation, parseDavResponses } = await import("../src/lib/webdav.ts");
+const { cloudBackupSiteLabel } = await import("../src/lib/cloud-backup-name.ts");
 const { encryptCloudArchive, decryptCloudArchive, extractAndVerifyCloudArchive } = await import("../src/lib/cloud-backup-archive.ts");
-const { startCloudTask, executeCloudTask, getCloudTask, cloudStage, preparedCloudDownload, writeCloudTask } = await import("../src/lib/cloud-backup.ts");
+const { acquireCloudLock, releaseCloudLock, isCloudBusy, deleteCloudBackup, startCloudTask, executeCloudTask, getCloudTask, cloudStage, preparedCloudDownload, writeCloudTask } = await import("../src/lib/cloud-backup.ts");
 const { applyCloudRestore, recoverInterruptedCloudRestore } = await import("../src/lib/cloud-backup-restore.ts");
 const { cloudRestoreGuardPath, isCloudRestoreActive } = await import("../src/lib/cloud-restore-guard.ts");
 const { runDbBackup } = await import("../src/lib/backup.ts");
@@ -111,6 +113,7 @@ test("cloud backups include WAL data, files and config, are encrypted, and round
   await executeCloudTask(started.task.id);
   const task = getCloudTask(); assert.equal(task.status, "completed", task.error);
   selected = task.name;
+  assert.match(selected, /-blog\.yezi\.me-/);
   assert.ok(remote.has(selected));
   assert.equal(remote.get(selected).subarray(0, 10).toString(), "YEZICLOUD1");
   assert.equal(remote.get(selected).includes(Buffer.from("backup-env-private")), false);
@@ -220,4 +223,63 @@ test("an upload accepted before restoration cannot create a record after the dat
   await assert.rejects(pending, /恢复流程/);
   assert.equal(recorded, false);
   assert.equal(fs.existsSync(file), false);
+});
+
+
+test("backup names distinguish domain, IPv4, IPv6 and ports, without paths or credentials", () => {
+  assert.equal(cloudBackupSiteLabel("https://user:secret@blog.yezi.me/path?q=secret"), "blog.yezi.me");
+  assert.equal(cloudBackupSiteLabel("http://192.0.2.1:3030"), "192.0.2.1-3030");
+  assert.equal(cloudBackupSiteLabel("http://[2001:db8::1]:3030"), "2001-db8--1--3030");
+  assert.equal(cloudBackupSiteLabel("invalid", "my-server"), "my-server");
+  assert.equal(cloudBackupSiteLabel("file:///secret", "my-server"), "my-server");
+  const longLabel = cloudBackupSiteLabel("invalid", "a".repeat(200));
+  assert.equal(longLabel.length, 100);
+  assert.notEqual(longLabel, cloudBackupSiteLabel("invalid", "a".repeat(199) + "b"));
+  assert.equal(cloudBackupSiteLabel("", "???"), "unknown-host");
+});
+
+test("shared-directory retention preserves other websites and legacy backups", async () => {
+  const foreign = `yezi-complete-20261007T000000Z-other.example-${crypto.randomUUID()}.tar.gz.enc`;
+  const legacy = `yezi-complete-20261007T000000Z-${crypto.randomUUID()}.tar.gz.enc`;
+  remote.set(foreign, Buffer.from("other website")); remote.set(legacy, Buffer.from("legacy"));
+  const task = startCloudTask("backup"); await executeCloudTask(task.task.id);
+  const completed = getCloudTask(); assert.equal(completed.status, "completed", completed.error);
+  const files = await new WebDavClient(readCloudSettings()).list();
+  assert.equal(files.filter(file => file.site === "blog.yezi.me").length, 1);
+  assert.equal(files.find(file => file.name === foreign).site, "other.example");
+  assert.equal(files.find(file => file.name === legacy).site, undefined);
+  assert.equal(CLOUD_FILE_PATTERN.test(legacy), true);
+  assert.equal(remote.has(selected), false);
+  assert.equal(remote.get("unrelated-personal-file.txt").toString(), "do not delete");
+});
+
+test("manual deletion rejects non-backup paths and busy tasks, and preserves files on DAV denial", async () => {
+  const client = new WebDavClient(readCloudSettings());
+  const files = await client.list();
+  const target = files.find(file => file.site === "blog.yezi.me").name;
+  for (const name of ["../" + target, "unrelated-personal-file.txt", "https://evil.example/" + target]) await assert.rejects(deleteCloudBackup(name), /有效的云备份/);
+  const lock = crypto.randomUUID(); acquireCloudLock(lock);
+  try { await assert.rejects(deleteCloudBackup(target), /另一个云备份/); } finally { releaseCloudLock(lock); }
+  fs.writeFileSync(path.join(cloudBackupRoot(), "restore-journal.json"), "{}", { mode: 0o600 });
+  try { await assert.rejects(deleteCloudBackup(target), /回滚/); } finally { fs.rmSync(path.join(cloudBackupRoot(), "restore-journal.json")); }
+  assert.equal(isCloudBusy(), false);
+  deleteDenied = true;
+  try { await assert.rejects(deleteCloudBackup(target), /DELETE.*403/); } finally { deleteDenied = false; }
+  assert.equal(remote.has(target), true); assert.equal(isCloudBusy(), false);
+  await deleteCloudBackup(target);
+  assert.equal(remote.has(target), false);
+  for (const file of files.filter(file => file.name !== target)) assert.equal(remote.has(file.name), true);
+  await assert.rejects(deleteCloudBackup(target), /不存在/);
+  assert.equal(isCloudBusy(), false);
+});
+
+test("deleting a prepared legacy backup invalidates its local restore preview", async () => {
+  const name = (await new WebDavClient(readCloudSettings()).list()).find(file => !file.site).name;
+  const id = crypto.randomUUID(); const stage = cloudStage(id); fs.mkdirSync(stage, { mode: 0o700 });
+  fs.writeFileSync(path.join(stage, "prepared.json"), JSON.stringify({ expiresAt: Date.now() + 60_000, settingsVersion: readCloudSettings().version }));
+  writeCloudTask({ id, name, kind: "prepare", status: "completed", phase: "ready", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  await deleteCloudBackup(name);
+  assert.equal(remote.has(name), false); assert.equal(fs.existsSync(stage), false);
+  assert.equal(getCloudTask(), null);
+  assert.throws(() => preparedCloudDownload(id));
 });

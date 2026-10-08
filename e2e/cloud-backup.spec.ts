@@ -35,7 +35,10 @@ async function stubDeploy(page: Page) {
 }
 test("cloud settings and recovery keys require admin authentication and same-origin writes", async ({ page, request }) => {
   for (const suffix of ["", "/files", "/key", "/download?id=../../.env.local"]) expect((await request.get(`/api/admin/v1/backups/cloud${suffix}`)).status()).toBe(401);
+  expect((await request.delete("/api/admin/v1/backups/cloud/files", { data: { name: "anything", confirmation: "删除备份" } })).status()).toBe(401);
   await login(page);
+  expect((await page.request.delete("/api/admin/v1/backups/cloud/files", { data: {}, headers: { origin: "https://evil.example" } })).status()).toBe(403);
+  expect((await page.request.delete("/api/admin/v1/backups/cloud/files", { data: { name: "../.env.local", confirmation: "删除备份" } })).status()).toBe(400);
   const rejected = await page.request.patch("/api/admin/v1/backups/cloud", { data: {}, headers: { origin: "https://evil.example" } });
   expect(rejected.status()).toBe(403);
   const invalidRestore = await page.request.post("/api/admin/v1/backups/cloud/restore", { data: { id: "../../.env.local", confirmation: "" } });
@@ -71,6 +74,7 @@ test("custom WebDAV settings, connection test, encrypted backup and verified one
   expect((await page.request.get("/")).status()).toBe(200);
   await expect(panel.getByText(/云备份完成，远程回读校验通过/)).toBeVisible({ timeout: 25_000 });
   const filename = [...remote.keys()][0]; expect(filename).toMatch(/^yezi-complete-.*\.tar\.gz\.enc$/);
+  expect(filename).toContain("-127.0.0.1-3100-");
   expect(remote.get(filename)!.subarray(0, 10).toString()).toBe("YEZICLOUD1");
   const created = await page.request.post("/api/admin/v1/posts", { data: { title: "云备份后新增", slug: `cloud-after-${Date.now()}`, content: "恢复后应不存在", status: "draft", cover: null, category: "", tags: "", attachmentIds: [], referenceSnapshots: [] } });
   expect(created.status()).toBe(200); const id = (await created.json()).data.id;
@@ -85,5 +89,19 @@ test("custom WebDAV settings, connection test, encrypted backup and verified one
   expect((await page.request.get("/api/admin/v1/backups/cloud")).status()).toBe(401);
   await login(page);
   expect((await page.request.get(`/api/admin/v1/posts/${id}`)).status()).toBe(404);
+  await page.goto("/admin/settings/backups");
+  await expect(panel.getByText("网站：127.0.0.1-3100", { exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: `恢复此备份 ${filename}` }).click();
+  await expect(panel.getByText("恢复预览 · 校验通过")).toBeVisible({ timeout: 25_000 });
+  page.once("dialog", dialog => dialog.dismiss());
+  await panel.getByRole("button", { name: `删除备份 ${filename}` }).click();
+  expect(remote.has(filename)).toBe(true);
+  await expect(panel.getByText("恢复预览 · 校验通过")).toBeVisible();
+  page.once("dialog", async dialog => { expect(dialog.message()).toContain(filename); await dialog.accept(); });
+  await panel.getByRole("button", { name: `删除备份 ${filename}` }).click();
+  await expect(panel.getByText("云端备份已删除，本地网站数据不受影响。", { exact: true })).toBeVisible();
+  expect(remote.has(filename)).toBe(false);
+  await expect(panel.getByText("恢复预览 · 校验通过")).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: `删除备份 ${filename}` })).toHaveCount(0);
   expect((await page.request.get("/")).status()).toBe(200);
 });
