@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import BackupFileMenu from "@/components/admin/BackupFileMenu";
+import type { BackupSummary } from "@/components/admin/BackupWorkspace";
 import { Archive, Download, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
 import type { AdminBackupPhase, AdminBackupStatus, LocalBackupFile, LocalBackupKind, LocalBackupList } from "@/lib/admin-backup-types";
 
@@ -38,7 +40,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / divisor).toFixed(2)} ${unit}`;
 }
 
-export default function DataBackupPanel() {
+export default function DataBackupPanel({ onSummary }: { onSummary?: (summary: BackupSummary) => void }) {
   const [status, setStatus] = useState<AdminBackupStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -150,10 +152,13 @@ export default function DataBackupPanel() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / LOCAL_PAGE_SIZE));
   const currentPage = Math.min(view.page, pageCount);
   const visibleFiles = filtered.slice((currentPage - 1) * LOCAL_PAGE_SIZE, currentPage * LOCAL_PAGE_SIZE);
+  useEffect(() => {
+    if (local) onSummary?.({ count: local.count, totalBytes: local.totalBytes, latest: local.files[0]?.createdAt ?? null });
+  }, [local, onSummary]);
   const step = status ? PHASES.findIndex((item) => item.phase === status.phase) + 1 : 0;
 
   return (
-    <section aria-labelledby="data-backup-title" className="rounded-2xl border border-neutral-200 bg-white p-5 sm:p-6">
+    <section aria-labelledby="data-backup-title" className="admin-card admin-backup-panel p-5 sm:p-6">
       <div className="flex items-center gap-2">
         <Archive size={19} className="text-neutral-500" />
         <h2 id="data-backup-title" className="text-base font-semibold text-neutral-900">数据备份</h2>
@@ -205,21 +210,20 @@ export default function DataBackupPanel() {
         {listError && <p role="alert" className="mt-2 text-sm text-red-600">{listError}</p>}
         {busy && <p role="status" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">备份、恢复或删除任务正在执行，暂时不能删除本地备份。</p>}
         {local && filtered.length === 0 && <p className="mt-4 text-sm text-neutral-500">{view.filter === "all" ? "服务器暂无已完成的本地备份。" : `暂无${KIND_LABELS[view.filter]}。`}</p>}
-        {Boolean(visibleFiles.length) && <ul aria-label="本地备份列表" className="mt-4 space-y-3">
+        {Boolean(visibleFiles.length) && <ul aria-label="本地备份列表" className="admin-local-backup-list">
           {visibleFiles.map(file => {
             const removing = deleting === `${file.kind}/${file.name}`;
-            return <li key={`${file.kind}/${file.name}`} className="rounded-xl border border-neutral-200 p-3 sm:p-4">
+            return <li key={`${file.kind}/${file.name}`} className="admin-local-backup-row">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-neutral-800">{KIND_LABELS[file.kind]}</p>
-                  <p className="mt-1 break-all text-xs text-neutral-500">{file.name}</p>
                   <p className="mt-2 text-xs text-neutral-600"><time dateTime={file.createdAt}>{new Date(file.createdAt).toLocaleString("zh-CN")}</time> · {formatBytes(file.sizeBytes)}{file.encrypted ? " · 已加密" : ""}</p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="admin-backup-actions">
                   <a href={localDownloadUrl(file)} download aria-label={`下载本地备份 ${file.name}`} className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-2 text-xs text-neutral-700 hover:bg-neutral-50"><Download size={14} />下载</a>
-                  <button type="button" disabled={busy || refreshing || Boolean(listError)} onClick={() => void remove(file)} aria-label={`删除本地备份 ${file.name}`} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50">
+                  <BackupFileMenu name={file.name}><button type="button" disabled={busy || refreshing || Boolean(listError)} onClick={() => void remove(file)} aria-label={`删除本地备份 ${file.name}`} className="admin-file-delete">
                     {removing ? <LoaderCircle size={14} className="animate-spin" /> : <Trash2 size={14} />}{removing ? "正在删除…" : "删除"}
-                  </button>
+                  </button></BackupFileMenu>
                 </div>
               </div>
             </li>;

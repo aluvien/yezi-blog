@@ -2,126 +2,50 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { BookOpen, FileText, FolderOpen, GitBranch, Home, Layers, MessageCircle, Music2, Palette, Paperclip, Settings, ShieldCheck, Tags, UserRound, type LucideIcon } from "lucide-react";
 
-const NAV: Array<{ href: string; label: string; exact?: boolean }> = [
-  { href: "/admin", label: "仪表盘", exact: true },
-  { href: "/admin/posts", label: "文章" },
-  { href: "/admin/moments", label: "絮语" },
+export const ADMIN_NAV: Array<{ group: string; items: Array<{ href: string; label: string; icon: LucideIcon; exact?: boolean; pending?: boolean }> }> = [
+  { group: "工作台", items: [{ href: "/admin", label: "后台概览", icon: Home, exact: true }] },
+  { group: "内容", items: [
+    { href: "/admin/posts", label: "文章", icon: FileText },
+    { href: "/admin/moments", label: "絮语", icon: MessageCircle },
+    { href: "/admin/life/milestones", label: "生活节点", icon: BookOpen },
+    { href: "/admin/works", label: "作品", icon: Layers },
+    { href: "/admin/life/github", label: "GitHub", icon: GitBranch },
+    { href: "/admin/references", label: "收藏引用", icon: FolderOpen },
+    { href: "/admin/categories", label: "分类与标签", icon: Tags },
+    { href: "/admin/attachments", label: "附件管理", icon: Paperclip },
+  ] },
+  { group: "互动", items: [{ href: "/admin/comments", label: "评论管理", icon: MessageCircle, pending: true }] },
+  { group: "设置", items: [
+    { href: "/admin/settings", label: "站点设置", icon: Settings, exact: true },
+    { href: "/admin/settings/music", label: "音乐设置", icon: Music2 },
+    { href: "/admin/settings/appearance", label: "外观主题", icon: Palette },
+    { href: "/admin/settings/backups", label: "备份恢复", icon: ShieldCheck },
+    { href: "/admin/pages/about", label: "关于页面", icon: UserRound },
+  ] },
 ];
 
-const LIFE_NAV = [
-  { href: "/admin/life/milestones", label: "生活节点" },
-  { href: "/admin/works", label: "作品" },
-  { href: "/admin/life/github", label: "GitHub" },
-  { href: "/admin/references", label: "收藏引用" },
-];
-
-const DATA_NAV = [
-  { href: "/admin/comments", label: "评论管理", pending: true },
-  { href: "/admin/attachments", label: "附件管理" },
-  { href: "/admin/pages/about", label: "关于页面" },
-];
-
-const SETTINGS_NAV = [
-  { href: "/admin/settings", label: "站点设置", exact: true },
-  { href: "/admin/settings/music", label: "音乐设置" },
-  { href: "/admin/settings/appearance", label: "外观主题" },
-  { href: "/admin/settings/backups", label: "备份恢复" },
-];
-
-type MenuKey = "life" | "data" | "settings";
-
-function isActive(pathname: string, href: string, exact?: boolean): boolean {
-  if (exact) return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function MenuChevron() {
-  return <svg aria-hidden="true" viewBox="0 0 12 12" className="admin-nav-chevron h-3 w-3 shrink-0 fill-none stroke-current stroke-[1.6]"><path d="m3 4.5 3 3 3-3" /></svg>;
-}
-
-export function AdminNav({ pendingCount = 0 }: { pendingCount?: number }) {
-  const pathname = usePathname();
-  const navRef = useRef<HTMLElement>(null);
-  const [menuState, setMenuState] = useState<{ pathname: string; key: MenuKey | null }>({ pathname, key: null });
-  const openMenu = menuState.pathname === pathname ? menuState.key : null;
-
-  const setOpenMenu = useCallback((next: MenuKey | null | ((current: MenuKey | null) => MenuKey | null)) => {
-    setMenuState((current) => {
-      const currentKey = current.pathname === pathname ? current.key : null;
-      return { pathname, key: typeof next === "function" ? next(currentKey) : next };
-    });
-  }, [pathname]);
-
-  useEffect(() => {
-    function closeOutside(event: PointerEvent) {
-      if (event.target instanceof Node && !navRef.current?.contains(event.target)) setOpenMenu(null);
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpenMenu(null);
-    }
-
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [setOpenMenu]);
-
-  // 后台使用独立的 .admin-shell 滚动容器；客户端切换路由时，
-  // 浏览器不会自动重置这个容器，因此这里主动回到新页面顶部。
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const shell = document.querySelector<HTMLElement>(".admin-shell");
-      if (shell) shell.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [pathname]);
-
-  function renderMenu(key: MenuKey, label: string, items: Array<{ href: string; label: string; exact?: boolean; pending?: boolean }>) {
-    const active = items.some((item) => isActive(pathname, item.href, item.exact));
-    const expanded = openMenu === key;
-    const menuId = `admin-nav-${key}-menu`;
-    return (
-      <div className={`admin-nav-menu relative shrink-0${expanded ? " is-open" : ""}`}>
-        <button
-          type="button"
-          className={`admin-nav-link admin-nav-menu-trigger flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${active ? "is-active bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"}`}
-          aria-haspopup="menu"
-          aria-expanded={expanded}
-          aria-controls={menuId}
-          onClick={() => setOpenMenu((current) => current === key ? null : key)}
-        >
-          <span>{label}</span><MenuChevron />
-        </button>
-        <div id={menuId} aria-hidden={!expanded} className={`admin-nav-submenu absolute left-1/2 top-[calc(100%+8px)] z-20 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col gap-1 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg${expanded ? " is-visible" : ""}`} role="menu">
-          {items.map((item) => {
-            const itemActive = isActive(pathname, item.href, item.exact);
-            return (
-              <Link key={item.href} href={item.href} role="menuitem" onClick={() => setOpenMenu(null)} className={`admin-nav-submenu-link flex w-max max-w-full items-center justify-between gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-sm no-underline transition-colors ${itemActive ? "is-active bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}>
-                <span>{item.label}</span>
-                {item.pending && pendingCount > 0 && <span className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium ${itemActive ? "bg-white/20 text-white" : "bg-amber-500 text-white"}`}>{pendingCount}</span>}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-    );
+export function adminLocation(pathname: string) {
+  for (const group of ADMIN_NAV) {
+    const item = group.items.find(item => item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`));
+    if (item) return { group: group.group, label: item.label };
   }
+  return { group: "工作台", label: "后台管理" };
+}
 
-  return (
-    <nav ref={navRef} className="admin-nav flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-visible" aria-label="后台导航">
-      {NAV.map((item) => {
-        const active = isActive(pathname, item.href, item.exact);
-        return <Link key={item.href} href={item.href} onClick={() => setOpenMenu(null)} className={`admin-nav-link relative shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3 sm:text-sm ${active ? "is-active bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-100"}`}>{item.label}</Link>;
+export function AdminNav({ pendingCount = 0, collapsed = false, onNavigate }: { pendingCount?: number; collapsed?: boolean; onNavigate?: () => void }) {
+  const pathname = usePathname();
+  return <nav className="admin-side-nav" aria-label="后台导航">
+    {ADMIN_NAV.map(group => <div className="admin-side-group" key={group.group}>
+      <p className={collapsed ? "sr-only" : "admin-side-group-title"}>{group.group}</p>
+      {group.items.map(({ icon: Icon, ...item }) => {
+        const active = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
+        return <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined} aria-current={active ? "page" : undefined} onClick={onNavigate} className={`admin-side-link${active ? " is-active" : ""}`}>
+          <Icon size={18} aria-hidden="true" /><span className={collapsed ? "sr-only" : "admin-side-label"}>{item.label}</span>
+          {item.pending && pendingCount > 0 && <span className="admin-nav-count" aria-label={`${pendingCount} 条待审评论`}>{pendingCount > 99 ? "99+" : pendingCount}</span>}
+        </Link>;
       })}
-      {renderMenu("life", "小记", LIFE_NAV)}
-      {renderMenu("data", "数据", DATA_NAV)}
-      {renderMenu("settings", "设置", SETTINGS_NAV)}
-    </nav>
-  );
+    </div>)}
+  </nav>;
 }

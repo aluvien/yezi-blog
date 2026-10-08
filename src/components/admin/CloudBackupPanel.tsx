@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import BackupFileMenu from "@/components/admin/BackupFileMenu";
+import type { BackupSummary } from "@/components/admin/BackupWorkspace";
 import { isCurrentSiteBackup } from "@/lib/cloud-backup-filter";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CloudUpload, Download, LoaderCircle, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
@@ -34,7 +36,9 @@ function formatRemaining(seconds: number | null): string {
   if (value < 3600) return `约 ${Math.ceil(value / 60)} 分钟`;
   return `约 ${(value / 3600).toFixed(1)} 小时`;
 }
-export default function CloudBackupPanel() {
+export default function CloudBackupPanel({ onSummary }: { onSummary?: (summary: BackupSummary | null) => void }) {
+  const [configurationOpen, setConfigurationOpen] = useState(false);
+  const [page, setPage] = useState(1);
   const [settings, setSettings] = useState<CloudBackupSettings>(EMPTY);
   const [password, setPassword] = useState("");
   const [recoveryKey, setRecoveryKey] = useState("");
@@ -48,6 +52,7 @@ export default function CloudBackupPanel() {
   const [confirmation, setConfirmation] = useState("");
   const [task, setTask] = useState<CloudBackupTask | null>(null);
   const [otherSites, setOtherSites] = useState(false);
+  const [listLoaded, setListLoaded] = useState(false);
   const [files, setFiles] = useState<CloudBackupFile[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -60,8 +65,8 @@ export default function CloudBackupPanel() {
   const configured = settings.hasPassword && settings.hasKey;
   const list = useCallback(async () => {
     setListing(true);
-    try { setFiles(await jsonRequest<CloudBackupFile[]>(`${API}/files`)); }
-    catch (issue) { setError(issue instanceof Error ? issue.message : "读取云备份列表失败。"); }
+    try { setFiles(await jsonRequest<CloudBackupFile[]>(`${API}/files`)); setListLoaded(true); }
+    catch (issue) { setListLoaded(false); setError(issue instanceof Error ? issue.message : "读取云备份列表失败。"); }
     finally { setListing(false); }
   }, []);
   useEffect(() => {
@@ -96,7 +101,7 @@ export default function CloudBackupPanel() {
     setSaving(true); setError(""); setMessage("");
     try {
       const saved = await jsonRequest<CloudBackupSettings>(API, { method: "PATCH", body: JSON.stringify({ endpoint: settings.endpoint, username: settings.username, directory: settings.directory, dailyEnabled: settings.dailyEnabled, keep: settings.keep, ...(password ? { password } : {}), ...(recoveryKey ? { recoveryKey: recoveryKey.trim() } : {}) }) });
-      setSettings(saved); setPassword(""); setRecoveryKey(""); setDirty(false); setFiles([]); setConfirmation("");
+      setSettings(saved); setConfigurationOpen(true); setPassword(""); setRecoveryKey(""); setDirty(false); setFiles([]); setListLoaded(false); setConfirmation("");
       setMessage("云备份配置已保存。请测试连接，并导出恢复密钥单独保存。");
     } catch (issue) { setError(issue instanceof Error ? issue.message : "保存失败。"); }
     finally { setSaving(false); }
@@ -132,13 +137,30 @@ export default function CloudBackupPanel() {
     const matches = isCurrentSiteBackup(file, settings);
     return otherSites ? !matches : matches;
   });
+  const pageCount = Math.max(1, Math.ceil(visibleFiles.length / 5));
+  const currentPage = Math.min(page, pageCount);
+  const pageFiles = visibleFiles.slice((currentPage - 1) * 5, currentPage * 5);
+  const ownFiles = files.filter(file => isCurrentSiteBackup(file, settings));
+  const ownCount = ownFiles.length;
+  const ownBytes = ownFiles.reduce((total, file) => total + file.sizeBytes, 0);
+  const ownLatest = ownFiles[0]?.createdAt ?? null;
+  useEffect(() => {
+    onSummary?.(listLoaded ? { count: ownCount, totalBytes: ownBytes, latest: ownLatest } : null);
+  }, [listLoaded, ownCount, ownBytes, ownLatest, onSummary]);
   const transfer = task?.transfer;
   const uploading = task?.status === "running" && task.phase === "upload" && transfer;
   const ready = task?.kind === "prepare" && task.status === "completed" && task.phase === "ready" && task.preview && !restored;
   return (
-    <section aria-labelledby="cloud-backup-title" className="rounded-2xl border border-neutral-200 bg-white p-5 sm:p-6">
-      <h2 id="cloud-backup-title" className="flex items-center gap-2 text-base font-semibold text-neutral-900"><CloudUpload size={18} />云备份与恢复</h2>
+    <section aria-labelledby="cloud-backup-title" className="admin-card admin-backup-panel p-5 sm:p-6">
+      <div className="admin-panel-heading">
+        <h2 id="cloud-backup-title" className="flex items-center gap-2 text-base font-semibold text-neutral-900"><CloudUpload size={18} />云备份与恢复</h2>
+        <div className="admin-panel-actions">
+          <button type="button" className={buttonClass} aria-expanded={!configured || configurationOpen} aria-controls="cloud-backup-configuration" onClick={() => setConfigurationOpen(value => !value)}>云端设置</button>
+          <button type="button" onClick={() => void start("backup")} disabled={loading || Boolean(busy) || !configured || dirty} className="admin-button admin-button-primary gap-2 px-4 text-sm"><CloudUpload size={16} />备份到云端</button>
+        </div>
+      </div>
       <p className="mt-2 text-sm leading-6 text-neutral-600">连接飞牛 NAS 或其他 WebDAV 存储。云端保存加密的完整备份，包含数据库、图片、附件和应用配置。</p>
+      <div id="cloud-backup-configuration" hidden={configured && !configurationOpen} className="admin-cloud-configuration">
       <fieldset disabled={loading || Boolean(busy)} className="mt-4 grid gap-4 sm:grid-cols-2">
         <label className="text-sm text-neutral-700">WebDAV 地址<input type="url" value={settings.endpoint} onChange={event => edit("endpoint", event.target.value)} placeholder="https://nas.example.com/" className={inputClass} autoComplete="off" /></label>
         <label className="text-sm text-neutral-700">备份目录<input aria-label="备份目录" value={settings.directory} onChange={event => edit("directory", event.target.value)} placeholder="backup" className={inputClass} /><span className="mt-1 block text-xs text-neutral-500">相对于地址的目录；留空使用地址本身。飞牛可填写 backup。</span></label>
@@ -155,6 +177,7 @@ export default function CloudBackupPanel() {
         {configured && <a href={`${API}/key`} download className="text-sm text-neutral-700 underline underline-offset-4">导出恢复密钥</a>}
       </div>
       <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">恢复密钥请单独保存；服务器丢失后需要它解密云备份。导入其他密钥后，原密钥加密的备份需要原密钥才能恢复。地址和账号密码仅在后台管理。</p>
+      </div>
       <div aria-live="polite" className="mt-4 space-y-2 text-sm text-neutral-600">
         {loading && <p>正在读取云备份配置…</p>}
         {task?.status === "running" && <p className="flex items-center gap-2"><LoaderCircle size={16} className="animate-spin" />{PHASES[task.phase]}…{task.phase === "safety" || task.phase === "restore" ? "网站暂时处于恢复维护状态。" : "可以继续浏览网站，刷新后进度会保留。"}</p>}
@@ -178,36 +201,35 @@ export default function CloudBackupPanel() {
         {restored && <Link href="/admin/login" className="inline-block underline underline-offset-4">重新登录后台</Link>}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => void start("backup")} disabled={loading || Boolean(busy) || !configured || dirty} className="inline-flex items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><CloudUpload size={16} />备份到云端</button>
         <button type="button" onClick={() => void list()} disabled={Boolean(busy) || listing || !configured || dirty} className={buttonClass}>{listing ? "正在读取…" : "刷新云备份列表"}</button>
       </div>
       {configured && <div className="mt-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-neutral-900">选择备份恢复</h3>
-          <button type="button" onClick={() => setOtherSites(current => !current)} className={buttonClass}>{otherSites ? "返回本站备份" : "浏览其他备份"}</button>
+          <button type="button" onClick={() => { setOtherSites(current => !current); setPage(1); }} className={buttonClass}>{otherSites ? "返回本站备份" : "浏览其他备份"}</button>
         </div>
         <p className="mt-2 text-xs text-neutral-600">{otherSites ? "其他域名、历史域名及未标识的备份" : `当前网站：${settings.siteLabel}`} · {visibleFiles.length} 份备份</p>
         <p className="mt-1 text-xs leading-5 text-neutral-600">默认按完整域名区分，子域名与主域名分别显示。改域名前的备份可在“浏览其他备份”中查看。</p>
-        <p className="mt-1 text-xs leading-5 text-neutral-600">点击“恢复此备份”先校验并预览内容，再确认恢复。下载备份为原始加密包，恢复时需要对应密钥。</p>
-        <ul className="mt-2 divide-y divide-neutral-100">
-          {visibleFiles.map(file => <li key={file.name} className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div className="min-w-0">
-              <p className="text-sm text-neutral-800">{new Date(file.createdAt).toLocaleString("zh-CN")} · {(file.sizeBytes / 1024 / 1024).toFixed(2)} MB</p>
-              <p className="mt-1 break-all text-xs text-neutral-600">网站：{file.site || "旧备份（未记录网站）"}</p>
-              <p className="mt-1 break-all text-xs text-neutral-500">{file.name}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <a href={`${API}/files/download?name=${encodeURIComponent(file.name)}`} download aria-label={`下载备份 ${file.name}`} className={`inline-flex items-center gap-2 ${buttonClass}`}><Download size={16} />下载备份</a>
-              <button type="button" disabled={Boolean(busy) || dirty} onClick={() => void start("prepare", file.name)} className={`inline-flex items-center gap-2 ${buttonClass}`} aria-label={`恢复此备份 ${file.name}`}>
-                <RotateCcw size={16} />恢复此备份
-              </button>
-              <button type="button" disabled={Boolean(busy) || dirty} onClick={() => void remove(file)} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50" aria-label={`删除备份 ${file.name}`}>
-                <Trash2 size={16} />{deleting === file.name ? "正在删除…" : "删除"}
-              </button>
-            </div>
-          </li>)}
+        <p className="mt-1 text-xs leading-5 text-neutral-600">点击“恢复…”先校验并预览内容，再确认恢复。下载备份为原始加密包，恢复时需要对应密钥。</p>
+        <div className="admin-backup-columns" aria-hidden="true"><span>备份时间</span><span>网站</span><span>大小</span><span>状态</span><span>操作</span></div>
+        <ul aria-label="云端备份列表" className="admin-backup-list">
+          {pageFiles.map(file => {
+            const verified = task?.name === file.name && task.status === "completed" && (task.kind === "backup" || (task.kind === "prepare" && task.phase === "ready"));
+            return <li key={file.name} className="admin-backup-row">
+              <time dateTime={file.createdAt}>{new Date(file.createdAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</time>
+              <span className="admin-backup-domain"><span className="admin-mobile-label">网站：</span>{file.site || "旧备份（未记录网站）"}</span>
+              <span className="admin-backup-size">{formatSize(file.sizeBytes)}</span>
+              <span className={`admin-status-tag ${verified ? "is-good" : ""}`}>{verified ? "已校验" : "待校验"}</span>
+              <div className="admin-backup-actions">
+                <a href={`${API}/files/download?name=${encodeURIComponent(file.name)}`} download aria-label={`下载备份 ${file.name}`} className="admin-backup-download"><Download size={15} />下载</a>
+                <button type="button" disabled={Boolean(busy) || dirty} onClick={() => void start("prepare", file.name)} className={buttonClass} aria-label={`恢复此备份 ${file.name}`}><RotateCcw size={15} />恢复…</button>
+                <BackupFileMenu name={file.name}><button type="button" disabled={Boolean(busy) || dirty} onClick={() => void remove(file)} className="admin-file-delete" aria-label={`删除备份 ${file.name}`}><Trash2 size={15} />{deleting === file.name ? "正在删除…" : "删除备份"}</button></BackupFileMenu>
+              </div>
+            </li>;
+          })}
         </ul>
-        {!listing && visibleFiles.length === 0 && <p className="mt-3 text-sm text-neutral-500">{otherSites ? "没有其他网站的备份。" : "暂无本站备份，可创建云备份，或点击“浏览其他备份”查看旧备份和其他网站备份。"}</p>}
+        {pageCount > 1 && <nav aria-label="云端备份分页" className="admin-backup-pagination"><span aria-live="polite">第 {currentPage} / {pageCount} 页 · 每页 5 份</span><div><button type="button" className={buttonClass} disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>上一页</button><button type="button" className={buttonClass} disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>下一页</button></div></nav>}
+        {listLoaded && !listing && visibleFiles.length === 0 && <p className="mt-3 text-sm text-neutral-500">{otherSites ? "没有其他网站的备份。" : "暂无本站备份，可创建云备份，或点击“浏览其他备份”查看旧备份和其他网站备份。"}</p>}
       </div>}
       {ready && <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
         <h3 className="text-sm font-semibold text-neutral-900">恢复预览 · 校验通过</h3>
