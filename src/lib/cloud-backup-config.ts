@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { getProjectRoot } from "@/lib/uploads";
 import { normalizeWebDavLocation, type WebDavConfig } from "@/lib/webdav";
+import { cloudBackupSiteLabel } from "@/lib/cloud-backup-name";
 import type { CloudBackupSettings } from "@/lib/cloud-backup-types";
 
 export type StoredCloudSettings = WebDavConfig & { format: 1; key: string; version: string; dailyEnabled: boolean; keep: number };
@@ -28,8 +29,8 @@ export function readCloudSettings(): StoredCloudSettings | null {
 }
 export function publicCloudSettings(): CloudBackupSettings {
   const settings = readCloudSettings();
-  return settings ? { endpoint: settings.endpoint, username: settings.username, directory: settings.directory, dailyEnabled: settings.dailyEnabled, keep: settings.keep, hasPassword: Boolean(settings.password), hasKey: true }
-    : { endpoint: "", username: "", directory: "backup", dailyEnabled: false, keep: 14, hasPassword: false, hasKey: false };
+  return settings ? { siteLabel: cloudBackupSiteLabel(), endpoint: settings.endpoint, username: settings.username, directory: settings.directory, dailyEnabled: settings.dailyEnabled, keep: settings.keep, hasPassword: Boolean(settings.password), hasKey: true }
+    : { siteLabel: cloudBackupSiteLabel(), endpoint: "", username: "", directory: "backup", dailyEnabled: false, keep: 14, hasPassword: false, hasKey: false };
 }
 export function validRecoveryKey(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9+/]{43}=$/.test(value) && Buffer.from(value, "base64").length === 32;

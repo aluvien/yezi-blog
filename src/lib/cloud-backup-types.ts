@@ -1,4 +1,5 @@
 export type CloudBackupSettings = {
+  siteLabel: string;
   endpoint: string;
   username: string;
   directory: string;
@@ -18,6 +19,13 @@ export type CloudRestorePreview = {
   schemaVersion: number;
   configurationFiles: number;
 };
+export type CloudBackupTransfer = {
+  totalBytes: number;
+  transferredBytes: number;
+  bytesPerSecond: number;
+  elapsedSeconds: number;
+  remainingSeconds: number | null;
+};
 export type CloudBackupTask = {
   id: string;
   kind: "test" | "backup" | "prepare";
@@ -28,6 +36,7 @@ export type CloudBackupTask = {
   name?: string;
   error?: string;
   warning?: string;
+  transfer?: CloudBackupTransfer;
   preview?: CloudRestorePreview;
   safetyBackup?: string;
 };

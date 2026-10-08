@@ -90,6 +90,13 @@ export function publicCloudError(error: unknown): string {
   if (/^(WebDAV |无法连接 WebDAV|WebDAV 返回|WebDAV 未返回|备份路径|远程备份|恢复密钥|该文件不是|备份包含|备份文件|备份超过|请选择|另一个|请先|云备份|网站进程|上次恢复|恢复失败|备份数据库|当前数据库|备份版本)/.test(message) && !/[\r\n]/.test(message)) return message.slice(0, 250);
   return "云备份操作未完成，请检查磁盘空间、文件权限、网络和 WebDAV 配置后重试。";
 }
+export async function downloadCloudBackup(name: string): Promise<{ body: ReadableStream<Uint8Array>; size: number }> {
+  if (!CLOUD_FILE_PATTERN.test(name)) throw new Error("请选择有效的云备份文件。");
+  const client = new WebDavClient(requireCloudSettings());
+  const file = (await client.list()).find(item => item.name === name);
+  if (!file) throw new Error("远程备份不存在，请刷新列表。");
+  return { body: await client.streamDownload(name, file.sizeBytes), size: file.sizeBytes };
+}
 export async function deleteCloudBackup(name: string): Promise<void> {
   if (!CLOUD_FILE_PATTERN.test(name)) throw new Error("请选择有效的云备份文件。");
   const settings = requireCloudSettings();
@@ -137,7 +144,9 @@ export async function executeCloudTask(id: string): Promise<void> {
       updateCloudPhase(task, "upload");
       let uploaded = false;
       try {
-        await client.upload(name, encrypted); uploaded = true;
+        await client.upload(name, encrypted, transfer => {
+          task.transfer = transfer; task.updatedAt = new Date().toISOString(); writeCloudTask(task);
+        }); uploaded = true;
         updateCloudPhase(task, "verify");
         const roundTrip = path.join(stage, "uploaded.enc");
         await client.download(name, roundTrip);

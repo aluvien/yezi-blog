@@ -92,7 +92,7 @@ export default function DataBackupPanel() {
       </div>
       <p className="mt-2 text-sm leading-6 text-neutral-600">一键下载数据库、上传图片与附件、引用归档、环境文件和 PM2 等应用配置。备份在后台执行，网站可以继续访问。</p>
       <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">下载包未加密，包含后台密码、接口密钥和 QQ Cookie，请妥善保存，不要上传公开仓库。备份期间请避免删除附件或修改配置。</p>
-      <p className="mt-2 text-xs leading-5 text-neutral-500">不包含历史备份、临时文件和可再生成的 QQ 音频缓存。恢复说明与文件校验清单会一并下载。</p>
+      <p className="mt-2 text-xs leading-5 text-neutral-500">服务器保留最近 3 份完整备份；“下载最近备份”下载最新一份。备份包不包含历史备份、临时文件和可再生成的 QQ 音频缓存，附带恢复说明与文件校验清单。</p>
       <div aria-live="polite" className="mt-4 text-sm text-neutral-600">
         {loading ? <p>正在读取备份状态…</p> : status?.status === "running" ? (
           <div className="space-y-2">

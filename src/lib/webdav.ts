@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
-import type { CloudBackupFile } from "@/lib/cloud-backup-types";
+import type { CloudBackupFile, CloudBackupTransfer } from "@/lib/cloud-backup-types";
 
 export const CLOUD_FILE_PATTERN = /^yezi-complete-(\d{8}T\d{6}Z)-(?:([a-z0-9][a-z0-9.-]{0,99})-)?([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.tar\.gz\.enc$/;
 export const MAX_CLOUD_BYTES = 2 * 1024 * 1024 * 1024;
@@ -54,13 +54,13 @@ export class WebDavClient {
     let response: Response;
     try {
       response = await fetch(url, {
-        ...options, method, redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(["PROPFIND", "MKCOL"].includes(method) ? 30_000 : 15 * 60_000),
+        ...options, method, redirect: "manual", cache: "no-store", signal: AbortSignal.any([AbortSignal.timeout(["PROPFIND", "MKCOL"].includes(method) ? 30_000 : 15 * 60_000), ...(options.signal ? [options.signal] : [])]),
         headers: { ...options.headers, Authorization: `Basic ${Buffer.from(`${this.config.username}:${this.config.password}`).toString("base64")}` },
       });
     } catch { throw new Error("无法连接 WebDAV，请检查地址、证书和网络连接。"); }
     if (!accepted.includes(response.status)) {
       await response.body?.cancel();
-      const detail = response.status === 401 ? "账号或密码未通过认证" : response.status === 403 ? "账号没有所需权限" : response.status === 404 ? "目录或文件不存在" : response.status === 405 ? "此目录不允许该操作" : response.status >= 300 && response.status < 400 ? "地址发生重定向，请填写最终 WebDAV 地址" : "服务器拒绝请求";
+      const detail = response.status === 401 ? "账号或密码未通过认证" : response.status === 403 ? "账号没有所需权限" : response.status === 404 ? "目录或文件不存在" : response.status === 405 ? "此目录不允许该操作" : response.status === 413 ? "上传内容超过 WebDAV 服务或反向代理的大小限制，请调大接收端上传限制" : response.status >= 300 && response.status < 400 ? "地址发生重定向，请填写最终 WebDAV 地址" : "服务器拒绝请求";
       throw new Error(`WebDAV ${method} 失败（${response.status}）：${detail}。`);
     }
     return response;
@@ -113,14 +113,61 @@ export class WebDavClient {
     }
     return files.sort((a, b) => b.name.localeCompare(a.name));
   }
-  async upload(name: string, file: string): Promise<void> {
+  async upload(name: string, file: string, onProgress?: (progress: CloudBackupTransfer) => void): Promise<void> {
     const size = fs.statSync(file).size;
     if (size <= 0 || size > MAX_CLOUD_BYTES) throw new Error("备份文件为空或超过 2 GB 上限。");
-    const response = await this.request(this.child(name), "PUT", {
-      headers: { "Content-Type": "application/octet-stream", "Content-Length": String(size), "If-None-Match": "*" },
-      body: Readable.toWeb(fs.createReadStream(file)) as BodyInit, duplex: "half",
-    } as RequestInit, [200, 201, 204]);
-    await response.body?.cancel();
+    const source = fs.createReadStream(file, { highWaterMark: 64 * 1024 });
+    const controller = new AbortController();
+    const started = performance.now();
+    let transferred = 0;
+    let progressError: unknown;
+    const report = () => {
+      const elapsedSeconds = Math.max(0, (performance.now() - started) / 1000);
+      const bytesPerSecond = elapsedSeconds > 0 ? transferred / elapsedSeconds : 0;
+      onProgress?.({ totalBytes: size, transferredBytes: transferred, bytesPerSecond, elapsedSeconds, remainingSeconds: bytesPerSecond > 0 ? (size - transferred) / bytesPerSecond : null });
+    };
+    const timer = onProgress ? setInterval(() => {
+      try { report(); } catch (error) { progressError = error; controller.abort(); }
+    }, 1000) : null;
+    timer?.unref();
+    // Count bytes pulled by the HTTP upload stream, respecting backpressure.
+    // Completion still requires the DAV response and subsequent remote hash verification.
+    const body = Readable.from((async function* () {
+      for await (const chunk of source) { transferred += chunk.length; yield chunk; }
+    })(), { objectMode: false, highWaterMark: 64 * 1024 });
+    try {
+      report();
+      const response = await this.request(this.child(name), "PUT", {
+        signal: controller.signal,
+        headers: { "Content-Type": "application/octet-stream", "Content-Length": String(size), "If-None-Match": "*" },
+        body: Readable.toWeb(body, { strategy: { highWaterMark: 64 * 1024, size: (chunk: Uint8Array) => chunk.byteLength } }) as BodyInit, duplex: "half",
+      } as RequestInit, [200, 201, 204]);
+      await response.body?.cancel();
+      if (progressError) throw progressError;
+      report();
+    } catch (error) {
+      report();
+      throw progressError || error;
+    } finally {
+      if (timer) clearInterval(timer);
+      source.destroy(); body.destroy();
+    }
+  }
+  async streamDownload(name: string, expectedSize: number): Promise<ReadableStream<Uint8Array>> {
+    if (!CLOUD_FILE_PATTERN.test(name) || !Number.isSafeInteger(expectedSize) || expectedSize <= 0 || expectedSize > MAX_CLOUD_BYTES) throw new Error("请选择有效的云备份文件，备份不可超过 2 GB。");
+    const response = await this.request(this.child(name), "GET", {}, [200]);
+    if (!response.body) throw new Error("远程备份响应为空。");
+    const length = response.headers.get("content-length");
+    if (length !== null && Number(length) !== expectedSize) { await response.body.cancel(); throw new Error("远程备份大小发生变化，请刷新列表后重试。"); }
+    let received = 0;
+    return response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        received += chunk.byteLength;
+        if (received > expectedSize) throw new Error("远程备份超过预期大小。");
+        controller.enqueue(chunk);
+      },
+      flush() { if (received !== expectedSize) throw new Error("远程备份下载不完整。"); },
+    }));
   }
   async download(name: string, destination: string): Promise<void> {
     const response = await this.request(this.child(name), "GET", {}, [200]);
