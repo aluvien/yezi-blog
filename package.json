@@ -39,7 +39,7 @@
     "linkedom": "^0.18.13",
     "lucide-react": "^1.34.0",
     "marked": "^18.0.9",
-    "next": "16.3.6",
+    "next": "16.3.8",
     "pinyin-pro": "^3.28.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -57,7 +57,7 @@
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.1",
     "eslint": "^9",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
