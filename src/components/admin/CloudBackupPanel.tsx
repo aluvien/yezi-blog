@@ -10,7 +10,7 @@ const PHASES: Record<CloudBackupPhase, string> = {
   snapshot: "生成完整备份", encrypt: "加密备份包", upload: "上传到 WebDAV", verify: "回读校验", download: "读取待恢复备份",
   decrypt: "解密备份包", validate: "校验数据库与文件", ready: "校验通过，请确认恢复", safety: "保存恢复前完整备份", restore: "恢复数据库与文件", complete: "已完成",
 };
-const EMPTY: CloudBackupSettings = { siteLabel: "", endpoint: "", username: "", directory: "backup", dailyEnabled: false, keep: 14, hasPassword: false, hasKey: false };
+const EMPTY: CloudBackupSettings = { siteLabel: "", siteId: "", siteLabels: [], endpoint: "", username: "", directory: "backup", dailyEnabled: false, keep: 14, hasPassword: false, hasKey: false };
 async function jsonRequest<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, { ...init, cache: "no-store", headers: { "Content-Type": "application/json", "x-yezi-csrf": "1", ...init.headers } });
   const result = await response.json();
@@ -72,6 +72,8 @@ export default function CloudBackupPanel() {
         const data = await jsonRequest<{ settings: CloudBackupSettings; task: CloudBackupTask | null }>(API);
         if (!mounted.current) return;
         if (!initialized.current) { initialized.current = true; setSettings(data.settings); if (data.settings.hasPassword) void list(); }
+        // Update identity across tabs without overwriting unsaved WebDAV edits.
+        setSettings(current => ({ ...current, siteId: data.settings.siteId, siteLabel: data.settings.siteLabel, siteLabels: data.settings.siteLabels }));
         setTask(data.task);
         if (data.task?.status === "completed" && data.task.kind === "backup" && lastCompleted.current !== data.task.id) {
           lastCompleted.current = data.task.id; void list();
@@ -125,7 +127,10 @@ export default function CloudBackupPanel() {
     } catch (issue) { setError(issue instanceof Error ? issue.message : "恢复未完成，请重新登录后查看状态。"); }
     finally { setRestoring(false); applying.current = false; }
   }
-  const visibleFiles = files.filter(file => otherSites ? file.site !== settings.siteLabel : file.site === settings.siteLabel);
+  const visibleFiles = files.filter(file => {
+    const matches = file.siteId ? file.siteId === settings.siteId : Boolean(file.site && settings.siteLabels.includes(file.site));
+    return otherSites ? !matches : matches;
+  });
   const transfer = task?.transfer;
   const uploading = task?.status === "running" && task.phase === "upload" && transfer;
   const ready = task?.kind === "prepare" && task.status === "completed" && task.phase === "ready" && task.preview && !restored;
@@ -138,7 +143,7 @@ export default function CloudBackupPanel() {
         <label className="text-sm text-neutral-700">备份目录<input aria-label="备份目录" value={settings.directory} onChange={event => edit("directory", event.target.value)} placeholder="backup" className={inputClass} /><span className="mt-1 block text-xs text-neutral-500">相对于地址的目录；留空使用地址本身。飞牛可填写 backup。</span></label>
         <label className="text-sm text-neutral-700">WebDAV 账号<input value={settings.username} onChange={event => edit("username", event.target.value)} className={inputClass} autoComplete="off" /></label>
         <label className="text-sm text-neutral-700">WebDAV 密码<input type="password" value={password} onChange={event => { setPassword(event.target.value); setDirty(true); }} placeholder={settings.hasPassword ? "已保存，留空保留原密码" : "请输入密码"} className={inputClass} autoComplete="new-password" /></label>
-        <label className="text-sm text-neutral-700">云端保留份数<input type="number" min={1} max={100} value={settings.keep} onChange={event => edit("keep", Number(event.target.value))} className={inputClass} /><span className="mt-1 block text-xs text-neutral-500">新备份校验成功后，仅清理相同网站标识的超额备份；其他网站和未标识的旧备份保留。</span></label>
+        <label className="text-sm text-neutral-700">云端保留份数<input type="number" min={1} max={100} value={settings.keep} onChange={event => edit("keep", Number(event.target.value))} className={inputClass} /><span className="mt-1 block text-xs text-neutral-500">新备份校验成功后，仅清理相同固定站点标识的超额备份；其他网站和旧格式备份保留。</span></label>
         <label className="text-sm text-neutral-700">导入恢复密钥（换机恢复时填写）<input type="password" value={recoveryKey} onChange={event => { setRecoveryKey(event.target.value); setDirty(true); }} placeholder="粘贴之前导出的恢复密钥，平时留空" className={inputClass} autoComplete="new-password" /></label>
         <label className="flex items-center gap-2 text-sm text-neutral-700 sm:col-span-2"><input type="checkbox" checked={settings.dailyEnabled} onChange={event => edit("dailyEnabled", event.target.checked)} />每天自动备份到云端（跟随网站每日备份任务，服务器当地时间 04:17）</label>
       </fieldset>

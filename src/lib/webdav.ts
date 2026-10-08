@@ -5,7 +5,17 @@ import { pipeline } from "node:stream/promises";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { CloudBackupFile, CloudBackupTransfer } from "@/lib/cloud-backup-types";
 
-export const CLOUD_FILE_PATTERN = /^yezi-complete-(\d{8}T\d{6}Z)-(?:([a-z0-9][a-z0-9.-]{0,99})-)?([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.tar\.gz\.enc$/;
+const BACKUP_UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const BACKUP_LABEL = "[a-z0-9][a-z0-9.-]{0,99}";
+const IDENTIFIED_CLOUD_FILE_PATTERN = new RegExp(`^yezi-complete-(\\d{8}T\\d{6}Z)-(${BACKUP_LABEL})-site-(${BACKUP_UUID})-(${BACKUP_UUID})\\.tar\\.gz\\.enc$`);
+const LEGACY_CLOUD_FILE_PATTERN = new RegExp(`^yezi-complete-(\\d{8}T\\d{6}Z)-(?:(${BACKUP_LABEL})-)?(${BACKUP_UUID})\\.tar\\.gz\\.enc$`);
+export const CLOUD_FILE_PATTERN = new RegExp(`(?:${IDENTIFIED_CLOUD_FILE_PATTERN.source})|(?:${LEGACY_CLOUD_FILE_PATTERN.source})`);
+export function parseCloudBackupName(name: string): { stamp: string; site?: string; siteId?: string } | null {
+  const identified = IDENTIFIED_CLOUD_FILE_PATTERN.exec(name);
+  if (identified) return { stamp: identified[1], site: identified[2], siteId: identified[3] };
+  const legacy = LEGACY_CLOUD_FILE_PATTERN.exec(name);
+  return legacy ? { stamp: legacy[1], ...(legacy[2] ? { site: legacy[2] } : {}) } : null;
+}
 export const MAX_CLOUD_BYTES = 2 * 1024 * 1024 * 1024;
 const XML_LIMIT = 8 * 1024 * 1024;
 const ALL_PROPERTIES = '<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:allprop/></d:propfind>';
@@ -105,11 +115,11 @@ export class WebDavClient {
       if (!prop || JSON.stringify(prop.resourcetype)?.includes("collection")) continue;
       const sizeBytes = Number(prop.getcontentlength);
       if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) continue;
-      const match = CLOUD_FILE_PATTERN.exec(name)!;
-      const stamp = match[1];
+      const parsedName = parseCloudBackupName(name)!;
+      const stamp = parsedName.stamp;
       const createdAt = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`;
       if (!Number.isFinite(Date.parse(createdAt))) continue;
-      files.push({ name, sizeBytes, createdAt, ...(match[2] ? { site: match[2] } : {}) });
+      files.push({ name, sizeBytes, createdAt, ...(parsedName.site ? { site: parsedName.site } : {}), ...(parsedName.siteId ? { siteId: parsedName.siteId } : {}) });
     }
     return files.sort((a, b) => b.name.localeCompare(a.name));
   }

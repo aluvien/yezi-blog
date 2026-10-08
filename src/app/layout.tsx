@@ -1,3 +1,4 @@
+import { getSiteUrl } from "@/lib/site-config";
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { site } from "@/lib/site";
@@ -12,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const siteName = settings.site_name?.trim() || site.name;
   const description = settings.site_subtitle?.trim() || site.description;
   return {
-    metadataBase: new URL(site.url),
+    metadataBase: new URL(getSiteUrl(settings)),
     title: {
       default: siteName,
       template: `%s · ${siteName}`,

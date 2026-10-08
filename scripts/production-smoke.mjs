@@ -215,6 +215,27 @@ try {
   if (!siteBody?.data || typeof siteBody.data.name !== "string" || !Array.isArray(siteBody.data.navigation)) {
     throw new Error("standalone App API 站点配置异常");
   }
+  if (siteBody.data.url !== baseUrl) throw new Error("生产站点地址被构建环境固定，未读取运行时配置");
+  const initialCloud = await (await fetch(`${baseUrl}/api/admin/v1/backups/cloud`, { headers: { cookie: adminCookie } })).json();
+  const savedUrl = "https://runtime-site.example";
+  const changed = await fetch(`${baseUrl}/api/admin/v1/settings`, {
+    method: "PATCH",
+    headers: { cookie: adminCookie, origin: baseUrl, "x-yezi-csrf": "1", "content-type": "application/json" },
+    body: JSON.stringify({ site_url: savedUrl }),
+  });
+  if (!changed.ok) throw new Error(`生产后台保存网站地址失败：HTTP ${changed.status}`);
+  const updatedSite = await (await fetch(`${baseUrl}/api/v1/site`)).json();
+  if (updatedSite.data.url !== savedUrl) throw new Error("生产网站地址保存后未立即生效");
+  const updatedCloud = await (await fetch(`${baseUrl}/api/admin/v1/backups/cloud`, { headers: { cookie: adminCookie } })).json();
+  if (updatedCloud.data.settings.siteId !== initialCloud.data.settings.siteId || updatedCloud.data.settings.siteLabel !== "runtime-site.example") {
+    throw new Error("生产域名变更未保留备份归属或更新备份域名");
+  }
+  for (const route of ["/sitemap.xml", "/robots.txt", "/rss.xml"]) {
+    const response = await fetch(`${baseUrl}${route}`);
+    if (!response.ok || !(await response.text()).includes(savedUrl) || !response.headers.get("cache-control")?.includes("no-store")) {
+      throw new Error(`生产域名变更未立即更新 ${route} 或仍有旧域名缓存`);
+    }
+  }
   console.log(`production smoke passed: relocated standalone + SQLite + FTS + CSP + HTTPS images on ${baseUrl}`);
 } finally {
   await stop(child);

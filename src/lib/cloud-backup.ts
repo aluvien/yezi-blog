@@ -6,7 +6,7 @@ import { executeAdminBackup, getAdminBackupDownload, getAdminBackupStatus, start
 import { cloudBackupRoot, requireCloudSettings, writePrivateJson, type StoredCloudSettings } from "@/lib/cloud-backup-config";
 import { decryptCloudArchive, encryptCloudArchive, extractAndVerifyCloudArchive, fileHash } from "@/lib/cloud-backup-archive";
 import { CLOUD_FILE_PATTERN, WebDavClient } from "@/lib/webdav";
-import { cloudBackupSiteLabel } from "@/lib/cloud-backup-name";
+import { getBackupSiteIdentity } from "@/lib/site-config";
 import type { CloudBackupTask, CloudBackupPhase } from "@/lib/cloud-backup-types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -129,6 +129,7 @@ export async function executeCloudTask(id: string): Promise<void> {
       updateCloudPhase(task, "complete");
     } else if (task.kind === "backup") {
       await client.ensureDirectory();
+      const identity = getBackupSiteIdentity();
       const snapshot = startAdminBackup();
       if (!snapshot.started) throw new Error("另一个本地备份任务正在执行，请稍后重试。");
       await executeAdminBackup(snapshot.status.id);
@@ -136,8 +137,8 @@ export async function executeCloudTask(id: string): Promise<void> {
       if (!archive) throw new Error(getAdminBackupStatus()?.error ?? "备份文件生成失败。");
       updateCloudPhase(task, "encrypt");
       const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-      const siteLabel = cloudBackupSiteLabel();
-      const name = `yezi-complete-${stamp}-${siteLabel}-${id}.tar.gz.enc`;
+      const { siteId, siteLabel } = identity;
+      const name = `yezi-complete-${stamp}-${siteLabel}-site-${siteId}-${id}.tar.gz.enc`;
       const encrypted = path.join(stage, name);
       await encryptCloudArchive(archive.path, encrypted, settings.key);
       task.name = name;
@@ -156,7 +157,7 @@ export async function executeCloudTask(id: string): Promise<void> {
 
       } catch (error) { if (uploaded || !(error instanceof Error && error.message.includes("（412）"))) { try { await client.remove(name); } catch { /* Keep the original failure; no old backups are reported as replaced. */ } } throw error; }
       // A deletion failure must never remove an already verified new backup.
-      try { for (const old of (await client.list()).filter(file => file.name !== name && file.site === siteLabel).slice(settings.keep - 1)) await client.remove(old.name); }
+      try { for (const old of (await client.list()).filter(file => file.name !== name && file.siteId === siteId).slice(settings.keep - 1)) await client.remove(old.name); }
       catch { task.warning = "新备份已校验完成，但旧备份清理未完成，请检查 WebDAV 删除权限。"; }
       updateCloudPhase(task, "complete");
     } else {

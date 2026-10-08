@@ -1,5 +1,7 @@
 export type CloudBackupSettings = {
   siteLabel: string;
+  siteId: string;
+  siteLabels: string[];
   endpoint: string;
   username: string;
   directory: string;
@@ -8,7 +10,7 @@ export type CloudBackupSettings = {
   hasPassword: boolean;
   hasKey: boolean;
 };
-export type CloudBackupFile = { name: string; sizeBytes: number; createdAt: string; site?: string };
+export type CloudBackupFile = { name: string; sizeBytes: number; createdAt: string; site?: string; siteId?: string };
 export type CloudBackupPhase = "snapshot" | "encrypt" | "upload" | "verify" | "download" | "decrypt" | "validate" | "ready" | "safety" | "restore" | "complete";
 export type CloudRestorePreview = {
   createdAt: string;

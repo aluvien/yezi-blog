@@ -193,7 +193,11 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
       },
       {
-        source: "/(rss.xml|manifest.webmanifest|sitemap.xml)",
+        source: "/(rss.xml|sitemap.xml|robots.txt)",
+        headers: [{ key: "Cache-Control", value: "no-store" }],
+      },
+      {
+        source: "/manifest.webmanifest",
         headers: [{ key: "Cache-Control", value: "public, max-age=300, stale-while-revalidate=3600" }],
       },
     ];

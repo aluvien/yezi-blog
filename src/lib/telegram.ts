@@ -1,4 +1,4 @@
-import { site } from "@/lib/site";
+import { getSiteUrl } from "@/lib/site-config";
 import { TELEGRAM_SOURCE, withSource } from "@/lib/service-source";
 
 type TelegramConfig = {
@@ -154,7 +154,7 @@ export async function sendTelegramMessage(text: string, options: TelegramMessage
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       chat_id: options.chatId ?? current.chatId,
-      text: compactText(text, 3800),
+      text: compactText(`网站：${options.parseMode === "HTML" ? escapeTelegramHtml(new URL(getSiteUrl()).host) : new URL(getSiteUrl()).host}\n\n${text}`, 3800),
       disable_web_page_preview: true,
       ...(options.parseMode ? { parse_mode: options.parseMode } : {}),
       ...(options.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
@@ -169,7 +169,7 @@ export async function sendTelegramPhoto(chatId: string, image: string, caption: 
   if (!match) return { ok: false, configured: isTelegramConfigured(), error: "QQ 音乐二维码格式无效" };
   const form = new FormData();
   form.set("chat_id", chatId);
-  form.set("caption", compactText(caption, 900));
+  form.set("caption", compactText(`网站：${new URL(getSiteUrl()).host}\n\n${caption}`, 900));
   form.set("photo", new Blob([Buffer.from(match[2].replace(/\s/g, ""), "base64")], { type: match[1] }), "qq-music-login.png");
   const result = await telegramRequest("sendPhoto", { method: "POST", body: form });
   return requestResult(result);
@@ -196,7 +196,7 @@ export async function answerTelegramCallback(callbackId: string, text: string): 
   await telegramRequest("answerCallbackQuery", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ callback_query_id: callbackId, text: compactText(text, 180), show_alert: false }),
+    body: JSON.stringify({ callback_query_id: callbackId, text: compactText(`[${new URL(getSiteUrl()).host}] ${text}`, 180), show_alert: false }),
   });
 }
 
@@ -229,7 +229,7 @@ export async function notifyNewComment(input: TelegramCommentNotification): Prom
     "",
     `<blockquote>${escapeTelegramHtml(input.content)}</blockquote>`,
     "",
-    `<a href=\"${site.url}/admin/comments\">进入后台审核 →</a>`,
+    `<a href=\"${getSiteUrl()}/admin/comments\">进入后台审核 →</a>`,
   ].join("\n"), {
     parseMode: "HTML",
     ...(canManageFromNotificationChat() ? { replyMarkup: { inline_keyboard: [[{ text: "通过", callback_data: `comment:approve:${input.commentId}` }, { text: "回复并通过", callback_data: `comment:reply:${input.commentId}` }]] } } : {}),

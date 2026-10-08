@@ -14,7 +14,7 @@ type Props = { initialValues: Record<string, string>; section?: SettingsSection 
 
 const SECTION_KEYS: Record<SettingsSection, string[]> = {
   site: [
-    "site_name", "site_subtitle", "site_logo", "site_logo_no_border", "footer_text", "social_links",
+    "site_name", "site_url", "site_subtitle", "site_logo", "site_logo_no_border", "footer_text", "social_links",
     "author_name", "author_email",
     "gravatar_enabled", "gravatar_mirror", "author_avatar", "author_avatar_no_border", "qq_music_health_check_enabled",
     "qq_music_health_check_interval_hours", "telegram_comment_notifications_enabled",
@@ -27,6 +27,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
   const router = useRouter();
   const [values, setValues] = useState({
     site_name: initialValues.site_name ?? "",
+    site_url: initialValues.site_url ?? "",
     site_subtitle: initialValues.site_subtitle ?? "",
     site_logo: initialValues.site_logo ?? "",
     site_logo_no_border: initialValues.site_logo_no_border ?? "0",
@@ -102,6 +103,10 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
           <h2 className="text-base font-semibold text-neutral-800">站点信息</h2>
           <p className="mt-1 text-xs text-neutral-500">设置网站名称、副标题和页脚显示内容。</p>
         </div>
+        <label className="mb-4 block text-sm font-medium text-neutral-700">网站地址
+          <input type="url" value={values.site_url} onChange={(event) => update("site_url", event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="https://yezi.me" />
+          <span className="mt-1 block text-xs font-normal leading-5 text-neutral-500">填写完整网站地址，保存后备份标识、站点链接和 Telegram 通知立即生效，无需重新构建。域名解析与证书需在服务器配置。</span>
+        </label>
         <div className="grid gap-4 md:grid-cols-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">站点名称</label>
