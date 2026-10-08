@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CloudUpload, LoaderCircle, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { CloudUpload, Download, LoaderCircle, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import type { CloudBackupFile, CloudBackupSettings, CloudBackupTask, CloudBackupPhase } from "@/lib/cloud-backup-types";
 
 const API = "/api/admin/v1/backups/cloud";
@@ -10,7 +10,7 @@ const PHASES: Record<CloudBackupPhase, string> = {
   snapshot: "生成完整备份", encrypt: "加密备份包", upload: "上传到 WebDAV", verify: "回读校验", download: "读取待恢复备份",
   decrypt: "解密备份包", validate: "校验数据库与文件", ready: "校验通过，请确认恢复", safety: "保存恢复前完整备份", restore: "恢复数据库与文件", complete: "已完成",
 };
-const EMPTY: CloudBackupSettings = { endpoint: "", username: "", directory: "backup", dailyEnabled: false, keep: 14, hasPassword: false, hasKey: false };
+const EMPTY: CloudBackupSettings = { siteLabel: "", endpoint: "", username: "", directory: "backup", dailyEnabled: false, keep: 14, hasPassword: false, hasKey: false };
 async function jsonRequest<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, { ...init, cache: "no-store", headers: { "Content-Type": "application/json", "x-yezi-csrf": "1", ...init.headers } });
   const result = await response.json();
@@ -20,6 +20,19 @@ async function jsonRequest<T>(url: string, init: RequestInit = {}): Promise<T> {
 const inputClass = "mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-600 disabled:bg-neutral-50";
 const buttonClass = "rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50";
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+function formatRemaining(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds)) return "计算中…";
+  const value = Math.max(1, Math.ceil(seconds));
+  if (value < 60) return `约 ${value} 秒`;
+  if (value < 3600) return `约 ${Math.ceil(value / 60)} 分钟`;
+  return `约 ${(value / 3600).toFixed(1)} 小时`;
+}
 export default function CloudBackupPanel() {
   const [settings, setSettings] = useState<CloudBackupSettings>(EMPTY);
   const [password, setPassword] = useState("");
@@ -33,6 +46,7 @@ export default function CloudBackupPanel() {
   const [restored, setRestored] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [task, setTask] = useState<CloudBackupTask | null>(null);
+  const [otherSites, setOtherSites] = useState(false);
   const [files, setFiles] = useState<CloudBackupFile[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -111,6 +125,9 @@ export default function CloudBackupPanel() {
     } catch (issue) { setError(issue instanceof Error ? issue.message : "恢复未完成，请重新登录后查看状态。"); }
     finally { setRestoring(false); applying.current = false; }
   }
+  const visibleFiles = files.filter(file => otherSites ? file.site !== settings.siteLabel : file.site === settings.siteLabel);
+  const transfer = task?.transfer;
+  const uploading = task?.status === "running" && task.phase === "upload" && transfer;
   const ready = task?.kind === "prepare" && task.status === "completed" && task.phase === "ready" && task.preview && !restored;
   return (
     <section aria-labelledby="cloud-backup-title" className="rounded-2xl border border-neutral-200 bg-white p-5 sm:p-6">
@@ -135,6 +152,17 @@ export default function CloudBackupPanel() {
       <div aria-live="polite" className="mt-4 space-y-2 text-sm text-neutral-600">
         {loading && <p>正在读取云备份配置…</p>}
         {task?.status === "running" && <p className="flex items-center gap-2"><LoaderCircle size={16} className="animate-spin" />{PHASES[task.phase]}…{task.phase === "safety" || task.phase === "restore" ? "网站暂时处于恢复维护状态。" : "可以继续浏览网站，刷新后进度会保留。"}</p>}
+        {uploading && <div className="space-y-2 rounded-lg bg-neutral-50 p-3">
+          <p>上传进度 {Math.min(100, transfer.transferredBytes / transfer.totalBytes * 100).toFixed(1)}%</p>
+          <progress aria-label="云备份上传进度" value={transfer.transferredBytes} max={transfer.totalBytes} className="h-2 w-full accent-neutral-900" />
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+            <span>已发送 {formatSize(transfer.transferredBytes)} / {formatSize(transfer.totalBytes)}</span>
+            <span>平均速度 {formatSize(transfer.bytesPerSecond)}/s</span>
+            <span>{transfer.transferredBytes >= transfer.totalBytes ? "等待上传确认…" : `预计剩余 ${formatRemaining(transfer.remainingSeconds)}`}</span>
+          </div>
+          <p className="text-xs text-neutral-500">速度和剩余时间为估算；上传后还需回读校验。刷新页面可继续查看进度。</p>
+        </div>}
+        {transfer && !uploading && <p className="text-xs text-neutral-500">备份包大小：{formatSize(transfer.totalBytes)}</p>}
         {task?.status === "failed" && <p role="alert" className="text-red-600">{task.error}</p>}
         {task?.status === "completed" && task.kind === "test" && <p className="flex items-center gap-2 text-green-700"><ShieldCheck size={16} />连接测试通过：目录列出、写入、读回和清理均成功。</p>}
         {task?.status === "completed" && task.kind === "backup" && <p className="text-green-700">云备份完成，远程回读校验通过。</p>}
@@ -147,17 +175,22 @@ export default function CloudBackupPanel() {
         <button type="button" onClick={() => void start("backup")} disabled={loading || Boolean(busy) || !configured || dirty} className="inline-flex items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><CloudUpload size={16} />备份到云端</button>
         <button type="button" onClick={() => void list()} disabled={Boolean(busy) || listing || !configured || dirty} className={buttonClass}>{listing ? "正在读取…" : "刷新云备份列表"}</button>
       </div>
-      {files.length > 0 ? <div className="mt-5">
-        <h3 className="text-sm font-semibold text-neutral-900">选择备份恢复</h3>
-        <p className="mt-1 text-xs leading-5 text-neutral-600">点击“恢复此备份”先校验并预览内容，再确认恢复。</p>
+      {configured && <div className="mt-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-neutral-900">选择备份恢复</h3>
+          <button type="button" onClick={() => setOtherSites(current => !current)} className={buttonClass}>{otherSites ? "返回本站备份" : "浏览其他备份"}</button>
+        </div>
+        <p className="mt-2 text-xs text-neutral-600">{otherSites ? "其他网站及未标识的旧备份" : `当前网站：${settings.siteLabel}`} · {visibleFiles.length} 份备份</p>
+        <p className="mt-1 text-xs leading-5 text-neutral-600">点击“恢复此备份”先校验并预览内容，再确认恢复。下载备份为原始加密包，恢复时需要对应密钥。</p>
         <ul className="mt-2 divide-y divide-neutral-100">
-          {files.map(file => <li key={file.name} className="flex flex-wrap items-center justify-between gap-3 py-3">
+          {visibleFiles.map(file => <li key={file.name} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="min-w-0">
               <p className="text-sm text-neutral-800">{new Date(file.createdAt).toLocaleString("zh-CN")} · {(file.sizeBytes / 1024 / 1024).toFixed(2)} MB</p>
               <p className="mt-1 break-all text-xs text-neutral-600">网站：{file.site || "旧备份（未记录网站）"}</p>
               <p className="mt-1 break-all text-xs text-neutral-500">{file.name}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <a href={`${API}/files/download?name=${encodeURIComponent(file.name)}`} download aria-label={`下载备份 ${file.name}`} className={`inline-flex items-center gap-2 ${buttonClass}`}><Download size={16} />下载备份</a>
               <button type="button" disabled={Boolean(busy) || dirty} onClick={() => void start("prepare", file.name)} className={`inline-flex items-center gap-2 ${buttonClass}`} aria-label={`恢复此备份 ${file.name}`}>
                 <RotateCcw size={16} />恢复此备份
               </button>
@@ -167,7 +200,8 @@ export default function CloudBackupPanel() {
             </div>
           </li>)}
         </ul>
-      </div> : configured && !listing && <p className="mt-3 text-sm text-neutral-500">当前列表没有完整云备份，可先测试连接并创建备份。</p>}
+        {!listing && visibleFiles.length === 0 && <p className="mt-3 text-sm text-neutral-500">{otherSites ? "没有其他网站的备份。" : "暂无本站备份，可创建云备份，或点击“浏览其他备份”查看旧备份和其他网站备份。"}</p>}
+      </div>}
       {ready && <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
         <h3 className="text-sm font-semibold text-neutral-900">恢复预览 · 校验通过</h3>
         <p className="mt-2 break-all text-xs text-neutral-500">{task.name}</p>

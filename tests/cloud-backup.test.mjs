@@ -19,7 +19,7 @@ const { cloudBackupRoot, saveCloudSettings, publicCloudSettings, readCloudSettin
 const { CLOUD_FILE_PATTERN, WebDavClient, normalizeWebDavLocation, parseDavResponses } = await import("../src/lib/webdav.ts");
 const { cloudBackupSiteLabel } = await import("../src/lib/cloud-backup-name.ts");
 const { encryptCloudArchive, decryptCloudArchive, extractAndVerifyCloudArchive } = await import("../src/lib/cloud-backup-archive.ts");
-const { acquireCloudLock, releaseCloudLock, isCloudBusy, deleteCloudBackup, startCloudTask, executeCloudTask, getCloudTask, cloudStage, preparedCloudDownload, writeCloudTask } = await import("../src/lib/cloud-backup.ts");
+const { acquireCloudLock, releaseCloudLock, isCloudBusy, downloadCloudBackup, deleteCloudBackup, startCloudTask, executeCloudTask, getCloudTask, cloudStage, preparedCloudDownload, writeCloudTask } = await import("../src/lib/cloud-backup.ts");
 const { applyCloudRestore, recoverInterruptedCloudRestore } = await import("../src/lib/cloud-backup-restore.ts");
 const { cloudRestoreGuardPath, isCloudRestoreActive } = await import("../src/lib/cloud-restore-guard.ts");
 const { runDbBackup } = await import("../src/lib/backup.ts");
@@ -27,9 +27,13 @@ const remote = new Map();
 let corruptDownloads = false;
 let deleteDenied = false;
 let selectiveRequests = 0;
+let uploadDelayMs = 0;
+let uploadStatus = 201;
+let pauseUpload = null;
 const basic = `Basic ${Buffer.from("test-user:test-password").toString("base64")}`;
 const server = http.createServer(async (request, response) => {
   if (request.headers.authorization !== basic) { response.writeHead(401); response.end(); return; }
+  if (request.method === "PUT" && pauseUpload) await pauseUpload;
   const chunks = []; for await (const chunk of request) chunks.push(chunk);
   const body = Buffer.concat(chunks);
   const url = new URL(request.url, "http://localhost");
@@ -46,7 +50,10 @@ const server = http.createServer(async (request, response) => {
   const name = decodeURIComponent(url.pathname.slice("/dav/backup/".length));
   if (request.method === "PUT") {
     if (remote.has(name) && request.headers["if-none-match"] === "*") { response.writeHead(412); response.end(); return; }
-    remote.set(name, body); response.writeHead(201); response.end(); return;
+    if (uploadStatus !== 201) { response.writeHead(uploadStatus); response.end(); return; }
+    remote.set(name, body);
+    if (uploadDelayMs) await new Promise(resolve => setTimeout(resolve, uploadDelayMs));
+    response.writeHead(201); response.end(); return;
   }
   if (request.method === "GET") {
     if (!remote.has(name)) { response.writeHead(404); response.end(); return; }
@@ -115,6 +122,9 @@ test("cloud backups include WAL data, files and config, are encrypted, and round
   selected = task.name;
   assert.match(selected, /-blog\.yezi\.me-/);
   assert.ok(remote.has(selected));
+  assert.equal(task.transfer.totalBytes, remote.get(selected).length);
+  assert.equal(task.transfer.transferredBytes, task.transfer.totalBytes);
+  assert.ok(task.transfer.bytesPerSecond > 0);
   assert.equal(remote.get(selected).subarray(0, 10).toString(), "YEZICLOUD1");
   assert.equal(remote.get(selected).includes(Buffer.from("backup-env-private")), false);
   assert.equal(fs.existsSync(cloudStage(task.id)), false);
@@ -282,4 +292,50 @@ test("deleting a prepared legacy backup invalidates its local restore preview", 
   assert.equal(remote.has(name), false); assert.equal(fs.existsSync(stage), false);
   assert.equal(getCloudTask(), null);
   assert.throws(() => preparedCloudDownload(id));
+});
+
+
+test("upload progress follows transferred bytes and remains pending until DAV acknowledges", async () => {
+  const file = path.join(root, "upload-progress.bin"); fs.writeFileSync(file, Buffer.alloc(32 * 1024 * 1024, 7));
+  const name = `progress-${crypto.randomUUID()}.bin`;
+  const samples = []; let completed = false;
+  uploadDelayMs = 1250;
+  let resume;
+  pauseUpload = new Promise(resolve => { resume = resolve; });
+  const pending = new WebDavClient(readCloudSettings()).upload(name, file, progress => samples.push({ ...progress, completed }));
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    assert.ok(samples.at(-1).transferredBytes > 0);
+    assert.ok(samples.at(-1).transferredBytes < samples.at(-1).totalBytes, "a stalled receiver must not show the entire file as sent");
+  } finally { pauseUpload = null; resume(); }
+  try { await pending; completed = true; } finally { uploadDelayMs = 0; }
+  assert.equal(samples[0].transferredBytes, 0); assert.equal(samples[0].totalBytes, fs.statSync(file).size);
+  assert.equal(samples[0].remainingSeconds, null);
+  assert.ok(samples.length >= 3, "periodic progress is emitted while waiting for the server");
+  for (let i = 1; i < samples.length; i++) {
+    assert.ok(samples[i].transferredBytes >= samples[i - 1].transferredBytes);
+    assert.ok(samples[i].transferredBytes <= samples[i].totalBytes);
+    assert.equal(samples[i].completed, false);
+  }
+  const last = samples.at(-1);
+  assert.equal(last.transferredBytes, last.totalBytes); assert.ok(last.bytesPerSecond > 0);
+  assert.ok(last.elapsedSeconds >= 1); assert.equal(last.remainingSeconds, 0);
+  assert.deepEqual(remote.get(name), fs.readFileSync(file)); remote.delete(name);
+  uploadStatus = 413;
+  try { await assert.rejects(new WebDavClient(readCloudSettings()).upload(name, file), /413.*大小限制/); }
+  finally { uploadStatus = 201; }
+});
+
+test("cloud backup downloads stream the original encrypted bytes without changing restore status", async () => {
+  const name = `yezi-complete-20261008T000000Z-other.example-${crypto.randomUUID()}.tar.gz.enc`;
+  const encrypted = fs.readFileSync(path.join(root, "remote.enc")); remote.set(name, encrypted);
+  const before = getCloudTask();
+  const download = await downloadCloudBackup(name);
+  assert.equal(download.size, encrypted.length);
+  assert.deepEqual(Buffer.from(await new Response(download.body).arrayBuffer()), encrypted);
+  assert.deepEqual(getCloudTask(), before);
+  await assert.rejects(downloadCloudBackup("../.env.local"), /有效的云备份/);
+  await assert.rejects(downloadCloudBackup(`yezi-complete-20261008T000000Z-missing.example-${crypto.randomUUID()}.tar.gz.enc`), /不存在/);
+  await assert.rejects(new WebDavClient(readCloudSettings()).streamDownload(name, encrypted.length + 1), /大小发生变化/);
+  remote.delete(name);
 });
