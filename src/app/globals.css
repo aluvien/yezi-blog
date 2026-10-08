@@ -4181,6 +4181,8 @@ html[data-layout-theme="classic"] :is(.classic-home-feed, #bits-list) .music-tri
 }
 .global-player-float-cover {
   object-fit: cover;
+  animation: global-player-spin 3.2s linear infinite;
+  animation-play-state: paused;
 }
 .global-player-float-fallback {
   display: grid;
@@ -4193,7 +4195,7 @@ html[data-layout-theme="classic"] :is(.classic-home-feed, #bits-list) .music-tri
   transform: translateY(-2px);
 }
 .global-player-float.is-playing .global-player-float-cover {
-  animation: global-player-spin 3.2s linear infinite;
+  animation-play-state: running;
 }
 @keyframes global-player-spin {
   to {
@@ -9319,12 +9321,13 @@ html[data-layout-theme="classic"] .classic-article-detail .reader-exit {
   right: 0;
   width: 38px;
   height: 38px;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--muted) 65%, var(--faint));
 }
 
 html[data-layout-theme="classic"] .classic-article-detail .reader-exit .icon {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.5;
 }
 
 /* 登录后的前台编辑入口与阅读控制同在标题右侧：编辑按钮向左让出分享、退出
@@ -9349,7 +9352,7 @@ html[data-layout-theme="classic"] .classic-article-detail .classic-share-button 
   border: 0;
   border-radius: 999px;
   padding: 0;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--muted) 65%, var(--faint));
   background: transparent;
   opacity: 0;
   pointer-events: none;
@@ -9357,9 +9360,10 @@ html[data-layout-theme="classic"] .classic-article-detail .classic-share-button 
 }
 
 html[data-layout-theme="classic"] .classic-article-detail .classic-share-button__icon {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  stroke-width: 1.5;
 }
 
 html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:hover,
@@ -9379,8 +9383,42 @@ html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:
 }
 
 @media (max-width: 640px) {
-  html[data-layout-theme="classic"] .classic-article-detail .classic-share-button {
-    right: 44px;
+  /* 标题和阅读操作共用一行布局；标题换行时仍保持居中，避免图标压住文字。 */
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .article-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    column-gap: 2px;
+    align-items: center;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .page-title {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    padding-right: 0;
+    overflow-wrap: anywhere;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail :is(.reader-exit, .classic-share-button) {
+    position: static;
+    grid-row: 1;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .classic-share-button {
+    grid-column: 2;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .reader-exit {
+    grid-column: 3;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .meta-line {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
 
@@ -9459,16 +9497,7 @@ html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose
   background: var(--book-paper);
 }
 
-html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose .blog-music .music-trigger {
-  border-color: var(--book-rule);
-  background: var(--book-paper);
-  color: var(--book-ink);
-}
-
-html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose .blog-music .music-trigger:hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--book-rule));
-  background: color-mix(in srgb, var(--accent) 7%, var(--book-paper));
-}
+/* 音乐卡片沿用与絮语相同的 .music-trigger 背景和交互样式。 */
 
 html[data-layout-theme="classic"] .classic-article-detail .classic-article-prose .blog-music-error {
   background: color-mix(in srgb, var(--book-ink) 5%, var(--book-paper));
