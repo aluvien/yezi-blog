@@ -124,18 +124,13 @@ open-source.`;
 
 /**
  * 前台版式主题：与配色方案分开，避免切换布局时覆盖现有颜色设置。
- * classic 为书香双栏版式，editorial 对应新的编辑感布局。
+ * classic 为书香双栏版式。
  */
 export const LAYOUT_THEMES = [
   {
     id: "classic",
     name: "经典版·书香",
     description: "左侧书写侧栏与右侧长卷阅读，适合安静浏览",
-  },
-  {
-    id: "editorial",
-    name: "编辑版 · 新视觉",
-    description: "紧凑页头、连续标题区与无方框操作图标",
   },
 ] as const;
 

@@ -6,6 +6,14 @@
   --admin-muted:#73746f;
   --accent:#444b41;
   --admin-line:#e7e6e1;
+  --admin-card-bg:#fff;
+  --background:var(--paper);
+  --divider:var(--admin-line);
+  --divider-strong:#c9cbc6;
+  --accent-strong:var(--foreground);
+  --faint:var(--admin-muted);
+  --muted:var(--admin-muted);
+  --link:var(--foreground);
   display:flex;
   height:100dvh;
   overflow:hidden;
@@ -16,13 +24,40 @@
 }
 
 html[data-theme="dark"] .admin-shell.admin-workspace {
-  --paper:#171918;
-  --foreground:#e7e8e3;
-  --soft:#30362f;
-  --admin-muted:#a6aaa2;
-  --accent:#bec9b5;
-  --admin-line:#353a35;
-  --admin-card-bg:#222622;
+  --paper:#181a1b;
+  --foreground:#eceeeb;
+  --soft:#2c2f31;
+  --admin-muted:#abb0ae;
+  --accent:#bbc2bd;
+  --admin-line:#383c3e;
+  --admin-card-bg:#222527;
+  --divider-strong:#53585a;
+}
+
+html[data-theme="dark"] .admin-shell.admin-workspace .admin-settings-subsection {
+  background:var(--soft)!important;
+  border-color:var(--admin-line)!important;
+}
+
+html[data-theme="dark"] .admin-workspace :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]) {
+  background:var(--paper)!important;
+  border-color:var(--admin-line)!important;
+}
+
+html[data-theme="dark"] .admin-workspace .bg-amber-50 {
+  background:color-mix(in srgb, #fbbf24 8%, var(--admin-card-bg))!important;
+}
+
+html[data-theme="dark"] .admin-workspace :is(.text-amber-900, .text-amber-800) {
+  color:#e5c483!important;
+}
+
+html[data-theme="dark"] .admin-workspace .admin-file-delete {
+  color:#f0aaa3;
+}
+
+html[data-theme="dark"] .admin-workspace .admin-nav-count {
+  color:#e5c483;
 }
 
 .admin-workspace * {
@@ -80,21 +115,16 @@ html[data-theme="dark"] .admin-shell.admin-workspace {
   gap:10px;
 }
 
+.admin-workspace .admin-brand:focus-visible {
+  outline:none;
+  text-decoration:underline;
+  text-underline-offset:5px;
+}
+
 .admin-brand>span {
-  font-size:28px;
-  font-weight:700;
-  letter-spacing:-1.5px;
-}
-
-.admin-brand small {
-  font-size:11px;
-  color:var(--admin-muted);
-}
-
-.admin-brand-area p,.admin-drawer-heading p {
-  font-size:12px;
-  color:var(--admin-muted);
-  margin-top:6px;
+  font-size:21px;
+  font-weight:600;
+  line-height:1.4;
   overflow-wrap:anywhere;
 }
 
@@ -210,16 +240,16 @@ html[data-theme="dark"] .admin-shell.admin-workspace {
 .admin-domain-chip {
   display:flex;
   align-items:center;
-  gap:6px;
+  justify-content:center;
+  width:44px;
+  height:44px;
+  flex-shrink:0;
   color:var(--admin-muted);
-  font-size:12px;
-  max-width:230px;
+  transition:color .15s ease;
 }
 
-.admin-domain-chip span {
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
+.admin-domain-chip:hover {
+  color:var(--foreground);
 }
 
 .admin-avatar {
@@ -272,6 +302,10 @@ html[data-theme="dark"] .admin-shell.admin-workspace {
 .admin-mobile-drawer::backdrop {
   background:#151b185c;
   backdrop-filter:blur(2px);
+}
+
+.admin-workspace .admin-mobile-drawer[data-keyboard-navigation="false"] :focus-visible {
+  outline:none;
 }
 
 .admin-mobile-drawer-inner {
@@ -778,10 +812,6 @@ html[data-theme="dark"] .admin-shell.admin-workspace {
   }
   .admin-avatar {
     display:none;
-  }
-  .admin-domain-chip {
-    max-width:110px;
-    font-size:10px;
   }
   .admin-topbar-actions button {
     min-width:44px;

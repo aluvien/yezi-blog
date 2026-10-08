@@ -22,56 +22,30 @@ test.describe.serial("core editorial smoke flows", () => {
     expect(upload.status()).toBe(401);
   });
 
-  test("installed PWA uses the five-item bottom navigation instead of the mobile menu button", async ({ page }) => {
+  test("installed PWA uses the classic layout and its responsive navigation", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.addInitScript(() => {
       Object.defineProperty(window.navigator, "standalone", { configurable: true, value: true });
     });
-    // PWA 底部导航属于现代版式；空库现在按默认经典版渲染，先显式切到编辑版。
     await login(page);
     const themeSwitch = await page.request.patch("/api/admin/v1/settings", { data: { layout_theme: "editorial" } });
     expect(themeSwitch.status()).toBe(200);
+    const settings = await page.request.get("/api/admin/v1/settings");
+    expect((await settings.json()).data.layout_theme).toBe("classic");
     await page.goto("/");
 
     await expect(page.locator("html")).toHaveAttribute("data-display-mode", "standalone");
+    await expect(page.locator("html")).toHaveAttribute("data-layout-theme", "classic");
     await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
-    await expect(page.getByLabel("打开菜单")).toBeHidden();
-    const navigation = page.getByRole("navigation", { name: "PWA 主导航" });
+    await expect(page.getByRole("navigation", { name: "PWA 主导航" })).toHaveCount(0);
+    const navigation = page.locator(".sidebar-public-nav");
     await expect(navigation).toBeVisible();
-    await expect(navigation).toHaveCSS("min-height", "66px");
     await expect(navigation.getByRole("link")).toHaveCount(5);
-    for (const label of ["首页", "文章", "絮语", "作品", "关于"]) {
-      await expect(navigation.getByRole("link", { name: label })).toBeVisible();
+    for (const label of ["随笔", "絮语", "小记", "归档", "关于"]) {
+      await expect(navigation.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
-
-    const musicAlignment = await page.evaluate(() => {
-      const float = document.createElement("button");
-      float.className = "global-player-float";
-      const panel = document.createElement("div");
-      panel.className = "global-player-panel is-open";
-      panel.innerHTML = '<div class="global-player-host">播放器</div>';
-      document.body.append(float, panel);
-      const nav = document.querySelector<HTMLElement>(".site-pwa-bottom-nav")!;
-      const result = {
-        floatGap: Math.round(nav.getBoundingClientRect().top - float.getBoundingClientRect().bottom),
-        panelBottom: Math.round(panel.getBoundingClientRect().bottom),
-        navTop: Math.round(nav.getBoundingClientRect().top),
-        playerSafeArea: getComputedStyle(panel.querySelector<HTMLElement>(".global-player-host")!).paddingBottom,
-      };
-      float.remove();
-      panel.remove();
-      const closedPanel = document.createElement("div");
-      closedPanel.className = "global-player-panel";
-      closedPanel.innerHTML = '<div class="global-player-host" style="height: 120px">播放器</div>';
-      document.body.append(closedPanel);
-      const closedPanelTop = Math.round(closedPanel.getBoundingClientRect().top);
-      closedPanel.remove();
-      return { ...result, closedPanelTop, viewportHeight: window.innerHeight };
-    });
-    expect(musicAlignment.floatGap).toBe(12);
-    expect(musicAlignment.panelBottom).toBe(musicAlignment.navTop);
-    expect(musicAlignment.playerSafeArea).toBe("0px");
-    expect(musicAlignment.closedPanelTop).toBeGreaterThanOrEqual(musicAlignment.viewportHeight);
+    await expect(page.getByRole("button", { name: "夜间模式", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 
   test("admin creates a draft, uploads and inserts an image, publishes, then edits the post", async ({ page }) => {
