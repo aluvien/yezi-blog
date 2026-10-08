@@ -24,17 +24,29 @@ test("mobile admin drawer traps focus, dismisses, and navigates without overflow
   await open.click();
   const drawer = page.getByRole("dialog", { name: "后台菜单" });
   await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "关闭后台菜单" })).toBeFocused();
+  await expect(drawer.getByRole("button", { name: "关闭后台菜单" })).toHaveCSS("outline-style", "none");
+  await expect(drawer.locator(".admin-brand")).not.toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("drawer-mobile.png") });
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(drawer.getByRole("button", { name: "关闭后台菜单" })).toBeFocused();
+  await expect(drawer.getByRole("button", { name: "关闭后台菜单" })).toHaveCSS("outline-style", "solid");
   for (let i = 0; i < 23; i++) {
     await page.keyboard.press("Tab");
     expect(await drawer.evaluate(node => node.contains(document.activeElement))).toBe(true);
   }
-  await drawer.getByRole("link", { name: "Yezi 网站管理" }).focus();
+  await drawer.locator(".admin-brand").focus();
+  await expect(drawer.locator(".admin-brand")).toHaveCSS("outline-style", "none");
   await page.keyboard.press("Shift+Tab");
   await expect(drawer.getByRole("link", { name: "访问网站" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(drawer).not.toBeVisible();
   await expect(open).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(drawer.getByRole("button", { name: "关闭后台菜单" })).toHaveCSS("outline-style", "solid");
+  await page.keyboard.press("Escape");
+  await expect(drawer).not.toBeVisible();
   await open.click();
   await drawer.getByRole("link", { name: "备份恢复", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/settings\/backups$/);
@@ -103,14 +115,58 @@ test("desktop sidebar collapses and settings show unsaved changes", async ({ pag
   await expect(page.getByRole("button", { name: "展开侧栏" })).toBeVisible();
   await page.getByRole("navigation", { name: "后台导航" }).getByRole("link", { name: "站点设置", exact: true }).click();
   await expect(page.getByRole("navigation", { name: "后台导航" }).getByRole("link", { name: "站点设置", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("button", { name: "保存设置", exact: true })).toHaveCount(0);
+  await expect(page.locator(".admin-topbar").getByRole("link", { name: "访问网站", exact: true })).toHaveAttribute("href", "/");
+  const originalAddress = await page.getByLabel("网站地址").inputValue();
+  await page.getByLabel("网站地址").fill("https://temporary.example");
+  await expect(page.getByRole("button", { name: "保存设置", exact: true })).toBeVisible();
+  await page.getByLabel("网站地址").fill(originalAddress);
+  await expect(page.getByRole("button", { name: "保存设置", exact: true })).toHaveCount(0);
   await page.getByLabel("网站地址").fill("https://mobile.example");
   await expect(page.getByText("有未保存的修改", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "设置已保存" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存设置", exact: true })).toHaveCount(0);
   await expect(page.getByText("有未保存的修改", { exact: true })).toHaveCount(0);
   await noOverflow(page);
   // Restore the test server's address for subsequent suites.
   await page.getByLabel("网站地址").fill("http://127.0.0.1:3100");
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "设置已保存" })).toBeVisible();
+});
+
+test("admin dark surfaces stay consistent across public palettes and appearance only offers classic", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await login(page);
+  await page.goto("/admin/settings");
+  await page.getByRole("button", { name: "切换后台明暗主题" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const colors = () => page.evaluate(() => {
+    const background = (selector: string) => getComputedStyle(document.querySelector(selector)!).backgroundColor;
+    return {
+      shell: background(".admin-workspace"),
+      topbar: background(".admin-topbar"),
+      card: background(".admin-card"),
+      field: background('input[type="url"]'),
+      foreground: getComputedStyle(document.querySelector(".admin-workspace")!).color,
+    };
+  });
+  const original = await colors();
+  expect(original.shell).toBe(original.topbar);
+  expect(original.card).not.toBe(original.shell);
+  expect(original.field).toBe(original.shell);
+  for (const palette of ["ocean", "indigo", "forest", "amber", "default"]) {
+    await page.locator("html").evaluate((node, value) => { node.dataset.palette = value; }, palette);
+    expect(await colors()).toEqual(original);
+  }
+  await page.screenshot({ path: testInfo.outputPath("settings-dark-desktop.png") });
+  await page.goto("/admin/settings/appearance");
+  await expect(page.getByText("编辑版 · 新视觉", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("编辑版 · 新视觉设置", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /经典版·书香/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "保存设置", exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("appearance-dark-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath("appearance-dark-mobile.png") });
 });

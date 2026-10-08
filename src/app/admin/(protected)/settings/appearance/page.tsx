@@ -10,7 +10,7 @@ export default function AdminAppearanceSettingsPage() {
       <AdminPageHeader
         eyebrow="APPEARANCE"
         title="外观主题"
-        description="选择前台版式、配色、默认深色模式，以及新视觉的内容与导航显示。"
+        description="设置经典版配色、页面展示与默认深色模式。"
       />
       <SiteSettingsForm initialValues={getSiteSettings()} section="appearance" />
     </div>

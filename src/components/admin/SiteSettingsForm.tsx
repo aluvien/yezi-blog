@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateSiteSettingsAction } from "@/lib/actions/settings";
-import { CLASSIC_THEME_PALETTES, DARK_MODE_OPTIONS, DEFAULT_CLASSIC_SIDEBAR_INTRO, LAYOUT_THEMES, THEME_PALETTES } from "@/lib/theme";
+import { CLASSIC_THEME_PALETTES, DARK_MODE_OPTIONS, DEFAULT_CLASSIC_SIDEBAR_INTRO, LAYOUT_THEMES, normalizeDarkMode, normalizeLayoutTheme, normalizePalette } from "@/lib/theme";
 import ImageUpload from "./ImageUpload";
 import QQMusicPanel from "./QQMusicPanel";
 import TelegramNotifyPanel from "./TelegramNotifyPanel";
@@ -65,9 +65,9 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
     qq_music_health_check_enabled: initialValues.qq_music_health_check_enabled ?? "1",
     qq_music_health_check_interval_hours: initialValues.qq_music_health_check_interval_hours ?? "6",
     telegram_comment_notifications_enabled: initialValues.telegram_comment_notifications_enabled ?? "1",
-    theme: initialValues.theme ?? "default",
-    layout_theme: initialValues.layout_theme ?? "classic",
-    dark_mode: initialValues.dark_mode ?? "auto",
+    theme: normalizePalette(initialValues.theme),
+    layout_theme: normalizeLayoutTheme(initialValues.layout_theme),
+    dark_mode: normalizeDarkMode(initialValues.dark_mode),
   });
   const snapshot = JSON.stringify(SECTION_KEYS[section].map(key => values[key as keyof typeof values]));
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
@@ -75,7 +75,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
-  const paletteOptions = values.layout_theme === "classic" ? CLASSIC_THEME_PALETTES : THEME_PALETTES;
+  const paletteOptions = CLASSIC_THEME_PALETTES;
 
   function update(key: keyof typeof values, value: string) {
     setMessage("");
@@ -84,6 +84,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!dirty || pending) return;
     setMessage("");
     setError("");
     startTransition(async () => {
@@ -296,7 +297,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
                   onClick={() => update("layout_theme", layout.id)}
                   aria-pressed={selected}
                   className={`flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-colors ${
-                    selected ? "border-neutral-900 bg-white ring-2 ring-neutral-900/10" : "border-neutral-200 hover:border-neutral-400"
+                    selected ? "border-accent bg-white ring-2 ring-accent/15" : "border-neutral-200 hover:border-neutral-400"
                   }`}
                 >
                   <span className="text-sm font-medium text-neutral-800">{layout.name}</span>
@@ -308,7 +309,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         </div>
         <div>
           <p className="text-sm text-neutral-600">
-            {values.layout_theme === "classic" ? "经典版配色" : "编辑版配色"}（保存后前台立即生效）
+            经典版配色（保存后前台立即生效）
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {paletteOptions.map((palette) => {
@@ -320,7 +321,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
                   onClick={() => update("theme", palette.id)}
                   aria-pressed={selected}
                   className={`flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-colors ${
-                    selected ? "border-neutral-900 ring-2 ring-neutral-900/10" : "border-neutral-200 hover:border-neutral-400"
+                    selected ? "border-accent ring-2 ring-accent/15" : "border-neutral-200 hover:border-neutral-400"
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
@@ -377,32 +378,6 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
             </fieldset>
           </fieldset>
         )}
-        {values.layout_theme === "editorial" && (
-        <fieldset className="admin-settings-subsection space-y-4 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
-          <legend className="px-1 text-sm font-medium text-neutral-700">编辑版 · 新视觉设置</legend>
-          <p className="text-xs leading-5 text-neutral-500">文章列表、文章页和前台导航的显示选项统一放在这里管理。</p>
-          <fieldset className="space-y-3 rounded-lg border border-neutral-200 bg-white/70 p-3">
-            <legend className="px-1 text-sm font-medium text-neutral-700">文章与列表显示</legend>
-            <div className="grid gap-3 md:grid-cols-3">
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_related_posts !== "0"} onChange={(event) => update("show_related_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章页“继续阅读”</label>
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_more_posts !== "0"} onChange={(event) => update("show_more_posts", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章列表页“查看更多文章”</label>
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_table_of_contents !== "0"} onChange={(event) => update("show_table_of_contents", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示文章右侧目录</label>
-            </div>
-          </fieldset>
-          <fieldset className="space-y-3 rounded-lg border border-neutral-200 bg-white/70 p-3">
-            <legend className="px-1 text-sm font-medium text-neutral-700">页面展示</legend>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_home_page !== "0"} onChange={(event) => update("show_home_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“首页”</label>
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_moments_page !== "0"} onChange={(event) => update("show_moments_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“絮语”</label>
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_posts_page !== "0"} onChange={(event) => update("show_posts_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“文章”</label>
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_references_page !== "0"} onChange={(event) => update("show_references_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“引用”</label>
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_works_page !== "0"} onChange={(event) => update("show_works_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“作品”</label>
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.show_about_page !== "0"} onChange={(event) => update("show_about_page", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示“关于”</label>
-            </div>
-            <p className="text-xs leading-5 text-neutral-500">控制桌面顶部导航和手机菜单中的页面入口；关闭入口不会删除页面，直接访问页面地址仍然有效。</p>
-          </fieldset>
-        </fieldset>
-        )}
         <div>
           <p className="text-sm text-neutral-600">深色模式（访客可在前台页头手动切换）</p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -426,12 +401,12 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
 
       </div>}
 
-      <div className="admin-settings-savebar flex flex-wrap items-center gap-4">
-        <button type="submit" disabled={pending} className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>
-        <span className="text-xs text-neutral-500" aria-live="polite">{dirty ? "有未保存的修改" : "没有未保存的修改"}</span>
+      {(dirty || pending || error || message) && <div className="admin-settings-savebar flex flex-wrap items-center gap-4">
+        {(dirty || pending) && <button type="submit" disabled={pending} className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>}
+        {dirty && <span className="text-xs text-neutral-500" aria-live="polite">有未保存的修改</span>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         {message && <p role="status" className="text-sm text-green-600">{message}</p>}
-      </div>
+      </div>}
     </form>
   );
 }

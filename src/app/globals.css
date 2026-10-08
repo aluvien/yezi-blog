@@ -289,18 +289,15 @@ html[data-theme="dark"] {
   flex: 0 0 34px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--admin-line);
-  border-radius: 9px;
-  background: var(--paper);
+  border: 0;
+  background: transparent;
   color: var(--admin-muted);
   cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+  transition: color 160ms ease;
 }
 
 .admin-theme-toggle:hover {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--admin-line));
-  background: color-mix(in srgb, var(--accent) 6%, var(--paper));
-  color: var(--accent-strong);
+  color: var(--foreground);
 }
 
 .admin-theme-toggle:focus-visible {
@@ -309,8 +306,8 @@ html[data-theme="dark"] {
 }
 
 .admin-theme-icon {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
 }
 
 .admin-theme-icon--sun {
@@ -350,7 +347,7 @@ html[data-theme="dark"] .admin-header-divider {
 
 html[data-theme="dark"] :is(.admin-shell, .admin-login-card) .bg-white,
 html[data-theme="dark"] :is(.admin-shell, .admin-login-card) [class~="bg-white/70"] {
-  background-color: var(--paper) !important;
+  background-color: var(--admin-card-bg, var(--paper)) !important;
 }
 
 html[data-theme="dark"] :is(.admin-shell, .admin-login-card) :is(.bg-neutral-50, .bg-neutral-100) {
