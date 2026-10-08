@@ -69,12 +69,16 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
     layout_theme: initialValues.layout_theme ?? "classic",
     dark_mode: initialValues.dark_mode ?? "auto",
   });
+  const snapshot = JSON.stringify(SECTION_KEYS[section].map(key => values[key as keyof typeof values]));
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
+  const dirty = snapshot !== savedSnapshot;
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const paletteOptions = values.layout_theme === "classic" ? CLASSIC_THEME_PALETTES : THEME_PALETTES;
 
   function update(key: keyof typeof values, value: string) {
+    setMessage("");
     setValues((current) => ({ ...current, [key]: value }));
   }
 
@@ -89,6 +93,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         setError(result.error);
         return;
       }
+      setSavedSnapshot(snapshot);
       setMessage("设置已保存");
       router.refresh();
     });
@@ -107,7 +112,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
           <input type="url" value={values.site_url} onChange={(event) => update("site_url", event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="https://yezi.me" />
           <span className="mt-1 block text-xs font-normal leading-5 text-neutral-500">填写完整网站地址，保存后备份标识、站点链接和 Telegram 通知立即生效，无需重新构建。域名解析与证书需在服务器配置。</span>
         </label>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">站点名称</label>
           <input value={values.site_name} onChange={(event) => update("site_name", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="Yezi's Blog" />
@@ -423,8 +428,9 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
 
       <div className="admin-settings-savebar flex flex-wrap items-center gap-4">
         <button type="submit" disabled={pending} className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {message && <p className="text-sm text-green-600">{message}</p>}
+        <span className="text-xs text-neutral-500" aria-live="polite">{dirty ? "有未保存的修改" : "没有未保存的修改"}</span>
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        {message && <p role="status" className="text-sm text-green-600">{message}</p>}
       </div>
     </form>
   );

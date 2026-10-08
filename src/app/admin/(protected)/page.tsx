@@ -1,19 +1,7 @@
 import Link from "next/link";
-import {
-  countAttachments,
-  countArticleReferences,
-  countGithubRepositories,
-  countLifeEvents,
-  countMoments,
-  countPendingComments,
-  countPosts,
-  countWorks,
-  getOverallMetrics,
-  listCategories,
-  listCommentsForAdmin,
-  listRecentPosts,
-  listRecentTags,
-} from "@/lib/db";
+import { countAttachments, countMoments, countPendingComments, countPosts, getOverallMetrics, listCommentsForAdmin, listRecentPosts } from "@/lib/db";
+import { getSiteUrl } from "@/lib/site-config";
+import { getQQMusicHealthAlertState } from "@/lib/qq-music-health";
 import { formatDateOnly } from "@/lib/format";
 import AdminPageHeader from "@/components/admin/AdminPageHeader";
 
@@ -22,111 +10,40 @@ export const dynamic = "force-dynamic";
 export default function AdminDashboard() {
   const pending = countPendingComments();
   const recentPosts = listRecentPosts(5);
-  const categories = listCategories();
+  const comments = listCommentsForAdmin(5);
   const metrics = getOverallMetrics();
-  const recentComments = listCommentsForAdmin(5);
-  const referenceCount = countArticleReferences();
-
-  const recentCategories = [...categories]
-    .sort((a, b) => b.created_at.localeCompare(a.created_at, "zh-CN"))
-    .slice(0, 5);
-
-  const recentTags = listRecentTags(5);
-
+  const music = getQQMusicHealthAlertState();
+  const labels = { healthy: "上次检测正常", missing_session: "未登录", expired: "登录已失效", unavailable: "服务不可用", unverified: "尚未确认" };
   const stats = [
-    { label: "文章", count: countPosts(), href: "/admin/posts" },
-    { label: "絮语", count: countMoments(), href: "/admin/moments" },
-    { label: "生活节点", count: countLifeEvents(), href: "/admin/life/milestones" },
-    { label: "作品", count: countWorks(), href: "/admin/works" },
-    { label: "GitHub", count: countGithubRepositories(), href: "/admin/life/github" },
-    { label: "收藏引用", count: referenceCount, href: "/admin/references" },
-    { label: pending > 0 ? `评论 · 待审 ${pending}` : "评论", count: pending, href: "/admin/comments" },
-    { label: "附件", count: countAttachments(), href: "/admin/attachments" },
-    { label: "阅读", count: metrics.views, href: "/admin" },
-    { label: "点赞", count: metrics.likes, href: "/admin" },
+    { label: "文章", count: countPosts(), href: "/admin/posts", hint: "管理文章与草稿" },
+    { label: "絮语", count: countMoments(), href: "/admin/moments", hint: "记录日常的点滴" },
+    { label: "待审评论", count: pending, href: "/admin/comments", hint: pending ? "有新的互动待处理" : "暂无待处理评论" },
+    { label: "附件", count: countAttachments(), href: "/admin/attachments", hint: "管理图片与文件" },
   ];
-
-  return (
-    <div className="flex flex-col gap-5">
-      <AdminPageHeader eyebrow="DASHBOARD" title="仪表盘" description="查看内容规模、互动数据和最近更新。" />
-
-      {/* 统计：内容规模 + 互动数据，小记相关分项各自可见。 */}
-      <div className="grid grid-cols-4 gap-2 sm:gap-3">
-        {stats.map((s) => (
-          <Link
-            key={s.label}
-            href={s.href}
-            className="admin-card admin-dashboard-stat min-w-0 rounded-2xl bg-white p-3 text-center shadow-sm sm:p-4"
-          >
-            <div className="text-xl font-bold sm:text-2xl">{s.count}</div>
-            <div className="mt-1 truncate whitespace-nowrap text-[11px] text-neutral-500 sm:text-sm">
-              {s.label}
-            </div>
-          </Link>
-        ))}
+  return <div className="flex flex-col gap-5">
+    <AdminPageHeader eyebrow="OVERVIEW" title="后台概览" description="管理内容、关注互动，查看网站的最新情况。" actions={<><Link href="/admin/moments/new" className="admin-button px-4">写絮语</Link><Link href="/admin/posts/new" className="admin-button admin-button-primary px-4">写文章</Link></>} />
+    {pending > 0 && <div className="admin-pending-banner"><span>有 <strong>{pending}</strong> 条新评论等待审核</span><Link href="/admin/comments">去处理 →</Link></div>}
+    <div className="admin-dashboard-stats">{stats.map(stat => <Link href={stat.href} className="admin-card" key={stat.label}><span>{stat.label}</span><strong>{stat.count}</strong><span>{stat.hint}</span></Link>)}</div>
+    <div className="admin-dashboard-grid">
+      <div className="admin-dashboard-column">
+        <section className="admin-card admin-dashboard-section">
+          <div className="admin-section-heading"><h2>最新文章</h2><Link href="/admin/posts">全部文章 →</Link></div>
+          {recentPosts.length ? <ul className="admin-recent-list">{recentPosts.map(post => <li key={post.id}><Link href={`/admin/posts/${post.id}/edit`}><div className="admin-recent-title"><span>{post.title}</span><span className={`admin-status-tag ${post.status === "published" ? "is-good" : ""}`}>{post.status === "published" ? "已发布" : "草稿"}</span></div><small>{formatDateOnly(post.created_at)}</small></Link></li>)}</ul> : <p className="py-8 text-sm text-neutral-500">还没有文章，从写下第一篇开始。</p>}
+        </section>
+        <section className="admin-card admin-dashboard-section">
+          <div className="admin-section-heading"><h2>最新评论</h2><Link href="/admin/comments">管理评论 →</Link></div>
+          {comments.length ? <ul className="admin-recent-list">{comments.map(comment => <li key={comment.id}><Link href="/admin/comments"><div className="admin-recent-title"><span>{comment.nickname}</span>{comment.status === "pending" && <span className="admin-status-tag">待审核</span>}</div><p className="mt-2 line-clamp-2 text-sm text-neutral-600">{comment.content}</p><small>{formatDateOnly(comment.created_at)}</small></Link></li>)}</ul> : <p className="py-8 text-sm text-neutral-500">暂无评论，新的互动会显示在这里。</p>}
+        </section>
       </div>
-
-      {/* 第三排:标签+分类(上下堆叠) / 最新文章 / 最新评论 */}
-      <div className="grid gap-3 md:grid-cols-3">
-        <section className="admin-card admin-dashboard-panel flex flex-col rounded-2xl bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-neutral-800">最新分类</h2>
-          {recentCategories.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {recentCategories.map((c) => (
-                <Link key={c.id} href="/admin/categories" className="rounded-full bg-neutral-100 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-200">{c.name}</Link>
-              ))}
-            </div>
-          ) : <p className="mt-3 text-sm text-neutral-400">还没有分类</p>}
-
-          <h2 className="mt-5 border-t border-neutral-100 pt-4 text-sm font-semibold text-neutral-800">最新标签</h2>
-          {recentTags.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {recentTags.map((tag) => (
-                <Link key={tag} href="/admin/categories" className="rounded-full bg-neutral-100 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-200">#{tag}</Link>
-              ))}
-            </div>
-          ) : <p className="mt-3 text-sm text-neutral-400">还没有标签</p>}
+      <div className="admin-dashboard-column">
+        <section className="admin-card admin-dashboard-section"><div className="admin-section-heading"><h2>网站状态</h2><Link href="/admin/settings">设置 →</Link></div>
+          <div className="admin-site-fact"><span>当前网站</span><strong>{new URL(getSiteUrl()).host}</strong></div>
+          <Link className="admin-site-fact" href="/admin/settings/music"><span>QQ 音乐</span><strong>{music.lastStatus ? labels[music.lastStatus] : "暂无检测记录"}</strong>{music.lastCheckedAt && <span>上次检测：{formatDateOnly(music.lastCheckedAt)}</span>}</Link>
+          <div className="admin-site-fact"><span>累计互动</span><strong>{metrics.views} 次阅读 · {metrics.likes} 次点赞</strong></div>
+          <Link className="admin-site-fact" href="/admin/settings/backups"><span>数据保护</span><strong>查看备份与恢复 →</strong></Link>
         </section>
-
-        <section className="admin-card admin-dashboard-panel rounded-2xl bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-neutral-800">最新文章</h2>
-          {recentPosts.length > 0 ? (
-            <ul className="mt-3 flex flex-col gap-3 text-sm">
-              {recentPosts.map((post) => (
-                <li key={post.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
-                  <Link href={`/admin/posts/${post.id}/edit`} className="block">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-neutral-700">{post.title}</span>
-                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] ${post.status === "published" ? "bg-green-100 text-green-700" : "bg-neutral-100 text-neutral-500"}`}>
-                        {post.status === "published" ? "已发布" : "草稿"}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 text-xs text-neutral-400">{formatDateOnly(post.created_at)}</div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="mt-3 text-sm text-neutral-400">还没有文章</p>}
-        </section>
-
-        <section className="admin-card admin-dashboard-panel rounded-2xl bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-neutral-800">最新评论</h2>
-          {recentComments.length > 0 ? (
-            <ul className="mt-3 flex flex-col gap-3 text-sm">
-              {recentComments.map((c) => {
-                return (
-                  <li key={c.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
-                    <Link href="/admin/comments" className="block">
-                      <div className="text-xs text-neutral-400">{c.nickname} · {formatDateOnly(c.created_at)}{c.status === "pending" ? " · 待审" : ""}</div>
-                      <p className="mt-0.5 line-clamp-2 text-neutral-700">{c.content}</p>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : <p className="mt-3 text-sm text-neutral-400">还没有评论</p>}
-        </section>
+        <section className="admin-card admin-dashboard-section"><div className="admin-section-heading"><h2>快捷入口</h2></div><div className="admin-quick-links"><Link href="/admin/attachments">附件管理</Link><Link href="/admin/settings/backups">备份恢复</Link><Link href="/admin/settings/music">音乐设置</Link><Link href="/admin/settings/appearance">外观主题</Link><Link href="/admin/categories">分类与标签</Link><Link href="/admin/settings">站点设置</Link></div></section>
       </div>
     </div>
-  );
+  </div>;
 }

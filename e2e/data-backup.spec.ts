@@ -126,6 +126,7 @@ test("local backup manager counts files, downloads history and confirms deletion
   const history = await downloading;
   expect(history.suggestedFilename()).toBe(names[0]);
   expect(await history.failure()).toBeNull();
+  await panel.getByLabel(`更多操作 ${names[1]}`, { exact: true }).click();
   const remove = panel.getByRole("button", { name: `删除本地备份 ${names[1]}`, exact: true });
   page.once("dialog", dialog => dialog.dismiss());
   await remove.click();
@@ -145,6 +146,7 @@ test("local backup manager counts files, downloads history and confirms deletion
   expect((await (await page.request.get("/api/admin/v1/backups")).json()).data).toBeNull();
   await page.route("**/api/admin/v1/backups/files", route => route.fulfill({ json: { data: { ...after, busy: true } } }));
   await panel.getByRole("button", { name: "刷新本地备份" }).click();
+  await panel.getByLabel(`更多操作 ${names[0]}`, { exact: true }).click();
   await expect(panel.getByRole("button", { name: `删除本地备份 ${names[0]}`, exact: true })).toBeDisabled();
   await expect(panel.getByText(/暂时不能删除本地备份/)).toBeVisible();
 });
@@ -195,6 +197,7 @@ test("local backup categories paginate five files and adjust pages after deletio
   await pager.getByRole("button", { name: "下一页" }).click();
   await expect(list.getByRole("listitem")).toHaveCount(1);
   await expect(list.getByRole("link", { name: `下载本地备份 ${sixth}`, exact: true })).toHaveAttribute("href", `/api/admin/v1/backups/files/download?kind=database&name=${sixth}`);
+  await list.getByLabel(`更多操作 ${sixth}`, { exact: true }).click();
   page.once("dialog", dialog => dialog.accept());
   await list.getByRole("button", { name: `删除本地备份 ${sixth}`, exact: true }).click();
   await expect.poll(() => deleted).toBe(sixth);

@@ -49,10 +49,10 @@ test("cloud settings and recovery keys require admin authentication and same-ori
 test("custom WebDAV settings, connection test, encrypted backup and verified one-click recovery work together", async ({ page }) => {
   test.setTimeout(90_000);
   await login(page); await stubDeploy(page);
-  await page.getByRole("button", { name: "设置", exact: true }).click();
-  await page.getByRole("menuitem", { name: "备份恢复", exact: true }).click();
+  await page.getByRole("navigation", { name: "后台导航" }).getByRole("link", { name: "备份恢复", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/settings\/backups$/);
   await expect(page.getByRole("heading", { name: "备份恢复", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "云端备份" }).click();
   const panel = page.getByRole("region", { name: "云备份与恢复" });
   await panel.getByLabel("WebDAV 地址").fill(endpoint);
   await panel.getByLabel("备份目录", { exact: true }).fill("backup");
@@ -71,7 +71,7 @@ test("custom WebDAV settings, connection test, encrypted backup and verified one
   await page.waitForTimeout(3000);
   await panel.getByLabel("WebDAV 账号").fill("unsaved-edit");
   await page.waitForTimeout(3000); await expect(panel.getByLabel("WebDAV 账号")).toHaveValue("unsaved-edit");
-  await page.reload(); await expect(panel.getByLabel("WebDAV 账号")).toHaveValue("e2e-user");
+  await page.reload(); await panel.getByRole("button", { name: "云端设置", exact: true }).click(); await expect(panel.getByLabel("WebDAV 账号")).toHaveValue("e2e-user");
   uploadDelayMs = 4500;
   await panel.getByRole("button", { name: "备份到云端", exact: true }).click();
   await expect(panel.getByRole("progressbar", { name: "云备份上传进度" })).toBeVisible({ timeout: 20_000 });
@@ -120,10 +120,11 @@ test("custom WebDAV settings, connection test, encrypted backup and verified one
   expect((await page.request.get("/api/admin/v1/backups/cloud")).status()).toBe(401);
   await login(page);
   expect((await page.request.get(`/api/admin/v1/posts/${id}`)).status()).toBe(404);
-  await page.goto("/admin/settings/backups");
+  await page.goto("/admin/settings/backups?tab=cloud");
   await expect(panel.getByText("网站：127.0.0.1-3100", { exact: true })).toBeVisible();
   await panel.getByRole("button", { name: `恢复此备份 ${filename}` }).click();
   await expect(panel.getByText("恢复预览 · 校验通过")).toBeVisible({ timeout: 25_000 });
+  await panel.getByLabel(`更多操作 ${filename}`, { exact: true }).click();
   page.once("dialog", dialog => dialog.dismiss());
   await panel.getByRole("button", { name: `删除备份 ${filename}` }).click();
   expect(remote.has(filename)).toBe(true);
@@ -152,7 +153,8 @@ test("backup list separates root and subdomains even when they share a website I
   ].map(file => ({ ...file, createdAt: "2026-10-08T00:00:00Z", sizeBytes: 1024 }));
   await page.route("**/api/admin/v1/backups/cloud", route => route.fulfill({ json: { data: { settings: backupSettings, task: null } } }));
   await page.route("**/api/admin/v1/backups/cloud/files", route => route.fulfill({ json: { data: files } }));
-  await page.goto("/admin/settings/backups");
+  await page.goto("/admin/settings/backups?tab=cloud");
+  await page.getByRole("tab", { name: "云端备份" }).click();
   const panel = page.getByRole("region", { name: "云备份与恢复" });
   for (const name of ["current-root.enc", "current-legacy-root.enc"]) await expect(panel.getByRole("link", { name: `下载备份 ${name}`, exact: true })).toBeVisible();
   for (const name of ["historical-blog.enc", "legacy-blog.enc", "foreign-root.enc"]) await expect(panel.getByRole("link", { name: `下载备份 ${name}`, exact: true })).toHaveCount(0);
