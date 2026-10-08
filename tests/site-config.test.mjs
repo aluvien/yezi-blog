@@ -55,10 +55,18 @@ test("saving a website URL applies immediately, rejects partial invalid writes a
   const after = getBackupSiteIdentity();
   assert.equal(after.siteId, before.siteId);
   assert.deepEqual(after.siteLabels, ["old.example", "yezi.me"]);
-  assert.equal(isCurrentSiteBackup({ site: "old.example" }, after), true);
-  assert.equal(isCurrentSiteBackup({ site: "old.example", siteId: before.siteId }, after), true);
+  assert.equal(isCurrentSiteBackup({ site: "old.example" }, after), false);
+  assert.equal(isCurrentSiteBackup({ site: "old.example", siteId: before.siteId }, after), false);
   assert.equal(isCurrentSiteBackup({ site: "yezi.me", siteId: crypto.randomUUID() }, after), false);
   assert.equal(isCurrentSiteBackup({ site: "foreign.example" }, after), false);
+  assert.equal(isCurrentSiteBackup({ site: "yezi.me" }, after), true);
+  assert.equal(isCurrentSiteBackup({ site: "yezi.me", siteId: before.siteId }, after), true);
+  for (const subdomain of ["blog.yezi.me", "www.yezi.me", "api.blog.yezi.me"]) {
+    assert.equal(isCurrentSiteBackup({ site: subdomain }, { ...after, siteLabels: [...after.siteLabels, subdomain] }), false);
+    assert.equal(isCurrentSiteBackup({ site: subdomain, siteId: before.siteId }, after), false);
+    assert.equal(isCurrentSiteBackup({ site: "yezi.me" }, { ...after, siteLabel: subdomain }), false);
+  }
+  assert.equal(isCurrentSiteBackup({ site: "127.0.0.1-3030" }, { ...after, siteLabel: "127.0.0.1-3100" }), false);
   assert.equal(isCurrentSiteBackup({}, after), false);
   assert.ok(sitemap().every(entry => entry.url.startsWith("https://yezi.me")));
   assert.equal(robots().sitemap, "https://yezi.me/sitemap.xml");
