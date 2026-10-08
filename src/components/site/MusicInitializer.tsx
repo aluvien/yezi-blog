@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { compactMusicCoverUrl, fetchMusicMetadata, fetchMusicTracks, parseMusicSpec, type MusicSpec, type MusicTrack } from "@/lib/music";
 import {
   getGlobalPlaybackState,
-  isGlobalPlaybackActiveForCard,
   requestGlobalPlay,
   setGlobalStateListener,
 } from "@/lib/player-store";
@@ -23,6 +22,7 @@ type CardSwipeGesture = {
   offset: number;
   direction: CardSwipeDirection | null;
   targetIndex: number | null;
+  playingTrack: MusicTrack | null;
 };
 
 /** 依据全局播放状态刷新单张卡片：命中即显示"正在播放"（等化器动效），否则回到静态三角。 */
@@ -31,8 +31,7 @@ function syncCardState(
   state: ReturnType<typeof getGlobalPlaybackState>,
   matchesCurrentTrack: boolean,
 ) {
-  const id = card.dataset.cardId;
-  const isPlaying = isGlobalPlaybackActiveForCard(state, id, matchesCurrentTrack);
+  const isPlaying = state.playing && matchesCurrentTrack;
   card.classList.toggle("is-playing", isPlaying);
   const playEl = card.querySelector<HTMLElement>(".music-trigger-play");
   if (!playEl) return;
@@ -75,12 +74,15 @@ export function MusicInitializer() {
       swipeFrame: number | null;
       suppressClick: boolean;
       playAfterResolve: boolean;
+      previewing: boolean;
+      settling: boolean;
       spec: MusicSpec;
       metadataPromise: Promise<MusicTrack[]> | null;
       resolvePromise: Promise<MusicTrack[]> | null;
     };
     const cardMusicState = new WeakMap<HTMLElement, CardMusicState>();
     const cardSwipeCleanups = new Map<HTMLElement, () => void>();
+    const initializedContainers = new Set<HTMLElement>();
 
     function trackKey(track: MusicTrack): string {
       return track.key?.trim() || track.url.trim() || `${track.name}\u0000${track.artist}`;
@@ -210,16 +212,9 @@ export function MusicInitializer() {
       const lyricEl = card.querySelector<HTMLElement>('[data-track-slot="current"] .music-trigger-lyric');
       const data = cardMusicState.get(card);
       if (!lyricEl || !data) return;
-      const isCurrentCard = Boolean(card.dataset.cardId) && state.cardId === card.dataset.cardId;
-      const matchesCurrentTrack = data.tracks.some((item) => trackMatchesState(item, state));
-      // `cardId` only identifies which card owns the play/pause animation.
-      // A song selected from the expanded global list can have no card owner
-      // (for example, a default playlist item), but the inline card should
-      // still show lyrics whenever its track key matches the current song.
-      const isPlaying = state.playing && (isCurrentCard || matchesCurrentTrack);
-      const track = matchesCurrentTrack
-        ? data.tracks.find((item) => trackMatchesState(item, state))
-        : data.tracks[data.activeIndex] ?? data.tracks[0];
+      // 歌单归属不代表当前展示的歌正在播放；预览另一首时不能显示旧歌的歌词。
+      const track = data.tracks[data.activeIndex] ?? data.tracks[0];
+      const isPlaying = state.playing && Boolean(track && trackMatchesState(track, state));
       card.classList.toggle("has-lyric", isPlaying && Boolean(track));
       if (!isPlaying || !track) {
         setLyricText(lyricEl, "", false);
@@ -245,6 +240,16 @@ export function MusicInitializer() {
     function syncCardTitle(card: HTMLElement, state: ReturnType<typeof getGlobalPlaybackState>): boolean {
       const data = cardMusicState.get(card);
       if (!data || data.tracks.length === 0) return false;
+      const selectedTrack = data.tracks[data.activeIndex];
+      const selectedIsPlaying = state.playing && Boolean(selectedTrack && trackMatchesState(selectedTrack, state));
+      if (data.gesture || data.settling) return selectedIsPlaying;
+      if (data.previewing) {
+        if (!selectedIsPlaying) {
+          renderCardTrack(card, data, data.activeIndex);
+          return false;
+        }
+        data.previewing = false;
+      }
       const currentIndex = state.playing
         ? data.tracks.findIndex((item) => trackMatchesState(item, state))
         : -1;
@@ -267,7 +272,6 @@ export function MusicInitializer() {
       card.classList.toggle("is-resolving", hasDisplaySnapshot);
       card.setAttribute("aria-busy", "true");
       card.setAttribute("aria-label", "正在加载音乐");
-      const selectedKey = data.tracks[data.activeIndex] ? trackKey(data.tracks[data.activeIndex]) : "";
       const slowTimer = window.setTimeout(() => {
         // 不把快照替换成错误文字：请求较慢时仍保留用户已经看到的歌名、歌手和封面。
         if (data.resolvePromise) {
@@ -286,6 +290,8 @@ export function MusicInitializer() {
               cover: data.spec.cover || tracks[0].cover,
             };
           }
+          // 请求期间仍允许浏览歌单，以请求完成时的选择为准。
+          const selectedKey = data.tracks[data.activeIndex] ? trackKey(data.tracks[data.activeIndex]) : "";
           data.tracks = tracks;
           const selectedIndex = selectedKey ? tracks.findIndex((track) => trackKey(track) === selectedKey) : -1;
           data.activeIndex = selectedIndex >= 0 ? selectedIndex : Math.min(data.activeIndex, tracks.length - 1);
@@ -376,6 +382,10 @@ export function MusicInitializer() {
         return;
       }
 
+      data.previewing = true;
+      data.settling = true;
+      data.playAfterResolve = false;
+
       renderTrackSlide(elements.preview, targetTrack);
       setSlideTransition(elements, true);
       elements.current.style.transform = direction === "next" ? "translate3d(-100%, 0, 0)" : "translate3d(100%, 0, 0)";
@@ -387,6 +397,7 @@ export function MusicInitializer() {
         elements.current.removeEventListener("transitionend", onExit);
         setSlideTransition(elements, false);
         data.activeIndex = targetIndex;
+        data.settling = false;
 
         // 目标预览已经完整停在中间，直接交换 current/preview 身份。
         // 不再把目标内容重新写进旧卡片并做第二次回场，避免图片和文字闪烁。
@@ -403,7 +414,21 @@ export function MusicInitializer() {
 
         const nextTrack = renderCardTrack(card, data, targetIndex);
         if (!nextTrack) return;
-        requestGlobalPlay({ tracks: data.tracks, cardId: card.dataset.cardId, trackKey: trackKey(nextTrack) });
+        syncCard(card, getGlobalPlaybackState());
+        // 未播放/暂停时只选歌；当前卡片正在播放时才切换播放，并先解析有效音源。
+        const playingTrack = gesture.playingTrack;
+        const canContinuePlaying = () => {
+          const state = getGlobalPlaybackState();
+          return card.isConnected && Boolean(playingTrack && state.playing && trackMatchesState(playingTrack, state))
+            && trackKey(data.tracks[data.activeIndex]) === trackKey(nextTrack);
+        };
+        if (canContinuePlaying()) {
+          void resolveTracks(card, data).then(tracks => {
+            if (!canContinuePlaying()) return;
+            const resolvedTrack = tracks.find(track => trackKey(track) === trackKey(nextTrack));
+            if (resolvedTrack?.url) requestGlobalPlay({ tracks, cardId: card.dataset.cardId, trackKey: trackKey(resolvedTrack) });
+          }).catch(() => undefined);
+        }
         window.setTimeout(() => {
           data.suppressClick = false;
         }, 320);
@@ -456,7 +481,9 @@ export function MusicInitializer() {
       };
 
       const onPointerDown = (event: PointerEvent): void => {
-        if (data.gesture || event.button !== 0) return;
+        if (data.gesture || data.settling || event.button !== 0) return;
+        const state = getGlobalPlaybackState();
+        const selectedTrack = data.tracks[data.activeIndex];
         data.gesture = {
           pointerId: event.pointerId,
           startX: event.clientX,
@@ -467,6 +494,7 @@ export function MusicInitializer() {
           offset: 0,
           direction: null,
           targetIndex: null,
+          playingTrack: state.playing && selectedTrack && trackMatchesState(selectedTrack, state) ? selectedTrack : null,
         };
       };
 
@@ -569,6 +597,7 @@ export function MusicInitializer() {
         return;
       }
       el.dataset.init = "1";
+      initializedContainers.add(el);
       const spec = {
         ...parsedSpec,
         title: el.dataset.musicName?.trim() || "",
@@ -632,7 +661,7 @@ export function MusicInitializer() {
         tracks = [{ name: spec.title, artist: spec.artist || "", cover: spec.cover || "", url: "", lrc: "", key: `qqvip:${spec.id}` }];
       }
 
-      const data: CardMusicState = { tracks, lyrics: new Map(), loading: new Set(), activeIndex: 0, gesture: null, swipeFrame: null, suppressClick: false, playAfterResolve: false, spec, metadataPromise: null, resolvePromise: null };
+      const data: CardMusicState = { tracks, lyrics: new Map(), loading: new Set(), activeIndex: 0, gesture: null, swipeFrame: null, suppressClick: false, playAfterResolve: false, previewing: false, settling: false, spec, metadataPromise: null, resolvePromise: null };
       if (!el.isConnected) return;
       cardMusicState.set(card, data);
       if (tracks.length > 0) {
@@ -751,6 +780,9 @@ export function MusicInitializer() {
       if (stateSyncFrame !== null) cancelAnimationFrame(stateSyncFrame);
       cardSwipeCleanups.forEach((cleanup) => cleanup());
       cardSwipeCleanups.clear();
+      // 开发模式会重新运行 effect，保留 init 标记会留下没有事件监听的卡片。
+      initializedContainers.forEach(container => { delete container.dataset.init; });
+      initializedContainers.clear();
     };
   }, []);
 
