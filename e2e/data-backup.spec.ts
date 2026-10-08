@@ -148,3 +148,66 @@ test("local backup manager counts files, downloads history and confirms deletion
   await expect(panel.getByRole("button", { name: `删除本地备份 ${names[0]}`, exact: true })).toBeDisabled();
   await expect(panel.getByText(/暂时不能删除本地备份/)).toBeVisible();
 });
+
+
+test("local backup categories paginate five files and adjust pages after deletion or refresh", async ({ page }) => {
+  await login(page);
+  await stubDeploy(page);
+  type File = { kind: string; name: string; sizeBytes: number; createdAt: string; encrypted: boolean };
+  let files: File[] = [
+    ...Array.from({ length: 6 }, (_, index) => ({ kind: "database", name: `blog-20261008010203${String(index).padStart(3, "0")}-a1234567.db`, sizeBytes: 1024, createdAt: "2026-10-08T01:02:03.000Z", encrypted: false })),
+    ...Array.from({ length: 2 }, (_, index) => ({ kind: "admin", name: `00000000-0000-4000-8000-00000000000${index}.tar.gz`, sizeBytes: 2048, createdAt: "2026-10-08T01:02:03.000Z", encrypted: false })),
+    { kind: "restore", name: "rollback-00000000-0000-4000-8000-000000000000.tar.gz", sizeBytes: 3072, createdAt: "2026-10-08T01:02:03.000Z", encrypted: false },
+  ];
+  const sixth = files[5].name;
+  let deleted = "";
+  await page.route("**/api/admin/v1/backups/files", async route => {
+    if (route.request().method() === "DELETE") {
+      const body = route.request().postDataJSON();
+      expect(body.confirmation).toBe("删除备份");
+      deleted = body.name;
+      files = files.filter(file => file.kind !== body.kind || file.name !== body.name);
+    }
+    await route.fulfill({ json: { data: { files, count: files.length, totalBytes: files.reduce((sum, file) => sum + file.sizeBytes, 0), busy: false } } });
+  });
+  await page.goto("/admin/settings/backups");
+  const panel = page.getByRole("region", { name: "数据备份" });
+  const categories = panel.getByRole("group", { name: "本地备份分类" });
+  const list = panel.getByRole("list", { name: "本地备份列表" });
+  const pager = panel.getByRole("navigation", { name: "本地备份分页" });
+  await expect(list.getByRole("listitem")).toHaveCount(5);
+  await expect(categories.getByRole("button", { name: "全部9", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(pager.getByRole("button", { name: "上一页" })).toBeDisabled();
+  await pager.getByRole("button", { name: "下一页" }).click();
+  await expect(list.getByRole("listitem")).toHaveCount(4);
+  await expect(pager.getByText(/第 2 \/ 2 页/)).toBeVisible();
+  await expect(pager.getByRole("button", { name: "下一页" })).toBeDisabled();
+  await categories.getByRole("button", { name: "手动完整备份2", exact: true }).click();
+  await expect(list.getByRole("listitem")).toHaveCount(2);
+  await expect(panel.getByText("手动完整备份 · 2 份 · 占用 4.00 KB", { exact: true })).toBeVisible();
+  await expect(pager).toHaveCount(0);
+  await categories.getByRole("button", { name: "自动加密数据备份0", exact: true }).click();
+  await expect(list).toHaveCount(0);
+  await expect(panel.getByText("暂无自动加密数据备份。", { exact: true })).toBeVisible();
+  await categories.getByRole("button", { name: "数据库快照6", exact: true }).click();
+  await expect(list.getByRole("listitem")).toHaveCount(5);
+  await expect(pager.getByText(/第 1 \/ 2 页/)).toBeVisible();
+  await pager.getByRole("button", { name: "下一页" }).click();
+  await expect(list.getByRole("listitem")).toHaveCount(1);
+  await expect(list.getByRole("link", { name: `下载本地备份 ${sixth}`, exact: true })).toHaveAttribute("href", `/api/admin/v1/backups/files/download?kind=database&name=${sixth}`);
+  page.once("dialog", dialog => dialog.accept());
+  await list.getByRole("button", { name: `删除本地备份 ${sixth}`, exact: true }).click();
+  await expect.poll(() => deleted).toBe(sixth);
+  await expect(list.getByRole("listitem")).toHaveCount(5);
+  await expect(categories.getByRole("button", { name: "数据库快照5", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(panel.getByText("数据库快照 · 5 份 · 占用 5.00 KB", { exact: true })).toBeVisible();
+  await expect(pager).toHaveCount(0);
+  await categories.getByRole("button", { name: "全部8", exact: true }).click();
+  await pager.getByRole("button", { name: "下一页" }).click();
+  await expect(list.getByRole("listitem")).toHaveCount(3);
+  files = files.slice(0, 2);
+  await panel.getByRole("button", { name: "刷新本地备份" }).click();
+  await expect(list.getByRole("listitem")).toHaveCount(2);
+  await expect(pager).toHaveCount(0);
+  await expect(panel.getByText("共 2 份 · 占用 2.00 KB", { exact: true })).toBeVisible();
+});

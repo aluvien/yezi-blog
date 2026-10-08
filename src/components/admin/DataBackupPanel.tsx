@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Archive, Download, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
 import type { AdminBackupPhase, AdminBackupStatus, LocalBackupFile, LocalBackupKind, LocalBackupList } from "@/lib/admin-backup-types";
 
@@ -19,6 +19,15 @@ function downloadUrl(id: string): string {
 const KIND_LABELS: Record<LocalBackupKind, string> = {
   admin: "手动完整备份", database: "数据库快照", data: "自动加密数据备份", restore: "恢复前安全备份",
 };
+type BackupFilter = LocalBackupKind | "all";
+const BACKUP_FILTERS: Array<{ kind: BackupFilter; label: string }> = [
+  { kind: "all", label: "全部" },
+  ...(["admin", "database", "data", "restore"] as const).map(kind => ({ kind, label: KIND_LABELS[kind] })),
+];
+const LOCAL_PAGE_SIZE = 5;
+function filterFiles(files: LocalBackupFile[], filter: BackupFilter): LocalBackupFile[] {
+  return filter === "all" ? files : files.filter(file => file.kind === filter);
+}
 function localDownloadUrl(file: LocalBackupFile): string {
   return `/api/admin/v1/backups/files/download?${new URLSearchParams({ kind: file.kind, name: file.name })}`;
 }
@@ -35,6 +44,14 @@ export default function DataBackupPanel() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const [local, setLocal] = useState<LocalBackupList | null>(null);
+  const [view, setView] = useState<{ filter: BackupFilter; page: number }>({ filter: "all", page: 1 });
+  const applyLocalList = useCallback((list: LocalBackupList) => {
+    setLocal(list);
+    setView(previous => {
+      const lastPage = Math.max(1, Math.ceil(filterFiles(list.files, previous.filter).length / LOCAL_PAGE_SIZE));
+      return previous.page > lastPage ? { ...previous, page: lastPage } : previous;
+    });
+  }, []);
   const [listError, setListError] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [refreshing, setRefreshing] = useState(true);
@@ -63,7 +80,7 @@ export default function DataBackupPanel() {
         const filesBody = await filesResponse.json();
         if (!filesResponse.ok) throw new Error(filesBody.error?.message || "读取本地备份列表失败");
         if (disposed) return;
-        setLocal(filesBody.data);
+        applyLocalList(filesBody.data);
         setListError("");
         if (filesBody.data?.busy) nextDelay = 1500;
       } catch (cause) {
@@ -80,7 +97,7 @@ export default function DataBackupPanel() {
     };
     void read();
     return () => { disposed = true; controller.abort(); clearTimeout(timer); };
-  }, [monitoring, refresh]);
+  }, [monitoring, refresh, applyLocalList]);
 
   useEffect(() => {
     if (status?.status === "completed" && autoDownload.current === status.id) {
@@ -119,7 +136,7 @@ export default function DataBackupPanel() {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message || "删除本地备份失败");
-      setLocal(body.data);
+      applyLocalList(body.data);
       if (file.kind === "admin" && file.name === `${status?.id}.tar.gz`) setStatus(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "删除本地备份失败"); }
     finally { requesting.current = false; setDeleting(""); setRefresh(value => value + 1); }
@@ -128,6 +145,11 @@ export default function DataBackupPanel() {
   const running = starting || status?.status === "running";
   const busy = running || Boolean(local?.busy) || Boolean(deleting);
   const latest = local?.files.find(file => file.kind === "admin");
+  const filtered = filterFiles(local?.files ?? [], view.filter);
+  const categoryBytes = filtered.reduce((sum, file) => sum + file.sizeBytes, 0);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / LOCAL_PAGE_SIZE));
+  const currentPage = Math.min(view.page, pageCount);
+  const visibleFiles = filtered.slice((currentPage - 1) * LOCAL_PAGE_SIZE, currentPage * LOCAL_PAGE_SIZE);
   const step = status ? PHASES.findIndex((item) => item.phase === status.phase) + 1 : 0;
 
   return (
@@ -170,11 +192,21 @@ export default function DataBackupPanel() {
           </button>
         </div>
         <p className="mt-2 text-xs leading-5 text-neutral-500">显示已完成的手动完整备份、数据库快照、自动加密数据备份和恢复前安全备份。数据库快照仅包含数据库；自动加密数据备份需要原加密密钥才能恢复。各类备份按原保留设置自动清理。</p>
+        <div role="group" aria-label="本地备份分类" className="mt-4 flex flex-wrap gap-2">
+          {BACKUP_FILTERS.map(filter => {
+            const selected = view.filter === filter.kind;
+            const count = filterFiles(local?.files ?? [], filter.kind).length;
+            return <button key={filter.kind} type="button" aria-pressed={selected} onClick={() => setView({ filter: filter.kind, page: 1 })} className={`rounded-lg border px-3 py-2 text-xs font-medium ${selected ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-600 hover:bg-neutral-50"}`}>
+              {filter.label}<span className="ml-1.5 opacity-75">{count}</span>
+            </button>;
+          })}
+        </div>
+        {local && view.filter !== "all" && <p aria-live="polite" className="mt-3 text-xs text-neutral-500">{KIND_LABELS[view.filter]} · {filtered.length} 份 · 占用 {formatBytes(categoryBytes)}</p>}
         {listError && <p role="alert" className="mt-2 text-sm text-red-600">{listError}</p>}
         {busy && <p role="status" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">备份、恢复或删除任务正在执行，暂时不能删除本地备份。</p>}
-        {local?.files.length === 0 && <p className="mt-4 text-sm text-neutral-500">服务器暂无已完成的本地备份。</p>}
-        {Boolean(local?.files.length) && <ul className="mt-4 space-y-3">
-          {local!.files.map(file => {
+        {local && filtered.length === 0 && <p className="mt-4 text-sm text-neutral-500">{view.filter === "all" ? "服务器暂无已完成的本地备份。" : `暂无${KIND_LABELS[view.filter]}。`}</p>}
+        {Boolean(visibleFiles.length) && <ul aria-label="本地备份列表" className="mt-4 space-y-3">
+          {visibleFiles.map(file => {
             const removing = deleting === `${file.kind}/${file.name}`;
             return <li key={`${file.kind}/${file.name}`} className="rounded-xl border border-neutral-200 p-3 sm:p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -193,6 +225,13 @@ export default function DataBackupPanel() {
             </li>;
           })}
         </ul>}
+        {pageCount > 1 && <nav aria-label="本地备份分页" className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p aria-live="polite" className="text-xs text-neutral-500">第 {currentPage} / {pageCount} 页 · 当前分类共 {filtered.length} 份 · 每页 {LOCAL_PAGE_SIZE} 份</p>
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={currentPage === 1} onClick={() => setView(previous => ({ ...previous, page: currentPage - 1 }))} className="rounded-lg border border-neutral-200 px-3 py-2 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">上一页</button>
+            <button type="button" disabled={currentPage === pageCount} onClick={() => setView(previous => ({ ...previous, page: currentPage + 1 }))} className="rounded-lg border border-neutral-200 px-3 py-2 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">下一页</button>
+          </div>
+        </nav>}
       </div>
     </section>
   );
