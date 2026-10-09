@@ -86,12 +86,20 @@ export default async function PostPage({ params }: Props) {
       ? { label: "更新于：", value: post.updated_at }
       : { label: "发布于：", value: post.created_at };
     const showComments = siteSettings.classic_show_comments !== "0";
+    // 以大致显示宽度分档，避免同字数的中文标题比英文标题明显拥挤。
+    const titleMeasure = Array.from(post.title).reduce((width, char) => width + (/^[\u0020-\u007e]$/.test(char) ? 0.55 : 1), 0);
+    const titleSize = titleMeasure > 32 ? "extended" : titleMeasure > 16 ? "long" : "short";
+    const titleParts = post.title.split(/(\d+(?:[.,]\d+)*[ \u00a0]*(?:小时|分钟|秒钟|[个篇首款种项次组台天年月日章节]))/g);
 
     return (
       <ArticleEditZone href={`/admin/posts/${post.id}/edit`} enabled={isAuthorized} zoneClassName="article-edit-zone article-detail-edit-zone">
         <article className="classic-article-detail">
           <div className="article-header reader-exit-anchor">
-            <h1 className="page-title">{post.title}</h1>
+            <h1 className="page-title" data-title-size={titleSize}>
+              {titleParts.map((part, index) => index % 2 === 1
+                ? <span className="article-title-keep" key={index}>{part}</span>
+                : part)}
+            </h1>
             <ClassicReaderExit />
             <ClassicShareButton postId={post.id} />
             <div className="meta-line meta-line--items">

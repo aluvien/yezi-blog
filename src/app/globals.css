@@ -9254,6 +9254,13 @@ html[data-layout-theme="classic"] .classic-article-detail .page-title {
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1.75;
+  text-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 数字和量词作为完整单位换行，例如“5 个”不会被拆到两行。 */
+html[data-layout-theme="classic"] .classic-article-detail .article-title-keep {
+  white-space: nowrap;
 }
 
 html[data-layout-theme="classic"] .classic-article-detail .meta-line {
@@ -9383,6 +9390,17 @@ html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:
 }
 
 @media (max-width: 640px) {
+  /* 手机长标题适度缩小并收紧行距，保留全文和中英文自然换行。 */
+  html[data-layout-theme="classic"] .classic-article-detail .page-title[data-title-size="long"] {
+    font-size: clamp(22px, 5.65vw, 24px);
+    line-height: 1.45;
+  }
+
+  html[data-layout-theme="classic"] .classic-article-detail .page-title[data-title-size="extended"] {
+    font-size: clamp(20px, 5.2vw, 22px);
+    line-height: 1.5;
+  }
+
   /* 标题和阅读操作共用一行布局；标题换行时仍保持居中，避免图标压住文字。 */
   html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .article-header {
     display: grid;
@@ -9419,6 +9437,32 @@ html[data-layout-theme="classic"] .classic-article-detail .classic-share-button:
   html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .meta-line {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+
+  /* 长标题只在首行给图标留位，后续行使用完整阅读宽度。 */
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .article-header:has(.page-title:is([data-title-size="long"], [data-title-size="extended"])) {
+    display: block;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .page-title:is([data-title-size="long"], [data-title-size="extended"]) {
+    text-wrap: wrap;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .page-title:is([data-title-size="long"], [data-title-size="extended"])::before {
+    content: "";
+    float: right;
+    width: 92px;
+    height: 1lh;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .article-header:has(.page-title:is([data-title-size="long"], [data-title-size="extended"])) :is(.reader-exit, .classic-share-button) {
+    position: absolute;
+    top: -6px;
+    right: 0;
+  }
+
+  html[data-layout-theme="classic"] body[data-reading="immersive"] .classic-article-detail .article-header:has(.page-title:is([data-title-size="long"], [data-title-size="extended"])) .classic-share-button {
+    right: 46px;
   }
 }
 
