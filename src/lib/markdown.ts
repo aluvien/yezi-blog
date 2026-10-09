@@ -19,14 +19,15 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "strong", "em", "del", "blockquote", "cite", "code", "pre",
     "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "aside", "details", "summary", "time", "iframe", "button", "svg", "path", "rect",
-    "figure", "figcaption",
+    "figure", "figcaption", "template",
   ],
   allowedAttributes: {
     a: ["href", "title", "target", "rel", "class", "aria-label"],
     img: ["src", "srcset", "sizes", "alt", "title", "loading", "decoding", "class", "data-original-src"],
     code: ["class"],
+    template: ["data-code-source"],
     blockquote: ["class"],
-    div: ["class", "data-hydrated", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover", "data-lang", "data-lines", "data-code-collapsible", "data-collapsed"],
+    div: ["class", "data-hydrated", "data-server", "data-id", "data-type", "data-shuffle", "data-music-name", "data-music-artist", "data-music-cover", "data-lang", "data-lines", "data-code-collapsible", "data-collapsed", "data-code-preview-lines"],
     h3: ["class"],
     p: ["class", "data-icon"],
     ul: ["class"],
@@ -58,8 +59,9 @@ export interface TocHeading {
 }
 
 // 超过这个行数的代码块默认收起，避免一篇文章被大段代码推得过长；
-// 展开按钮仍会保留完整代码，复制操作也始终复制全部内容。
+// 完整原文放在惰性的 template 文本节点中，只有展开后才生成全部代码行。
 const COLLAPSIBLE_CODE_LINE_THRESHOLD = 16;
+const CODE_PREVIEW_LINE_COUNT = 12;
 
 /** HTML 属性转义，避免 Markdown 内容进入属性时破坏 HTML 结构。 */
 function escapeHtml(value: string): string {
@@ -348,18 +350,24 @@ export function renderMarkdown(content: string, references: readonly ArticleRefe
     } as Record<string, string>)[language] ?? language : "Text";
     const lines = token.text.replace(/\r\n?/g, "\n").split("\n");
     if (lines.length > 1 && lines.at(-1) === "") lines.pop();
-    const lineMarkup = lines.map((line) => `<span class="line">${escapeHtml(line) || " "}</span>`).join("\n");
+    const isCollapsible = lines.length > COLLAPSIBLE_CODE_LINE_THRESHOLD;
+    const visibleLines = isCollapsible ? lines.slice(0, CODE_PREVIEW_LINE_COUNT) : lines;
+    const lineMarkup = visibleLines.map((line) => `<span class="line">${escapeHtml(line) || " "}</span>`).join("\n");
     const codeClass = language ? ` class="language-${escapeHtml(language)}"` : "";
     const codeMarkup = `<pre><code${codeClass}>${lineMarkup}</code></pre>`;
     const iconMarkup = `<svg class="code-lang-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 5h16v14H4zM6 7v10h12V7zM8 9h8v2H8zm0 4h5v2H8z"/></svg>`;
     const copyMarkup = `<button class="code-copy" type="button" aria-label="复制代码" title="复制代码" data-code-copy="true" data-state="idle"><svg class="icon-copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1 0-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>`;
-    const isCollapsible = lines.length > COLLAPSIBLE_CODE_LINE_THRESHOLD;
+    const sourceMarkup = isCollapsible
+      ? `<template data-code-source="true">${escapeHtml(lines.join("\n"))}</template>`
+      : "";
     const blockClass = isCollapsible ? "code-block code-block--collapsible" : "code-block";
-    const collapseAttributes = isCollapsible ? ' data-code-collapsible="true" data-collapsed="true"' : "";
+    const collapseAttributes = isCollapsible
+      ? ` data-code-collapsible="true" data-collapsed="true" data-code-preview-lines="${CODE_PREVIEW_LINE_COUNT}"`
+      : "";
     const expandMarkup = isCollapsible
       ? `<button class="code-expand-toggle" type="button" aria-expanded="false" aria-label="展开全部代码" title="展开全部代码" data-code-expand="true"><span class="code-expand-toggle__label">展开全部代码（${lines.length} 行）</span><svg class="code-expand-toggle__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`
       : "";
-    return `<div class="${blockClass}" data-lang="${escapeHtml(language)}" data-lines="${lines.length}"${collapseAttributes}><div class="code-toolbar"><span class="code-lang">${iconMarkup}<span>${escapeHtml(languageLabel)}</span></span><div class="code-meta"><span class="code-info">UTF-8</span><span class="code-separator">|</span><span class="code-info">${lines.length} Lines</span><span class="code-separator">|</span>${copyMarkup}</div></div>${codeMarkup}${expandMarkup}</div>`;
+    return `<div class="${blockClass}" data-lang="${escapeHtml(language)}" data-lines="${lines.length}"${collapseAttributes}><div class="code-toolbar"><span class="code-lang">${iconMarkup}<span>${escapeHtml(languageLabel)}</span></span><div class="code-meta"><span class="code-info">UTF-8</span><span class="code-separator">|</span><span class="code-info">${lines.length} Lines</span><span class="code-separator">|</span>${copyMarkup}</div></div>${codeMarkup}${sourceMarkup}${expandMarkup}</div>`;
   };
 
   const expandedContent = expandMediaShortcodes(expandArticleReferenceMarkers(expandSiteArticleReferenceMarkers(content, inlineSiteReferences)));
