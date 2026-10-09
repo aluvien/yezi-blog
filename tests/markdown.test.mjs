@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { parseHTML } from "linkedom";
 import { renderMarkdown, renderMarkdownInline, extractHeadings, stripMarkdown } from "../src/lib/markdown.ts";
 import { normalizeMediaShortcodes } from "../src/lib/media-shortcodes.ts";
 import { encodeSiteArticleReferenceMarker } from "../src/lib/article-reference.ts";
@@ -97,6 +98,31 @@ test("long code blocks collapse by default and expose an accessible expand contr
   assert.ok(html.includes('data-code-expand="true"'));
   assert.ok(html.includes('aria-expanded="false"'));
   assert.ok(html.includes("展开全部代码（17 行）"));
+});
+
+test("collapsed 2710-line code renders only its preview and keeps exact inert source", () => {
+  const lines = Array.from({ length: 2710 }, (_, index) => `line ${index + 1}`);
+  lines[1] = "";
+  lines[2] = "\t  preserve whitespace & entities < >";
+  lines[2709] = '</template><script>alert(1)</script><img src="x" onerror="alert(2)">';
+  const source = lines.join("\n");
+  const { document } = parseHTML(renderMarkdown(`\`\`\`text\n${source}\n\`\`\``));
+  const block = document.querySelector(".code-block");
+  assert.equal(block.dataset.lines, "2710");
+  assert.equal(block.dataset.codePreviewLines, "12");
+  assert.equal(block.querySelectorAll("pre code .line").length, 12);
+  const template = block.querySelector("template[data-code-source]");
+  assert.equal(template.textContent, source);
+  assert.equal(template.content.childElementCount, 0);
+  assert.equal(document.querySelectorAll("script, img").length, 0);
+});
+
+test("code below the collapse threshold renders every line without a deferred source", () => {
+  const source = Array.from({ length: 16 }, (_, index) => `line ${index + 1}`).join("\n");
+  const { document } = parseHTML(renderMarkdown(`\`\`\`text\n${source}\n\`\`\``));
+  assert.equal(document.querySelectorAll("pre code .line").length, 16);
+  assert.equal(document.querySelector("template[data-code-source]"), null);
+  assert.equal(document.querySelector("[data-code-expand]"), null);
 });
 
 test("wraps Markdown tables in a horizontal-scroll container", () => {

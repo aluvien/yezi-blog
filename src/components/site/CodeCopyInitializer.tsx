@@ -15,6 +15,22 @@ export function CodeCopyInitializer() {
         if (!block) return;
         const isCollapsed = block.dataset.collapsed !== "false";
         const nextCollapsed = !isCollapsed;
+        const source = block.querySelector<HTMLTemplateElement>("template[data-code-source]")?.content.textContent;
+        const code = block.querySelector("pre code");
+        if (source != null && code) {
+          const sourceLines = source.split("\n");
+          const previewLines = Number(block.dataset.codePreviewLines) || 12;
+          const visibleLines = nextCollapsed ? sourceLines.slice(0, previewLines) : sourceLines;
+          const fragment = document.createDocumentFragment();
+          for (const [index, text] of visibleLines.entries()) {
+            if (index > 0) fragment.append(document.createTextNode("\n"));
+            const line = document.createElement("span");
+            line.className = "line";
+            line.textContent = text || " ";
+            fragment.append(line);
+          }
+          code.replaceChildren(fragment);
+        }
         block.dataset.collapsed = nextCollapsed ? "true" : "false";
         expandButton.setAttribute("aria-expanded", String(!nextCollapsed));
         const actionLabel = nextCollapsed ? "展开全部代码" : "收起代码";
@@ -31,10 +47,12 @@ export function CodeCopyInitializer() {
 
       const button = target.closest<HTMLButtonElement>("button[data-code-copy]");
       if (!button) return;
-      const code = button.closest(".code-block")?.querySelector("pre code");
+      const block = button.closest(".code-block");
+      const code = block?.querySelector("pre code");
       if (!code) return;
       const lines = Array.from(code.querySelectorAll<HTMLElement>(".line"));
-      const text = (lines.length > 0 ? lines.map((line) => line.textContent ?? "").join("\n") : code.textContent ?? "").replace(/\n$/, "");
+      const source = block?.querySelector<HTMLTemplateElement>("template[data-code-source]")?.content.textContent;
+      const text = source ?? (lines.length > 0 ? lines.map((line) => line.textContent ?? "").join("\n") : code.textContent ?? "").replace(/\n$/, "");
       try {
         await navigator.clipboard.writeText(text);
       } catch {
