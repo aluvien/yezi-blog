@@ -40,7 +40,8 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
     span: ["class", "aria-hidden", "role"],
     button: ["class", "type", "aria-label", "aria-expanded", "title", "data-state", "data-code-copy", "data-code-expand"],
-    svg: ["class", "width", "height", "viewBox", "fill", "stroke", "stroke-width", "aria-hidden"],
+    // HTML 解析器会将 viewBox 转成小写；保留它，浏览器才能按完整坐标系缩放 SVG。
+    svg: ["class", "width", "height", "viewBox", "viewbox", "fill", "stroke", "stroke-width", "aria-hidden"],
     path: ["d", "fill", "stroke", "stroke-width"],
     rect: ["x", "y", "width", "height", "rx", "fill", "stroke", "stroke-width"],
     cite: [],

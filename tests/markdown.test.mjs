@@ -79,6 +79,15 @@ test("renders target-style Markdown lists, links, divider and code metadata", ()
   assert.ok(!html.includes('data-code-expand="true"'));
 });
 
+test("preserves SVG coordinate systems for code language, copy, copied and expand icons", () => {
+  const source = Array.from({ length: 17 }, (_, index) => `line ${index + 1}`).join("\n");
+  const html = renderMarkdown(`\`\`\`text\n${source}\n\`\`\``);
+  const icons = [...html.matchAll(/<svg\b[^>]*>/g)].map(([tag]) => tag);
+  assert.equal(icons.length, 4);
+  for (const icon of icons) assert.match(icon, /\bviewbox="0 0 24 24"/i);
+  assert.match(html, /<rect[^>]*width="14"[^>]*height="14"[^>]*x="8"[^>]*y="8"/);
+});
+
 test("long code blocks collapse by default and expose an accessible expand control", () => {
   const source = Array.from({ length: 17 }, (_, index) => `const line${index + 1} = ${index + 1};`).join("\n");
   const html = renderMarkdown(`\`\`\`ts\n${source}\n\`\`\``);
