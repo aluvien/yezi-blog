@@ -9813,7 +9813,8 @@ html[data-layout-theme="classic"] .classic-article-detail .comment-submit {
 
 @media (max-width: 640px) {
   html[data-layout-theme="classic"] .classic-article-detail .page-title {
-    padding-right: 36px;
+    /* 普通模式没有标题操作按钮；阅读模式由上方布局单独预留位置。 */
+    padding-right: 0;
     font-size: 24px;
     line-height: 1.75;
   }
