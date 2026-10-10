@@ -282,7 +282,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         </div>
       </section>}
 
-      {section === "appearance" && <div className="admin-card admin-panel">
+      {section === "appearance" && <section className="admin-card admin-panel" aria-label="外观主题配置">
       <fieldset className="space-y-6">
         <legend className="mb-4 text-base font-semibold text-neutral-800">外观主题</legend>
         <div>
@@ -399,7 +399,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         </div>
       </fieldset>
 
-      </div>}
+      </section>}
 
       {(dirty || pending || error || message) && <div className="admin-settings-savebar flex flex-wrap items-center gap-4">
         {(dirty || pending) && <button type="submit" disabled={pending} className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>}

@@ -135,7 +135,7 @@ test.describe.serial("core editorial smoke flows", () => {
     await page.goto("/admin/settings/appearance");
     const [mainBox, panelBox] = await Promise.all([
       page.locator("main.admin-main").boundingBox(),
-      page.locator("fieldset").first().boundingBox(),
+      page.getByRole("region", { name: "外观主题配置" }).boundingBox(),
     ]);
     if (!mainBox || !panelBox) throw new Error("外观设置布局未加载");
     expect(panelBox.width).toBeGreaterThan(mainBox.width * 0.9);
