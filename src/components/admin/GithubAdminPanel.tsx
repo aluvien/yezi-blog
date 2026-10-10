@@ -166,7 +166,7 @@ export default function GithubAdminPanel({ repositories }: { repositories: Githu
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+      <div className="admin-card admin-panel p-4 sm:p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             value={input}

@@ -44,7 +44,7 @@ export default function AdminReferencesPage() {
   const tagOptions = listReferenceLibraryTags().map((item) => item.tag);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <LifeAdminTabs />
       <AdminPageHeader
         eyebrow="LIFE · REFERENCES"
@@ -54,7 +54,7 @@ export default function AdminReferencesPage() {
       />
 
       {references.length === 0 ? (
-        <p className="rounded-2xl bg-white py-12 text-center text-sm text-neutral-400">还没有保存文章引用</p>
+        <p className="admin-card admin-empty-state">还没有保存文章引用</p>
       ) : (
         <ReferenceSelectionProvider ids={references.map((reference) => reference.id)}>
         <ul className="flex flex-col gap-3">

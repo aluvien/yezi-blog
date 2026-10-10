@@ -2,23 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-
-function loadEnvFile(filePath) {
-  if (!fs.existsSync(filePath)) return;
-  for (const rawLine of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!match) continue;
-    const [, key, rawValue] = match;
-    if (process.env[key] !== undefined) continue;
-    const value = rawValue.trim();
-    process.env[key] =
-      (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))
-        ? value.slice(1, -1)
-        : value;
-  }
-}
+import { loadRuntimeEnvFiles } from "./runtime-env.mjs";
 
 function restrictFilePermissions(filePath) {
   if (fs.existsSync(filePath)) fs.chmodSync(filePath, 0o600);
@@ -33,12 +17,10 @@ const localEnv = path.join(root, ".env.local");
 const fallbackEnv = path.join(root, ".env");
 if (externalEnv) {
   restrictFilePermissions(externalEnv);
-  loadEnvFile(externalEnv);
 }
 restrictFilePermissions(localEnv);
 restrictFilePermissions(fallbackEnv);
-loadEnvFile(localEnv);
-loadEnvFile(fallbackEnv);
+loadRuntimeEnvFiles([externalEnv, localEnv, fallbackEnv]);
 if (!process.env.BLOG_ROOT) process.env.BLOG_ROOT = root;
 if (!process.env.PORT) process.env.PORT = "3030";
 if (!process.env.HOSTNAME) process.env.HOSTNAME = "127.0.0.1";

@@ -278,7 +278,7 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
   }
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+    <div className="admin-settings-subsection p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-neutral-800">QQ 音乐账号</p>

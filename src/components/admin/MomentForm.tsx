@@ -239,8 +239,10 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-form admin-card admin-form-panel admin-form-stack">
+      <label htmlFor="moment-content" className="admin-field-label">絮语内容</label>
       <textarea
+        id="moment-content"
         value={content}
         onChange={(e) => setContent(e.target.value)}
         rows={6}
@@ -323,7 +325,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
         type="button"
         disabled={pending || uploading}
         onClick={submit}
-        className="rounded-lg bg-neutral-900 py-3 text-base font-medium text-white active:bg-neutral-700 disabled:opacity-50"
+        className="admin-button admin-button-primary admin-form-submit disabled:opacity-50"
       >
         {pending ? "保存中…" : moment ? "保存修改" : "发布"}
       </button>

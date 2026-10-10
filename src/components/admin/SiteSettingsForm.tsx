@@ -101,7 +101,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
+    <form onSubmit={submit} className="admin-form space-y-5">
       {section === "site" && <>
       <div className="grid gap-5 xl:grid-cols-12">
       <section className="admin-card rounded-2xl bg-white p-5 shadow-sm xl:col-span-5 sm:p-6">
@@ -271,7 +271,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
               ["left", "左下角图标"],
               ["bottom", "底部展开播放器"],
             ].map(([value, label]) => (
-              <label key={value} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${values.music_position === value ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
+              <label key={value} className={`admin-choice inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${values.music_position === value ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
                 <input type="radio" name="music-position" value={value} checked={values.music_position === value} onChange={(event) => update("music_position", event.target.value)} className="h-3.5 w-3.5 accent-current" />
                 {label}
               </label>
@@ -282,9 +282,9 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         </div>
       </section>}
 
-      {section === "appearance" && <div>
-      <fieldset className="admin-settings-subsection space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:p-5">
-        <legend className="px-1 text-sm font-medium text-neutral-700">外观主题</legend>
+      {section === "appearance" && <section className="admin-card admin-panel" aria-label="外观主题配置">
+      <fieldset className="space-y-6">
+        <legend className="mb-4 text-base font-semibold text-neutral-800">外观主题</legend>
         <div>
           <p className="text-sm text-neutral-600">前台版式主题（不改变现有内容与数据）</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -340,7 +340,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
           </div>
         </div>
         {values.layout_theme === "classic" && (
-          <fieldset className="admin-settings-subsection space-y-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+          <fieldset className="admin-settings-subsection space-y-4 p-4">
             <legend className="px-1 text-sm font-medium text-neutral-700">经典版·书香自定义功能</legend>
             <p className="text-xs leading-5 text-neutral-500">仅在经典版·书香启用。内容继续沿用本站数据，版式遵循书香主题的阅读节奏。</p>
             <ImageUpload value={values.classic_home_image || null} onChange={(path) => update("classic_home_image", path ?? "")} label="首页图片（可选）" />
@@ -370,7 +370,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
               />
               <p className="mt-1.5 text-xs leading-5 text-neutral-500">显示在经典版桌面左侧、站点名称与菜单之间；支持 Markdown 与换行，清空后不显示。</p>
             </div>
-            <fieldset className="space-y-3 rounded-lg border border-amber-200/80 bg-white/70 p-3">
+            <fieldset className="admin-settings-subsection space-y-3 p-3">
               <legend className="px-1 text-sm font-medium text-neutral-700">本站扩展</legend>
               <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.classic_home_include_bits !== "0"} onChange={(event) => update("classic_home_include_bits", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />首页混入絮语时间流</label>
               <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-700"><input type="checkbox" checked={values.classic_show_interactions !== "0"} onChange={(event) => update("classic_show_interactions", event.target.checked ? "1" : "0")} className="h-4 w-4 accent-accent" />显示经典版互动信息（点赞、浏览、评论入口）</label>
@@ -388,7 +388,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
                 onClick={() => update("dark_mode", option.value)}
                 aria-pressed={values.dark_mode === option.value}
                 title={option.description}
-                className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
+                className={`admin-choice rounded-lg border px-4 py-2 text-sm transition-colors ${
                   values.dark_mode === option.value ? "bg-neutral-900 text-white" : "border border-neutral-300 text-neutral-600 hover:bg-neutral-100"
                 }`}
               >
@@ -399,7 +399,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         </div>
       </fieldset>
 
-      </div>}
+      </section>}
 
       {(dirty || pending || error || message) && <div className="admin-settings-savebar flex flex-wrap items-center gap-4">
         {(dirty || pending) && <button type="submit" disabled={pending} className="admin-button admin-button-primary rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{pending ? "保存中…" : "保存设置"}</button>}

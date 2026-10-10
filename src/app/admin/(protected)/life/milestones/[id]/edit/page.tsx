@@ -12,10 +12,10 @@ export default async function EditLifeEventPage({ params }: { params: Promise<{ 
   if (!event) notFound();
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <LifeAdminTabs />
-      <AdminPageHeader eyebrow="EDIT MILESTONE" title="编辑生活节点" description="修改经历的时间、内容与展示信息。来源絮语不受影响。" />
-      <div className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
+      <AdminPageHeader backHref="/admin/life/milestones" backLabel="返回生活节点" eyebrow="EDIT MILESTONE" title="编辑生活节点" description="修改经历的时间、内容与展示信息。来源絮语不受影响。" />
+      <div className="admin-card admin-form-panel">
         <LifeEventForm mode="edit" event={event} />
       </div>
     </div>

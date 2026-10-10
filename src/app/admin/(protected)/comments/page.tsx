@@ -22,20 +22,21 @@ export default async function AdminCommentsPage({ searchParams }: { searchParams
   ];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <AdminPageHeader eyebrow="COMMENTS" title="评论管理" description="审核访客评论、公开或撤回，并以作者身份回复。" />
-      <nav className="flex gap-2 overflow-x-auto" aria-label="评论筛选">
+      <nav className="admin-tabs admin-tabs-list" aria-label="评论筛选">
         {tabs.map((tab) => (
           <Link
             key={tab.value}
             href={tab.value === "all" ? "/admin/comments" : `/admin/comments?status=${tab.value}`}
-            className={`admin-filter-tab shrink-0 rounded-full px-3 py-1.5 text-sm ${status === tab.value ? "is-active bg-neutral-900 text-white" : "bg-white text-neutral-600 shadow-sm"}`}
+            className="admin-tab"
+            aria-current={status === tab.value ? "page" : undefined}
           >
             {tab.label} {tab.count}
           </Link>
         ))}
       </nav>
-      {comments.length === 0 && <p className="rounded-2xl bg-white py-12 text-center text-sm text-neutral-400">当前筛选下暂无评论</p>}
+      {comments.length === 0 && <p className="admin-card admin-empty-state">当前筛选下暂无评论</p>}
       <ul className="flex flex-col gap-3">
         {comments.map((comment) => {
           const targetHref = comment.target_type === "post"

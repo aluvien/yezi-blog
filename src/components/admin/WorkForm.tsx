@@ -58,7 +58,7 @@ export default function WorkForm({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-form admin-card admin-form-panel admin-form-stack">
       <div>
         <label htmlFor="work-title" className="mb-1 block text-sm font-medium text-neutral-700">标题</label>
         <input id="work-title" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base" placeholder="作品名称" />
@@ -99,7 +99,7 @@ export default function WorkForm({
         type="button"
         disabled={pending}
         onClick={submit}
-        className="rounded-lg bg-neutral-900 py-3 text-base font-medium text-white active:bg-neutral-700 disabled:opacity-50"
+        className="admin-button admin-button-primary admin-form-submit disabled:opacity-50"
       >
         {pending ? "保存中…" : work ? "保存修改" : "添加作品"}
       </button>

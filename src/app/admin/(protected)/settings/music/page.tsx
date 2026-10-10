@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default function AdminMusicSettingsPage() {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="admin-page flex flex-col gap-5">
       <AdminPageHeader
         eyebrow="MUSIC SETTINGS"
         title="音乐设置"

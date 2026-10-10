@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default function AdminGithubPage() {
   const repositories = listGithubRepositories();
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <LifeAdminTabs />
       <AdminPageHeader
         eyebrow="LIFE · GITHUB"

@@ -20,7 +20,7 @@ export default function AdminAttachmentsPage() {
   const unusedCount = attachments.filter((attachment) => !attachment.referenced).length;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <AdminPageHeader
         eyebrow="ATTACHMENTS"
         title={`附件管理（${attachments.length}）`}
@@ -29,7 +29,7 @@ export default function AdminAttachmentsPage() {
       />
 
       {attachments.length === 0 ? (
-        <p className="rounded-2xl bg-white py-12 text-center text-sm text-neutral-400">还没有上传附件</p>
+        <p className="admin-card admin-empty-state">还没有上传附件</p>
       ) : (
         <ul className="flex flex-col gap-3">
           {attachments.map((attachment) => (

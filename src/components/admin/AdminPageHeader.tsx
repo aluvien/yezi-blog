@@ -1,21 +1,26 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 type AdminPageHeaderProps = {
   eyebrow: string;
   title: ReactNode;
   description: string;
   actions?: ReactNode;
+  backHref?: string;
+  backLabel?: string;
 };
 
-export default function AdminPageHeader({ eyebrow, title, description, actions }: AdminPageHeaderProps) {
+export default function AdminPageHeader({ eyebrow, title, description, actions, backHref, backLabel = "返回列表" }: AdminPageHeaderProps) {
   return (
-    <div className="admin-page-header flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <header className="admin-page-header">
       <div className="min-w-0">
+        {backHref && <Link href={backHref} className="admin-back-link"><ArrowLeft size={14} aria-hidden="true" />{backLabel}</Link>}
         <p className="admin-page-eyebrow">{eyebrow}</p>
         <h1 className="admin-page-title">{title}</h1>
         <p className="admin-page-description">{description}</p>
       </div>
       {actions && <div className="admin-page-actions shrink-0">{actions}</div>}
-    </div>
+    </header>
   );
 }

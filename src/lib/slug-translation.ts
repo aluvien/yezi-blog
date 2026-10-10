@@ -63,15 +63,22 @@ function normalizeModelSlug(value: string): string | null {
  * 用已配置的 LLM 把中文标题翻译为便于分享的英文 slug。
  * 未配置、超时或返回异常时返回 null，由调用方继续使用本地 slugify。
  */
-export async function translateTitleToEnglishSlug(title: string): Promise<string | null> {
+async function requestTitleTranslation(title: string): Promise<{ slug: string | null; fallbackReason?: string }> {
   const apiKey = process.env.LLM_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim();
   const source = title.trim().slice(0, 240);
-  if (!apiKey || !source) return null;
+  if (!source) return { slug: null };
+  if (!apiKey) return { slug: null, fallbackReason: "网站进程未读取到模型密钥，请检查环境文件和启动配置" };
 
+  let endpoint: string;
+  try {
+    endpoint = resolveLlmEndpoint(process.env.LLM_API_URL || "");
+  } catch {
+    return { slug: null, fallbackReason: "模型接口配置无效，请检查 LLM_API_URL" };
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
   try {
-    const response = await fetch(resolveLlmEndpoint(process.env.LLM_API_URL || ""), {
+    const response = await fetch(endpoint, {
       method: "POST",
       cache: "no-store",
       signal: controller.signal,
@@ -89,14 +96,45 @@ export async function translateTitleToEnglishSlug(title: string): Promise<string
         ],
       }),
     });
-    if (!response.ok) return null;
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
-    return normalizeModelSlug(extractText(payload.choices?.[0]?.message?.content));
-  } catch {
-    return null;
+    if (!response.ok) {
+      const status = response.status;
+      const reason = status === 401 || status === 403
+        ? "模型服务鉴权失败，请检查网站实际使用的密钥"
+        : status === 404
+          ? "模型接口或模型名称不匹配，请检查 LLM_API_URL / LLM_MODEL"
+          : status === 429
+            ? "模型服务限流或额度不足，请稍后重试或检查服务额度"
+            : "模型服务请求失败";
+      return { slug: null, fallbackReason: `${reason}（HTTP ${status}）` };
+    }
+    let payload: { choices?: Array<{ finish_reason?: string; message?: { content?: unknown } }> };
+    try {
+      payload = await response.json();
+    } catch {
+      return { slug: null, fallbackReason: "模型返回了无法读取的响应" };
+    }
+    const choice = payload?.choices?.[0];
+    const slug = normalizeModelSlug(extractText(choice?.message?.content));
+    return slug ? { slug } : {
+      slug: null,
+      fallbackReason: choice?.finish_reason === "length"
+        ? "模型输出被长度限制截断，未得到有效英文链接"
+        : "模型未返回有效英文链接，请检查模型配置",
+    };
+  } catch (error) {
+    return {
+      slug: null,
+      fallbackReason: controller.signal.aborted || (error instanceof Error && error.name === "AbortError")
+        ? "模型请求超时（30 秒）"
+        : "无法连接模型服务，请检查服务器网络和接口地址",
+    };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function translateTitleToEnglishSlug(title: string): Promise<string | null> {
+  return (await requestTitleTranslation(title)).slug;
 }
 
 /** 测试与调用方共用的安全兜底，确保永远能得到本地可用 slug。 */
@@ -107,6 +145,7 @@ export function localSlugFallback(title: string): string {
 export type GeneratedTitleSlug = {
   slug: string;
   source: "llm" | "fallback";
+  fallbackReason?: string;
 };
 
 /**
@@ -118,9 +157,9 @@ export async function generateTitleSlug(title: string): Promise<GeneratedTitleSl
   const source = title.trim();
   if (!source) return null;
 
-  const translated = await translateTitleToEnglishSlug(source);
-  if (translated) return { slug: translated, source: "llm" };
+  const translated = await requestTitleTranslation(source);
+  if (translated.slug) return { slug: translated.slug, source: "llm" };
 
   const fallback = localSlugFallback(source);
-  return fallback ? { slug: fallback, source: "fallback" } : null;
+  return fallback ? { slug: fallback, source: "fallback", fallbackReason: translated.fallbackReason } : null;
 }

@@ -12,9 +12,9 @@ export default async function EditWorkPage({ params }: { params: Promise<{ id: s
   if (!work) notFound();
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <LifeAdminTabs />
-      <AdminPageHeader eyebrow="LIFE · EDIT WORK" title="编辑作品" description="修改作品展示内容、封面、链接、排序与关联的 GitHub 仓库。" />
+      <AdminPageHeader backHref="/admin/works" backLabel="返回作品列表" eyebrow="LIFE · EDIT WORK" title="编辑作品" description="修改作品展示内容、封面、链接、排序与关联的 GitHub 仓库。" />
       <WorkForm work={work} repositories={listGithubRepositories()} initialRepositoryIds={listRepositoryIdsForWork(work.id)} />
     </div>
   );

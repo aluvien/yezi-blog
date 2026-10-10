@@ -9,8 +9,8 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
   const query = await searchParams;
   const openReferenceDialog = query.reference === "1";
   return (
-    <div className="flex flex-col gap-4">
-      <AdminPageHeader eyebrow="NEW POST" title="写文章" description="创建一篇文章，设置封面、分类、标签和正文内容。" />
+    <div className="admin-page flex flex-col gap-4">
+      <AdminPageHeader backHref="/admin/posts" backLabel="返回文章列表" eyebrow="NEW POST" title="写文章" description="创建一篇文章，设置封面、分类、标签和正文内容。" />
       <PostForm categories={categories} usedTags={usedTags} availableImageAttachments={imageAttachments} openReferenceDialog={openReferenceDialog} />
     </div>
   );

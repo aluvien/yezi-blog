@@ -21,10 +21,10 @@ export default async function ExtractFromMomentPage({ params }: { params: Promis
   if (!seed) notFound();
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <LifeAdminTabs />
-      <AdminPageHeader eyebrow="LIFE · EXTRACT" title="整理成生活节点" description="已从这条絮语预填内容、图片、标签与日期；补一个标题、确认发生时间后保存即可。" />
-      <div className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
+      <AdminPageHeader backHref="/admin/life/milestones" backLabel="返回生活节点" eyebrow="LIFE · EXTRACT" title="整理成生活节点" description="已从这条絮语预填内容、图片、标签与日期；补一个标题、确认发生时间后保存即可。" />
+      <div className="admin-card admin-form-panel">
         <LifeEventForm mode="extract" momentId={id} seed={seed} />
         <p className="mt-4 text-xs text-neutral-400">
           原絮语会原样保留，可在 <Link href="/moments" className="text-neutral-500 underline">前台絮语页</Link> 查看。

@@ -13,8 +13,8 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
   const usedTags = listAllTags();
   const imageAttachments = listImageAttachments();
   return (
-    <div className="flex flex-col gap-4">
-      <AdminPageHeader eyebrow="EDIT POST" title="编辑文章" description="修改文章正文、封面、分类、标签和发布状态。" />
+    <div className="admin-page flex flex-col gap-4">
+      <AdminPageHeader backHref="/admin/posts" backLabel="返回文章列表" eyebrow="EDIT POST" title="编辑文章" description="修改文章正文、封面、分类、标签和发布状态。" />
       <PostForm post={post} initialAttachments={getPostAttachments(post.id)} initialReferences={listArticleReferenceSnapshotsForPost(post.id)} availableImageAttachments={imageAttachments} categories={categories} usedTags={usedTags} />
     </div>
   );

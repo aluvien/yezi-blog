@@ -106,7 +106,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
       setSlug(result.slug);
       setSlugNotice(result.source === "llm"
         ? "已由 AI 生成，可继续编辑"
-        : "AI 暂不可用，已使用本地规则生成；请检查 LLM_API_KEY / OPENAI_API_KEY 配置");
+        : `${result.fallbackReason || "AI 暂不可用"}；已使用本地规则生成`);
     } catch {
       setError("生成 Slug 失败，请稍后重试");
     } finally {
@@ -398,8 +398,8 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-      <div className="flex min-w-0 flex-col gap-4">
+    <div className="admin-form admin-editor-layout">
+      <div className="admin-card admin-form-panel admin-editor-main">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">标题</label>
           <input
@@ -475,12 +475,12 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
         )}
         </div>
       </div>
-      <aside className="flex flex-col gap-3 lg:sticky lg:top-20">
+      <aside className="admin-editor-sidebar">
         <div className="px-1 pb-1">
           <p className="text-[11px] font-medium tracking-[0.14em] text-accent">文章设置</p>
           <p className="mt-1 text-xs text-neutral-400">附件、状态和索引信息</p>
         </div>
-        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <section className="admin-card admin-editor-section">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-neutral-800">附件</h2>
@@ -546,7 +546,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           )}
         </section>
 
-        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <section className="admin-card admin-editor-section">
           <label htmlFor="post-status" className="mb-1 block text-sm font-medium text-neutral-700">发布状态</label>
           <select
             id="post-status"
@@ -559,20 +559,20 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           </select>
         </section>
 
-        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <section className="admin-card admin-editor-section">
           <ImageUpload value={cover} onChange={setCover} onAttachmentUploaded={addUploadedAttachment} label="封面图（可空）" />
           <p className="mt-2 text-xs text-neutral-400">也可以在上方图片附件中点击“设为封面”。封面只用于首页和分享图，正文中不会自动重复显示。</p>
         </section>
 
-        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <section className="admin-card admin-editor-section">
           <p className="text-sm font-medium text-neutral-700">分类</p>
           <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="选择分类">
-            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${category === "" ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
+            <label className={`admin-choice inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${category === "" ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
               <input type="radio" name="post-category" value="" checked={category === ""} onChange={() => setCategory("")} className="h-3.5 w-3.5 accent-current" />
               未分类
             </label>
             {categories.map((c) => (
-              <label key={c} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${category === c ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
+              <label key={c} className={`admin-choice inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${category === c ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
                 <input type="radio" name="post-category" value={c} checked={category === c} onChange={() => setCategory(c)} className="h-3.5 w-3.5 accent-current" />
                 {c}
               </label>
@@ -582,12 +582,12 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           <p className="mt-1 text-xs text-neutral-400">单选一个分类；分类选项来自分类管理，也可以直接填写新分类。</p>
         </section>
 
-        <section className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <section className="admin-card admin-editor-section">
           <p className="text-sm font-medium text-neutral-700">标签</p>
           {usedTags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="选择标签">
               {usedTags.slice(0, 20).map(({ tag, count }) => (
-                <label key={tag} className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${selectedTags.some((selected) => selected.toLowerCase() === tag.toLowerCase()) ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
+                <label key={tag} className={`admin-choice inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${selectedTags.some((selected) => selected.toLowerCase() === tag.toLowerCase()) ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-500"}`}>
                   <input type="checkbox" checked={selectedTags.some((selected) => selected.toLowerCase() === tag.toLowerCase())} onChange={() => toggleTag(tag)} className="h-3.5 w-3.5 rounded accent-current" />
                   #{tag}<sup>{count}</sup>
                 </label>
@@ -603,7 +603,7 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           type="button"
           disabled={pending}
           onClick={submit}
-          className="rounded-lg bg-neutral-900 py-3 text-base font-medium text-white active:bg-neutral-700 disabled:opacity-50"
+          className="admin-button admin-button-primary admin-form-submit disabled:opacity-50"
         >
           {pending ? "保存中…" : post ? "保存修改" : status === "published" ? "发布文章" : "保存草稿"}
         </button>

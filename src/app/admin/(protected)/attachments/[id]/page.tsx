@@ -20,11 +20,8 @@ export default async function AttachmentDetailPage({ params }: { params: Promise
   const isImage = attachment.mime_type.startsWith("image/");
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-2">
-        <Link href="/admin/attachments" className="text-sm text-neutral-500 hover:text-neutral-900">← 返回附件列表</Link>
-        <AdminPageHeader eyebrow="ATTACHMENT DETAIL" title="附件详情" description="查看文件信息、引用关系，并对图片进行裁切处理。" />
-      </div>
+    <div className="admin-page flex flex-col gap-5">
+      <AdminPageHeader backHref="/admin/attachments" backLabel="返回附件列表" eyebrow="ATTACHMENT DETAIL" title="附件详情" description="查看文件信息、引用关系，并对图片进行裁切处理。" />
 
       <div className="admin-card rounded-2xl bg-white p-5 shadow-sm">
         {isImage ? (

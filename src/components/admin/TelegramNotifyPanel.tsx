@@ -82,7 +82,7 @@ export default function TelegramNotifyPanel({
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+    <section className="admin-card admin-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-neutral-800">Telegram 通知</p>

@@ -11,8 +11,8 @@ export default async function EditMomentPage({ params }: { params: Promise<{ id:
   if (!moment) notFound();
 
   return (
-    <div className="flex flex-col gap-4">
-      <AdminPageHeader eyebrow="EDIT MOMENT" title="编辑絮语" description="修改絮语内容、标签、图片和发布信息。" />
+    <div className="admin-page flex flex-col gap-4">
+      <AdminPageHeader backHref="/admin/moments" backLabel="返回絮语列表" eyebrow="EDIT MOMENT" title="编辑絮语" description="修改絮语内容、标签、图片和发布信息。" />
       <MomentForm moment={moment} />
     </div>
   );

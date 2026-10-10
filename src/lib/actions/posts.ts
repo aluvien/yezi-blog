@@ -26,7 +26,7 @@ export interface PostInput {
 export type ActionResult = { ok: true; message?: string; data?: unknown } | { ok: false; error: string };
 
 export type GeneratePostSlugResult =
-  | { ok: true; slug: string; source: "llm" | "fallback" }
+  | { ok: true; slug: string; source: "llm" | "fallback"; fallbackReason?: string }
   | { ok: false; error: string };
 
 /** Server Action 入口：只做 Cookie 会话鉴权，业务逻辑在 @/lib/admin/posts。 */
@@ -48,7 +48,7 @@ export async function generatePostSlugAction(title: string): Promise<GeneratePos
   if (!source) return { ok: false, error: "请先填写文章标题" };
   const generated = await generateTitleSlug(source);
   if (!generated) return { ok: false, error: "无法生成有效 Slug，请手动填写" };
-  return { ok: true, slug: generated.slug, source: generated.source };
+  return { ok: true, ...generated };
 }
 
 export async function deletePostAction(id: number): Promise<ActionResult> {
