@@ -62,7 +62,7 @@ fs.mkdirSync(path.join(runtimeRoot, "scripts"));
 fs.cpSync(path.join(root, ".next", "standalone"), path.join(runtimeRoot, ".next", "standalone"), { recursive: true });
 fs.cpSync(path.join(root, ".next", "static"), path.join(runtimeRoot, ".next", "static"), { recursive: true });
 if (fs.existsSync(path.join(root, "public"))) fs.cpSync(path.join(root, "public"), path.join(runtimeRoot, "public"), { recursive: true });
-for (const name of ["start-standalone.mjs", "maintain-db.mjs"]) fs.copyFileSync(path.join(root, "scripts", name), path.join(runtimeRoot, "scripts", name));
+for (const name of ["start-standalone.mjs", "runtime-env.mjs", "maintain-db.mjs"]) fs.copyFileSync(path.join(root, "scripts", name), path.join(runtimeRoot, "scripts", name));
 fs.symlinkSync(path.join(runtimeRoot, ".next", "standalone", "node_modules"), path.join(runtimeRoot, "node_modules"), "dir");
 const port = await reserveLoopbackPort();
 const output = [];

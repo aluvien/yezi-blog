@@ -12,7 +12,7 @@ export default function AdminWorksPage() {
   const repoIds = listRepositoryIdsForWorks(works.map((work) => work.id));
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <LifeAdminTabs />
       <AdminPageHeader
         eyebrow="LIFE · WORKS"
@@ -27,7 +27,7 @@ export default function AdminWorksPage() {
           </Link>
         )}
       />
-      {works.length === 0 && <p className="py-10 text-center text-sm text-neutral-400">还没有作品</p>}
+      {works.length === 0 && <p className="admin-card admin-empty-state">还没有作品</p>}
       <ul className="flex flex-col gap-2">
         {works.map((work) => {
           const repos = repoIds.get(work.id) ?? [];

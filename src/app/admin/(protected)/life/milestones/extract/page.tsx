@@ -23,7 +23,7 @@ export default function LifeExtractPickerPage() {
   void getSiteSettings;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <LifeAdminTabs />
       <AdminPageHeader
         eyebrow="LIFE · EXTRACT"

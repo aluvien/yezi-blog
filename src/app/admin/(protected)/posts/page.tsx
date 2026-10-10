@@ -13,7 +13,7 @@ export default function AdminPostsPage() {
   const metrics = getContentMetricsBulk("post", posts.map((post) => post.id));
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <AdminPageHeader
         eyebrow="POSTS"
         title={`文章（${posts.length}）`}
@@ -27,7 +27,7 @@ export default function AdminPostsPage() {
           </Link>
         )}
       />
-      {posts.length === 0 && <p className="py-10 text-center text-sm text-neutral-400">还没有文章</p>}
+      {posts.length === 0 && <p className="admin-card admin-empty-state">还没有文章</p>}
       <ul className="flex flex-col gap-2">
         {posts.map((post) => {
           const tags = parsePostTags(post.tags);

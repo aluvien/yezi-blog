@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default function AdminSettingsPage() {
   const settings = getSiteSettings();
   return (
-    <div className="flex flex-col gap-5">
+    <div className="admin-page flex flex-col gap-5">
       <AdminPageHeader
         eyebrow="SITE SETTINGS"
         title="站点设置"

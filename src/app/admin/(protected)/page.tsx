@@ -20,7 +20,7 @@ export default function AdminDashboard() {
     { label: "待审评论", count: pending, href: "/admin/comments", hint: pending ? "有新的互动待处理" : "暂无待处理评论" },
     { label: "附件", count: countAttachments(), href: "/admin/attachments", hint: "管理图片与文件" },
   ];
-  return <div className="flex flex-col gap-5">
+  return <div className="admin-page flex flex-col gap-5">
     <AdminPageHeader eyebrow="OVERVIEW" title="后台概览" description="管理内容、关注互动，查看网站的最新情况。" actions={<><Link href="/admin/moments/new" className="admin-button px-4">写絮语</Link><Link href="/admin/posts/new" className="admin-button admin-button-primary px-4">写文章</Link></>} />
     {pending > 0 && <div className="admin-pending-banner"><span>有 <strong>{pending}</strong> 条新评论等待审核</span><Link href="/admin/comments">去处理 →</Link></div>}
     <div className="admin-dashboard-stats">{stats.map(stat => <Link href={stat.href} className="admin-card" key={stat.label}><span>{stat.label}</span><strong>{stat.count}</strong><span>{stat.hint}</span></Link>)}</div>

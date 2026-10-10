@@ -49,7 +49,7 @@ function Row({ event }: { event: LifeEvent }) {
 export default function AdminMilestonesPage() {
   const events = listLifeEvents();
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <LifeAdminTabs />
       <AdminPageHeader
         eyebrow="LIFE · MILESTONES"
@@ -62,7 +62,7 @@ export default function AdminMilestonesPage() {
           </div>
         )}
       />
-      {events.length === 0 && <p className="py-10 text-center text-sm text-neutral-400">还没有生活节点，点击“添加生活节点”或“从絮语提取”开始。</p>}
+      {events.length === 0 && <p className="admin-card admin-empty-state">还没有生活节点，点击“添加生活节点”或“从絮语提取”开始。</p>}
       <ul className="flex flex-col gap-2">
         {events.map((event) => <Row key={event.id} event={event} />)}
       </ul>

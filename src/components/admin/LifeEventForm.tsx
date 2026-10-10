@@ -96,7 +96,7 @@ export default function LifeEventForm({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-form admin-form-stack">
       {mode === "extract" && (
         <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
           从絮语提取：以下内容已按原絮语预填，可自由修改。保存后只新增生活节点，原絮语保持不变。
@@ -174,7 +174,7 @@ export default function LifeEventForm({
       </div>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <div className="flex items-center gap-3">
-        <button type="button" disabled={pending || uploading} onClick={submit} className="rounded-lg bg-neutral-900 px-5 py-3 text-base font-medium text-white active:bg-neutral-700 disabled:opacity-50">
+        <button type="button" disabled={pending || uploading} onClick={submit} className="admin-button admin-button-primary admin-form-submit disabled:opacity-50">
           {pending ? "保存中…" : mode === "extract" ? "创建生活节点" : mode === "edit" ? "保存修改" : "添加生活节点"}
         </button>
         <button type="button" onClick={() => router.push("/admin/life/milestones")} className="text-sm text-neutral-500 hover:text-neutral-700">取消</button>

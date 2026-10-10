@@ -225,7 +225,7 @@ export default function AboutPageForm({ initialValue }: { initialValue: string }
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="admin-form space-y-4">
       <section className="admin-card rounded-2xl bg-white p-5 shadow-sm sm:p-6">
         <div className="mb-2 flex items-center justify-between gap-3">
           <label htmlFor="about-markdown-editor" className="block text-sm font-medium text-neutral-800">关于页内容（Markdown）</label>

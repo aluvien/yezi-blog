@@ -14,7 +14,7 @@ export default function AdminMomentsPage() {
   const nodeMap = lifeEventNodeMapByMoment();
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="admin-page flex flex-col gap-4">
       <AdminPageHeader
         eyebrow="MOMENTS"
         title={`絮语（${moments.length}）`}
@@ -28,7 +28,7 @@ export default function AdminMomentsPage() {
           </Link>
         )}
       />
-      {moments.length === 0 && <p className="py-10 text-center text-sm text-neutral-400">还没有絮语</p>}
+      {moments.length === 0 && <p className="admin-card admin-empty-state">还没有絮语</p>}
       <ul className="flex flex-col gap-2">
         {moments.map((moment) => {
           const images = parseMomentImages(moment);

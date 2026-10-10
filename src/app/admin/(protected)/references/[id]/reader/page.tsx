@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import AdminPageHeader from "@/components/admin/AdminPageHeader";
 import { formatArticleReferenceDate } from "@/lib/article-reference";
@@ -24,10 +23,11 @@ export default async function ArticleReferenceReaderPage({ params }: { params: P
   }
 
   return (
-    <div className="article-reference-reader-page flex flex-col gap-5">
+    <div className="admin-page article-reference-reader-page flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <Link href="/admin/references" className="text-sm text-neutral-500 no-underline hover:text-neutral-900">← 返回引用管理</Link>
         <AdminPageHeader
+          backHref="/admin/references"
+          backLabel="返回引用管理"
           eyebrow="PRIVATE READING ARCHIVE"
           title={reference.title || "阅读缓存"}
           description={archive ? `阅读模式已在 ${formatDate(archive.updated_at)} 更新；原网页内容仅保存于本地后台。` : "尚未保存阅读缓存。请返回引用管理后点击“缓存正文”。"}

@@ -38,7 +38,7 @@ export function MarkdownToolbar({ tools, onBeforeTool, onTool }: {
   onTool: (tool: MarkdownTool) => void;
 }) {
   return (
-    <div className="mb-2 flex flex-wrap gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 p-2 lg:sticky lg:top-20 lg:z-10" aria-label="Markdown 工具栏">
+    <div className="admin-markdown-toolbar mb-2 flex flex-wrap gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 p-2 lg:sticky lg:top-20 lg:z-10" aria-label="Markdown 工具栏">
       {tools.map((tool) => (
         <button
           key={tool.label}

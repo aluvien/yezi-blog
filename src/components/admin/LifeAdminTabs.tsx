@@ -18,8 +18,8 @@ function isActive(pathname: string, prefixes: string[]): boolean {
 export default function LifeAdminTabs() {
   const pathname = usePathname();
   return (
-    <nav aria-label="小记管理" className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <ul className="flex min-w-max items-center gap-1.5 border-b border-neutral-200 pb-2">
+    <nav aria-label="小记管理" className="admin-tabs">
+      <ul className="admin-tabs-list">
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.match);
           return (
@@ -27,9 +27,7 @@ export default function LifeAdminTabs() {
               <Link
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
-                className={`inline-block whitespace-nowrap rounded-lg px-3.5 py-2 text-sm no-underline transition-colors ${
-                  active ? "bg-neutral-900 font-medium text-white" : "text-neutral-600 hover:bg-neutral-100"
-                }`}
+                className="admin-tab"
               >
                 {tab.label}
               </Link>

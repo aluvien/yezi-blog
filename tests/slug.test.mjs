@@ -69,7 +69,7 @@ test("falls back to the local slug rule when LLM is unavailable", async () => {
   delete process.env.LLM_API_KEY;
   delete process.env.OPENAI_API_KEY;
   try {
-    assert.deepEqual(await generateTitleSlug("你好世界"), { slug: "ni-hao-shi-jie", source: "fallback" });
+    assert.deepEqual(await generateTitleSlug("你好世界"), { slug: "ni-hao-shi-jie", source: "fallback", fallbackReason: "网站进程未读取到模型密钥，请检查环境文件和启动配置" });
   } finally {
     for (const key of Object.keys(previous)) {
       const value = previous[key];
@@ -77,4 +77,63 @@ test("falls back to the local slug rule when LLM is unavailable", async () => {
       else process.env[key] = value;
     }
   }
+});
+
+async function withModelFixture(callback) {
+  const keys = ["LLM_API_KEY", "OPENAI_API_KEY", "LLM_API_URL", "LLM_MODEL"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  try {
+    process.env.LLM_API_KEY = "private-test-key";
+    delete process.env.OPENAI_API_KEY;
+    process.env.LLM_API_URL = "https://llm.example.test/v1";
+    process.env.LLM_MODEL = "test-model";
+    await callback();
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
+
+for (const [status, expected] of [[401, "鉴权失败"], [403, "鉴权失败"], [404, "模型名称不匹配"], [429, "限流或额度不足"], [503, "请求失败"]]) {
+  test(`reports HTTP ${status} without exposing provider response or credentials`, async () => {
+    await withModelFixture(async () => {
+      globalThis.fetch = async () => new Response("provider echoed private-test-key", { status });
+      const result = await generateTitleSlug("你好世界");
+      assert.equal(result.slug, "ni-hao-shi-jie");
+      assert.equal(result.source, "fallback");
+      assert.ok(result.fallbackReason.includes(expected));
+      assert.ok(result.fallbackReason.includes(`HTTP ${status}`));
+      assert.ok(!JSON.stringify(result).includes("private-test-key"));
+    });
+  });
+}
+
+for (const [name, error, expected] of [["timeout", new DOMException("private-test-key", "AbortError"), "超时"], ["network failure", new Error("private-test-key"), "无法连接"]]) {
+  test(`reports ${name} while preserving the local fallback`, async () => {
+    await withModelFixture(async () => {
+      globalThis.fetch = async () => { throw error; };
+      const result = await generateTitleSlug("你好世界");
+      assert.equal(result.source, "fallback");
+      assert.ok(result.fallbackReason.includes(expected));
+      assert.ok(!result.fallbackReason.includes("private-test-key"));
+    });
+  });
+}
+
+test("reports truncated and malformed model responses distinctly", async () => {
+  await withModelFixture(async () => {
+    globalThis.fetch = async () => Response.json({ choices: [{ finish_reason: "length", message: { content: "" } }] });
+    assert.match((await generateTitleSlug("你好世界")).fallbackReason, /长度限制截断/);
+    globalThis.fetch = async () => new Response("not JSON");
+    assert.match((await generateTitleSlug("你好世界")).fallbackReason, /无法读取的响应/);
+    globalThis.fetch = async () => Response.json({ choices: [{ message: { content: "中文内容" } }] });
+    assert.match((await generateTitleSlug("你好世界")).fallbackReason, /未返回有效英文链接/);
+    process.env.LLM_API_URL = "invalid URL";
+    globalThis.fetch = async () => { throw new Error("must not fetch"); };
+    assert.match((await generateTitleSlug("你好世界")).fallbackReason, /接口配置无效/);
+  });
 });
