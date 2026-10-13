@@ -20,7 +20,7 @@ import type { CloudBackupTask } from "@/lib/cloud-backup-types";
 type Move = { target: string; old: string; next: string; hadOriginal: boolean };
 type Journal = { id: string; dbPath: string; rollbackDb: string; committed: boolean; moves: Move[] };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const PRESERVE = new Set(["backups", "qq-music-audio", "blog.db", "blog.db-wal", "blog.db-shm"]);
+const PRESERVE = new Set(["backups", "qq-music-audio", "npm-cache", "blog.db", "blog.db-wal", "blog.db-shm"]);
 function preserved(name: string): boolean { return PRESERVE.has(name) || /^deploy(?:[.-]|$)/.test(name) || name.endsWith(".tmp"); }
 function databasePath(): string { return path.resolve(process.env.BLOG_DB_PATH?.trim() || path.join(getProjectRoot(), "data", "blog.db")); }
 function storeJournal(journal: Journal): void { writePrivateJson(path.join(cloudBackupRoot(), "restore-journal.json"), journal); }

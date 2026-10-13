@@ -57,14 +57,14 @@ export async function login(password: string, options: { secure?: boolean; ip?: 
     return { ok: false, blocked: true, retryAfter: Math.ceil((ipBlockedUntil - now) / 1000) };
   }
 
-  const passwordMatches = verifyPassword(password);
   const globalBlockedUntil = globalExisting?.blocked_until ?? 0;
+  // Rate limits must run before password verification, including for a fresh
+  // client. Otherwise a 429 still acts as an unlimited password oracle.
+  if (globalBlockedUntil > now) {
+    return { ok: false, blocked: true, retryAfter: Math.ceil((globalBlockedUntil - now) / 1000) };
+  }
+  const passwordMatches = verifyPassword(password);
   if (!passwordMatches) {
-    // The account-wide guard blocks distributed guessing, but an attacker must
-    // not be able to use it to reject the administrator's correct password.
-    if (globalBlockedUntil > now) {
-      return { ok: false, blocked: true, retryAfter: Math.ceil((globalBlockedUntil - now) / 1000) };
-    }
     const failure = hasStableClientKey
       ? recordLoginFailure(ip, {
           now,

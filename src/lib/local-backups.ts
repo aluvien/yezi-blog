@@ -1,3 +1,4 @@
+import { acquireProcessLock, releaseProcessLock, isProcessLockBusy } from "../../scripts/process-lock.mjs";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -47,7 +48,7 @@ export function listLocalBackups(): LocalBackupList {
     }
   }
   files.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.name.localeCompare(a.name));
-  return { files, count: files.length, totalBytes: files.reduce((total, file) => total + file.sizeBytes, 0), busy: status?.status === "running" || isCloudBusy() || fs.existsSync(restoreJournal()) || dailyLocks().some(file => fs.existsSync(file)) };
+  return { files, count: files.length, totalBytes: files.reduce((total, file) => total + file.sizeBytes, 0), busy: status?.status === "running" || isCloudBusy() || fs.existsSync(restoreJournal()) || dailyLocks().some(file => isProcessLockBusy(file)) };
 }
 export function openLocalBackupDownload(kind: string, name: string): { fd: number; size: number; name: string; type: string } {
   const catalog = catalogFor(kind, name);
@@ -71,13 +72,13 @@ export function deleteLocalBackup(kind: string, name: string): void {
   try {
     if (fs.existsSync(restoreJournal())) throw new LocalBackupError("恢复保护尚未结束，请完成恢复后再删除。", 409);
     withAdminBackupMaintenanceLock(() => {
-      const held: Array<{ path: string; fd: number }> = [];
+      const held: Array<ReturnType<typeof acquireProcessLock>> = [];
       try {
         // Acquire the same locks as the daily producer, in its data -> database order.
         for (const lock of dailyLocks()) {
           if (!fs.existsSync(path.dirname(lock))) continue;
-          try { held.push({ path: lock, fd: fs.openSync(lock, "wx", 0o600) }); }
-          catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new LocalBackupError("自动备份任务正在执行，请稍后再删除。", 409); throw error; }
+          try { held.push(acquireProcessLock(lock, "自动备份任务正在执行，请稍后再删除。")); }
+          catch (error) { if (error instanceof Error && error.message === "自动备份任务正在执行，请稍后再删除。") throw new LocalBackupError(error.message, 409); throw error; }
         }
         const file = path.join(catalog.directory, name);
         if (!regularFile(file)) throw new LocalBackupError("本地备份不存在，请刷新列表。", 404);
@@ -86,7 +87,7 @@ export function deleteLocalBackup(kind: string, name: string): void {
         if (kind === "restore" && previousCloudTask?.safetyBackup === name) {
           previousCloudTask.safetyBackup = undefined; writeCloudTask(previousCloudTask);
         }
-      } finally { for (const lock of held.reverse()) { fs.closeSync(lock.fd); fs.rmSync(lock.path, { force: true }); } }
+      } finally { for (const lock of held.reverse()) releaseProcessLock(lock); }
     });
   } catch (error) {
     if (error instanceof Error && error.message === "本地备份任务正在执行，请稍后再删除。") throw new LocalBackupError(error.message, 409);

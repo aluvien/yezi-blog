@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import test from "node:test";
 import { deployInPlace, runDeploymentCommand, retainPreviousStaticAssets } from "../scripts/deploy-in-place.mjs";
@@ -144,6 +144,17 @@ if(args[1]==="backup") {
 }
 
 function deploy(env) { return deployInPlace({ env, healthAttempts: 40, healthInterval: 25, npmCommand: path.join(path.dirname(env.DEPLOY_PM2_BIN), "npm") }); }
+
+test("a deployment lock left by an exited process permits a verified new deployment", async t => {
+  const f = await fixture(t);
+  const lock = path.join(f.root, "data", ".deploy.lock");
+  const owner = spawnSync(process.execPath, ["--input-type=module", "-e",
+    `import { acquireProcessLock } from ${JSON.stringify(new URL("../scripts/process-lock.mjs", import.meta.url).href)}; acquireProcessLock(process.argv[1]);`, lock], { encoding: "utf8" });
+  assert.equal(owner.status, 0, owner.stderr);
+  await deploy(f.env);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "data", "deploy-status.json"))).status, "success");
+  assert.equal(fs.existsSync(lock), false);
+});
 
 test("terminal update fast-forwards main, rebuilds in place and restarts the existing standalone PM2 process", async (t) => {
   const f = await fixture(t);

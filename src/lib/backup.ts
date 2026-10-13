@@ -1,3 +1,4 @@
+import { acquireProcessLock, releaseProcessLock } from "../../scripts/process-lock.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -39,12 +40,7 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string; bac
   fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(backupDir, 0o700);
   const lockPath = path.join(backupDir, ".backup.lock");
-  let lockFd: number;
-  try {
-    lockFd = fs.openSync(lockPath, "wx", 0o600);
-  } catch {
-    throw new Error("已有备份任务正在执行");
-  }
+  const lock = acquireProcessLock(lockPath, "已有备份任务正在执行");
   const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "");
   const suffix = crypto.randomBytes(4).toString("hex");
   const target = path.join(backupDir, `blog-${stamp}-${suffix}.db`);
@@ -68,8 +64,7 @@ export async function runDbBackup(options: { keep?: number; dbPath?: string; bac
     throw error;
   } finally {
     db?.close();
-    fs.closeSync(lockFd!);
-    fs.rmSync(lockPath, { force: true });
+    releaseProcessLock(lock);
   }
 
   const parsedKeep = Number.parseInt(String(options.keep ?? process.env.BACKUP_KEEP ?? ""), 10);

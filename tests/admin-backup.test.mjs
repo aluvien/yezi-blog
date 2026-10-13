@@ -36,6 +36,8 @@ function fixtures() {
   fs.mkdirSync(path.join(root, "data", "uploads"), { recursive: true });
   fs.mkdirSync(path.join(root, "data", "reference-archives"), { recursive: true });
   fs.mkdirSync(path.join(root, "data", "qq-music-audio"), { recursive: true });
+  fs.mkdirSync(path.join(root, "data", "npm-cache", "_cacache"), { recursive: true });
+  fs.writeFileSync(path.join(root, "data", "npm-cache", "_cacache", "package"), "regenerable dependencies");
   fs.writeFileSync(path.join(root, "data", "uploads", "photo.png"), "image-original");
   fs.writeFileSync(path.join(root, "data", "reference-archives", "reader.md"), "reference");
   fs.writeFileSync(path.join(root, "data", "qq-music-audio", "song.m4a"), "cache");
@@ -86,6 +88,8 @@ test("one-click backup is recoverable with committed WAL rows, files and actual 
   assert.equal(env.includes("must-not-export"), false);
   assert.equal(fs.existsSync(path.join(restored, "data", "backups")), false);
   assert.equal(fs.existsSync(path.join(restored, "data", "qq-music-audio")), false);
+  assert.equal(fs.existsSync(path.join(restored, "data", "npm-cache")), false);
+  assert.equal(fs.readFileSync(path.join(root, "data", "npm-cache", "_cacache", "package"), "utf8"), "regenerable dependencies");
   assert.equal(fs.existsSync(path.join(restored, "data", "upload.tmp")), false);
   const manifest = JSON.parse(fs.readFileSync(path.join(restored, "manifest.json"), "utf8"));
   assert.ok(manifest.files.some((entry) => entry.path === "config/project/ecosystem.config.js"));

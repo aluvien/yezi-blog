@@ -21,6 +21,7 @@ import {
 import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
 import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
 import { generateTitleSlug } from "@/lib/slug-translation";
+import { currentDataEpoch, dataWriteRejection } from "@/lib/cloud-restore-guard";
 import type { ActionResult, PostInput } from "@/lib/actions/posts";
 
 /**
@@ -77,11 +78,16 @@ function writeError(error: unknown): ActionResult {
 }
 
 export async function createPostEntry(data: PostInput): Promise<ActionResult> {
+  const epoch = currentDataEpoch();
+  const held = dataWriteRejection(epoch);
+  if (held) return { ok: false, error: held };
   const validationError = validatePostInput(data);
   if (validationError) return { ok: false, error: validationError };
   const referenceSnapshots = data.referenceSnapshots ?? [];
   const content = normalizeMediaShortcodes(compactArticleReferenceMarkers(data.content, referenceSnapshots));
   const generatedSlug = data.slug.trim() || (await generateTitleSlug(data.title))?.slug;
+  const restored = dataWriteRejection(epoch);
+  if (restored) return { ok: false, error: restored };
   let createdPost: ReturnType<typeof getPost>;
   try {
     db.transaction(() => {
@@ -113,6 +119,9 @@ export async function createPostEntry(data: PostInput): Promise<ActionResult> {
 }
 
 export async function updatePostEntry(id: number, data: PostInput): Promise<ActionResult> {
+  const epoch = currentDataEpoch();
+  const held = dataWriteRejection(epoch);
+  if (held) return { ok: false, error: held };
   if (!Number.isInteger(id) || id < 1) return { ok: false, error: "文章不存在" };
   const existing = getPost(id);
   if (!existing) return { ok: false, error: "文章不存在" };
@@ -121,6 +130,8 @@ export async function updatePostEntry(id: number, data: PostInput): Promise<Acti
   const referenceSnapshots = data.referenceSnapshots ?? [];
   const content = normalizeMediaShortcodes(compactArticleReferenceMarkers(data.content, referenceSnapshots));
   const generatedSlug = data.slug.trim() || (await generateTitleSlug(data.title))?.slug;
+  const restored = dataWriteRejection(epoch);
+  if (restored) return { ok: false, error: restored };
   let updatedSlug = existing.slug;
   let updatedPost: ReturnType<typeof getPost>;
   try {
