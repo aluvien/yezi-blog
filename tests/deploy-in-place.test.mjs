@@ -145,6 +145,15 @@ if(args[1]==="backup") {
 
 function deploy(env) { return deployInPlace({ env, healthAttempts: 40, healthInterval: 25, npmCommand: path.join(path.dirname(env.DEPLOY_PM2_BIN), "npm") }); }
 
+test("an abandoned legacy deployment lock permits a verified new deployment", async t => {
+  const f = await fixture(t);
+  const lock = path.join(f.root, "data", ".deploy.lock");
+  fs.writeFileSync(lock, ""); fs.utimesSync(lock, new Date(0), new Date(0));
+  await deploy(f.env);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, "data", "deploy-status.json"))).status, "success");
+  assert.equal(fs.existsSync(lock), false);
+});
+
 test("terminal update fast-forwards main, rebuilds in place and restarts the existing standalone PM2 process", async (t) => {
   const f = await fixture(t);
   const imageCache = path.join(f.root, ".next", "standalone", ".next", "cache", "images", "cached-variant");

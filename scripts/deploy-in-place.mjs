@@ -1,3 +1,4 @@
+import { acquireProcessLock, releaseProcessLock, isProcessLockBusy } from "./process-lock.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
@@ -165,7 +166,7 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
     const data = path.join(path.resolve(env.BLOG_ROOT || project), "data");
     // A bootstrap failure must not leave a queued dashboard task forever, or
     // overwrite the status of a worker that already holds the shared lock.
-    if (!fs.existsSync(path.join(data, ".deploy.lock"))) {
+    if (!isProcessLockBusy(path.join(data, ".deploy.lock"))) {
       fs.mkdirSync(data, { recursive: true, mode: 0o700 });
       const status = path.resolve(env.DEPLOY_STATUS_FILE || path.join(data, "deploy-status.json"));
       fs.mkdirSync(path.dirname(status), { recursive: true, mode: 0o700 });
@@ -203,7 +204,7 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
   const startedAt = commandEnv.DEPLOY_STARTED_AT || new Date().toISOString();
   const guard = path.join(data, `.deploy-write-hold-${process.pid}`);
   const moved = [];
-  let lockFd, stopped = false, started = false, activated = false, recovered = false;
+  let lockHandle, stopped = false, started = false, activated = false, recovered = false;
   let snapshot, previousCommit, originalMarker;
   const writeStatus = (status, extra = {}) => {
     fs.mkdirSync(path.dirname(statusFile), { recursive: true, mode: 0o700 });
@@ -221,11 +222,7 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
   try {
     await waitForOrphan(commandEnv);
     fs.mkdirSync(data, { recursive: true, mode: 0o700 });
-    try { lockFd = fs.openSync(lock, "wx", 0o600); }
-    catch (error) {
-      if (error.code === "EEXIST") throw new Error("已有一次部署正在执行");
-      throw error;
-    }
+    lockHandle = acquireProcessLock(lock, "已有一次部署正在执行");
     validateEnvironment(fileEnvironment);
     fs.mkdirSync(npmCache, { recursive: true, mode: 0o700 });
     fs.chmodSync(npmCache, 0o700);
@@ -370,10 +367,10 @@ export async function deployInPlace({ env = process.env, healthAttempts = 80, he
         detail += `；恢复失败：${rollbackError.message}；备份保留在 ${backup}`;
       }
     }
-    if (lockFd !== undefined) writeStatus(activated ? "success" : "failed", { error: detail });
+    if (lockHandle) writeStatus(activated ? "success" : "failed", { error: detail });
     throw new Error(detail);
   } finally {
-    if (lockFd !== undefined) { fs.closeSync(lockFd); fs.rmSync(lock, { force: true }); }
+    releaseProcessLock(lockHandle);
     if (recovered || !stopped) {
       fs.rmSync(guard, { force: true });
       fs.rmSync(workspace, { recursive: true, force: true });

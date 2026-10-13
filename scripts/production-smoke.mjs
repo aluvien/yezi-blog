@@ -1,5 +1,6 @@
 import { once } from "node:events";
 import sharp from "sharp";
+import Database from "better-sqlite3";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -119,8 +120,7 @@ try {
     throw new Error("standalone 搜索接口返回格式异常");
   }
 
-  // 分布式失败触发账户级保护后，正确密码仍必须能登录；否则任何访客都能把
-  // 管理员锁在门外。每次使用不同可信代理 IP，避免先触发单 IP 保护。
+  // Account protection must stop password verification even from fresh IPs.
   for (let index = 0; index < 25; index += 1) {
     await fetch(`${baseUrl}/api/admin/login`, {
       method: "POST",
@@ -133,7 +133,11 @@ try {
     headers: { "content-type": "application/json", origin: baseUrl, "x-real-ip": "198.51.100.201" },
     body: JSON.stringify({ password: "production-smoke-password" }),
   });
-  if (!validLogin.ok) throw new Error("全局登录保护错误地拒绝了正确密码");
+  if (validLogin.status !== 429 || validLogin.headers.has("set-cookie")) throw new Error("全局登录保护未拦截锁定期内的新来源");
+  // Expire only this isolated smoke database's counters to verify recovery.
+  const smokeDatabase = new Database(path.join(smokeRoot, "data", "blog.db"));
+  try { smokeDatabase.prepare("UPDATE login_attempts SET first_failed_at = ?, blocked_until = ?").run(Date.now() - 16 * 60_000, Date.now() - 1); }
+  finally { smokeDatabase.close(); }
 
   for (let index = 0; index < 5; index += 1) {
     await fetch(`${baseUrl}/api/admin/login`, {

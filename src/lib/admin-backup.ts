@@ -182,7 +182,7 @@ async function listFiles(root: string, directory = root): Promise<FileEntry[]> {
 async function copyData(source: string, target: string, dataRoot: string, ancestors: string[] = [], excluded: string[] = []): Promise<void> {
   const relative = path.relative(dataRoot, source);
   if (excluded.includes(path.resolve(source))) return;
-  if (relative && (["backups", "qq-music-audio"].includes(relative.split(path.sep)[0]) || /\.tmp$/.test(relative) || excluded.includes(path.resolve(source)) || /(?:^|\/)blog\.db(?:-wal|-shm)?$/.test(relative))) return;
+  if (relative && (["backups", "qq-music-audio", "npm-cache"].includes(relative.split(path.sep)[0]) || /\.tmp$/.test(relative) || excluded.includes(path.resolve(source)) || /(?:^|\/)blog\.db(?:-wal|-shm)?$/.test(relative))) return;
   const real = await fs.promises.realpath(source);
   if (real !== dataRoot && !real.startsWith(`${dataRoot}${path.sep}`)) throw new Error("数据软链接指向备份范围外");
   const stat = await fs.promises.stat(source);
@@ -303,7 +303,7 @@ export async function executeAdminBackup(id: string, onProgress?: (phase: AdminB
       schemaVersion: snapshot.verification.schemaVersion,
       locations: { BLOG_ROOT: stateRoot, BLOG_DB_PATH: dbPath, QQ_MUSIC_SESSION_PATH: sessionPath, TELEGRAM_STATE_PATH: telegramPath },
       configuration,
-      excludes: ["data/backups", "data/qq-music-audio", "SQLite WAL/SHM", "*.tmp", "node_modules", ".next"],
+      excludes: ["data/backups", "data/qq-music-audio", "data/npm-cache", "SQLite WAL/SHM", "*.tmp", "node_modules", ".next"],
       files: await listFiles(stage),
     };
     await fs.promises.writeFile(path.join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });

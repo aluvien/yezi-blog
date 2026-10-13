@@ -113,6 +113,8 @@ test("encrypted complete backup contains persistent data and only the online SQL
   // 音频降级缓存是可再生的派生数据，必须排除在完整备份之外。
   fs.mkdirSync(path.join(tempRoot, "data", "qq-music-audio"), { recursive: true });
   fs.writeFileSync(path.join(tempRoot, "data", "qq-music-audio", "CacheMid01.m4a"), "audio");
+  fs.mkdirSync(path.join(tempRoot, "data", "npm-cache", "_cacache"), { recursive: true });
+  fs.writeFileSync(path.join(tempRoot, "data", "npm-cache", "_cacache", "package"), "dependencies");
   process.env.DATA_BACKUP_KEY = Buffer.alloc(32, 7).toString("base64");
   process.env.DATA_BACKUP_MIRROR_DIR = mirrorRoot;
 
@@ -129,4 +131,22 @@ test("encrypted complete backup contains persistent data and only the online SQL
   ]);
   assert.equal(checked.entries.some((name) => /blog\.db-(?:wal|shm)$/.test(name)), false);
   assert.equal(checked.entries.some((name) => name.startsWith("data/qq-music-audio/")), false);
+});
+
+test("automatic and manual producers recover abandoned legacy locks", async () => {
+  const backupDir = path.join(tempRoot, "data", "backups");
+  const abandoned = name => {
+    const file = path.join(backupDir, name);
+    fs.writeFileSync(file, ""); fs.utimesSync(file, new Date(0), new Date(0));
+  };
+  abandoned(".backup.lock");
+  assert.ok((await runDbBackup()).verification.sizeBytes > 0);
+  abandoned(".data-backup.lock"); abandoned(".backup.lock");
+  assert.ok(fs.existsSync((await runCompleteDataBackup()).path));
+  abandoned(".backup.lock");
+  const manual = spawnSync(process.execPath, ["--experimental-strip-types", path.join(projectRoot, "scripts", "backup.mts")], {
+    cwd: tempRoot, env: { ...process.env, BLOG_BACKUP_DIR: backupDir }, encoding: "utf8",
+  });
+  assert.equal(manual.status, 0, manual.stderr);
+  assert.ok(!fs.existsSync(path.join(backupDir, ".backup.lock")));
 });

@@ -1,3 +1,4 @@
+import { acquireProcessLock, releaseProcessLock } from "./process-lock.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -20,13 +21,7 @@ const backupDir = path.resolve(process.env.BLOG_BACKUP_DIR?.trim() || path.join(
 fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
 fs.chmodSync(backupDir, 0o700);
 const lockPath = path.join(backupDir, ".backup.lock");
-let lockFd: number;
-try {
-  lockFd = fs.openSync(lockPath, "wx", 0o600);
-} catch {
-  console.error("已有备份任务正在执行");
-  process.exit(1);
-}
+const lock = acquireProcessLock(lockPath, "已有备份任务正在执行");
 const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "");
 const target = path.join(backupDir, `blog-${stamp}-${crypto.randomBytes(4).toString("hex")}.db`);
 const temporary = `${target}.${process.pid}.tmp`;
@@ -44,8 +39,7 @@ try {
   throw error;
 } finally {
   db?.close();
-  fs.closeSync(lockFd!);
-  fs.rmSync(lockPath, { force: true });
+  releaseProcessLock(lock);
 }
 
 // 保留最近 BACKUP_KEEP 份（默认 30），超出按修改时间倒序清理。

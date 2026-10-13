@@ -1,3 +1,4 @@
+import { acquireProcessLock, releaseProcessLock } from "../../scripts/process-lock.mjs";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -51,7 +52,7 @@ async function copyPersistentData(dataRoot: string, stagingData: string): Promis
       if (first === "backups") return false;
       // QQ 音频降级缓存是可再生的派生数据（授权正常时会重新预热），且可能达到
       // GB 级、压缩率极低。放进完整备份会让每次备份体积和耗时都失控，因此排除。
-      if (first === "qq-music-audio") return false;
+      if (first === "qq-music-audio" || first === "npm-cache") return false;
       if (/^blog\.db(?:-wal|-shm)?$/.test(relative)) return false;
       if (/\.tmp$/.test(relative)) return false;
       return true;
@@ -102,15 +103,11 @@ export async function runCompleteDataBackup(options: { keep?: number } = {}): Pr
   const backupRoot = path.join(dataRoot, "backups");
   fs.mkdirSync(backupRoot, { recursive: true, mode: 0o700 });
   const lockPath = path.join(backupRoot, ".data-backup.lock");
-  let lockFd: number;
-  try {
-    lockFd = fs.openSync(lockPath, "wx", 0o600);
-  } catch {
-    throw new Error("已有完整数据备份正在执行");
-  }
+  const lock = acquireProcessLock(lockPath, "已有完整数据备份正在执行");
 
-  const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-data-backup-"));
+  let stagingRoot: string | undefined;
   try {
+    stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-data-backup-"));
     const database = await runDbBackup();
     const stagingData = path.join(stagingRoot, "data");
     await copyPersistentData(dataRoot, stagingData);
@@ -121,7 +118,7 @@ export async function runCompleteDataBackup(options: { keep?: number } = {}): Pr
       format: 1,
       createdAt: new Date().toISOString(),
       database: { file: "data/blog.db", schemaVersion: database.verification.schemaVersion },
-      excludes: ["data/blog.db-wal", "data/blog.db-shm", "data/backups", "*.tmp"],
+      excludes: ["data/blog.db-wal", "data/blog.db-shm", "data/backups", "data/qq-music-audio", "data/npm-cache", "*.tmp"],
     };
     fs.writeFileSync(path.join(stagingRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
 
@@ -147,9 +144,8 @@ export async function runCompleteDataBackup(options: { keep?: number } = {}): Pr
     if (mirror) cleaned.push(...applyRetention(mirror, keep).map((item) => `mirror:${item}`));
     return { path: destination, mirroredPath, databaseSnapshot: database.path, cleaned };
   } finally {
-    fs.rmSync(stagingRoot, { recursive: true, force: true });
-    fs.closeSync(lockFd!);
-    fs.rmSync(lockPath, { force: true });
+    try { if (stagingRoot) fs.rmSync(stagingRoot, { recursive: true, force: true }); }
+    finally { releaseProcessLock(lock); }
   }
 }
 
