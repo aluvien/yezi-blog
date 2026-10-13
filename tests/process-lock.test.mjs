@@ -41,9 +41,29 @@ test("killed owners are recovered and stale releases cannot remove their success
 });
 test("legacy locks remain held while their descriptor is open, and recover after death", async t => {
   const file = lockPath(t); const child = await childOwner(file, true);
+  // Limit the process inventory to this fixture. Shared Linux runners can have
+  // unrelated same-UID processes with unreadable descriptors, which correctly
+  // make the production scanner refuse reclamation instead of guessing.
+  if (process.platform === "linux") {
+    const readdir = fs.readdirSync;
+    t.mock.method(fs, "readdirSync", (directory, ...args) => directory === "/proc"
+      ? [String(process.pid), String(child.pid)] : readdir(directory, ...args));
+  }
   try { assert.equal(isProcessLockBusy(file), true); } finally { await kill(child); }
   const next = acquireProcessLock(file); releaseProcessLock(next);
   assert.equal(fs.existsSync(file), false);
+});
+test("legacy recovery fails closed when a possible owner's descriptors cannot be inspected", { skip: process.platform !== "linux" }, t => {
+  const file = lockPath(t); fs.writeFileSync(file, ""); fs.utimesSync(file, new Date(0), new Date(0));
+  const readdir = fs.readdirSync;
+  t.mock.method(fs, "readdirSync", (directory, ...args) => {
+    if (directory === "/proc") return [String(process.pid)];
+    if (directory === `/proc/${process.pid}/fd`) throw Object.assign(new Error("denied"), { code: "EACCES" });
+    return readdir(directory, ...args);
+  });
+  assert.equal(isProcessLockBusy(file), true);
+  assert.throws(() => acquireProcessLock(file), /已有任务/);
+  assert.equal(fs.existsSync(file), true);
 });
 test("fresh legacy files are protected while their owner is initializing", t => {
   const file = lockPath(t); fs.writeFileSync(file, "");

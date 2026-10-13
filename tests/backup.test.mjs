@@ -133,11 +133,13 @@ test("encrypted complete backup contains persistent data and only the online SQL
   assert.equal(checked.entries.some((name) => name.startsWith("data/qq-music-audio/")), false);
 });
 
-test("automatic and manual producers recover abandoned legacy locks", async () => {
+test("automatic and manual producers recover locks left by exited processes", async () => {
   const backupDir = path.join(tempRoot, "data", "backups");
   const abandoned = name => {
     const file = path.join(backupDir, name);
-    fs.writeFileSync(file, ""); fs.utimesSync(file, new Date(0), new Date(0));
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+      `import { acquireProcessLock } from ${JSON.stringify(new URL("../scripts/process-lock.mjs", import.meta.url).href)}; acquireProcessLock(process.argv[1]);`, file], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
   };
   abandoned(".backup.lock");
   assert.ok((await runDbBackup()).verification.sizeBytes > 0);
