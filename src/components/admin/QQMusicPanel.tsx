@@ -6,11 +6,12 @@ type Status = {
   available: boolean;
   loggedIn: boolean;
   playable: boolean;
-  healthStatus: "healthy" | "missing_session" | "expired" | "unavailable" | "unverified";
+  healthStatus: "healthy" | "missing_session" | "expired" | "unavailable" | "unverified" | "playback_unavailable";
   label: string;
   detail: string;
   checkedAt: string;
   uin: string | null;
+  loginExpiresAt: string | null;
 };
 type LoginSource = { label: string; website: string };
 type Qr = {
@@ -48,6 +49,13 @@ function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0 MB";
   const megabytes = value / (1024 * 1024);
   return megabytes >= 1024 ? `${(megabytes / 1024).toFixed(2)} GB` : `${megabytes.toFixed(1)} MB`;
+}
+
+function formatLoginExpiry(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(new Date(value));
 }
 
 type Props = {
@@ -184,7 +192,7 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
       }
       pollingRef.current = true;
       try {
-        const result = await api<{ state?: string; uin?: string; message?: string }>("/api/admin/qq-music", {
+        const result = await api<{ state?: string; uin?: string; message?: string; loginExpiresAt?: string | null }>("/api/admin/qq-music", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(qr.channel === "qq"
@@ -201,6 +209,7 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
             detail: "登录 Cookie 已保存，正在验证播放授权",
             checkedAt: new Date().toISOString(),
             uin: result.uin ?? null,
+            loginExpiresAt: result.loginExpiresAt ?? null,
           });
           setMessage(`${qr.channel === "qqmusic" ? "QQ 音乐 App" : "QQ"} 扫码登录成功，会员权限已仅保存在服务器。`);
           setQr(null);
@@ -283,13 +292,24 @@ export default function QQMusicPanel({ defaultMusic, onDefaultMusicChange }: Pro
         <div>
           <p className="text-sm font-medium text-neutral-800">QQ 音乐账号</p>
           <p className="mt-1 text-xs leading-5 text-neutral-500">
-            扫码后的 Cookie 仅保存在服务器受保护的会话文件中，不会存入网站数据库或下发给访客。
+            登录凭据仅保存在服务器，定时检测时自动尝试续期。上游拒绝续期时仍需重新扫码，推荐使用 QQ 音乐 App 扫码。
           </p>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-xs ${status?.playable ? "bg-emerald-100 text-emerald-700" : status?.healthStatus === "missing_session" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
+        <span className={`rounded-full px-2.5 py-1 text-xs ${status?.healthStatus === "healthy" ? "bg-emerald-100 text-emerald-700" : status?.healthStatus === "expired" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
           {statusBusy && status === null ? "检查中…" : status ? `${status.label}${status.uin ? ` · ${status.uin}` : ""}` : "检测失败"}
         </span>
       </div>
+
+      {status?.uin && (
+        <div className="mt-3 text-xs leading-5 text-neutral-500">
+          <p>
+            登录预计失效时间：{status.loginExpiresAt
+              ? <><time dateTime={status.loginExpiresAt}>{formatLoginExpiry(status.loginExpiresAt)}</time>（北京时间）</>
+              : "无法确定（上游未提供有效期）"}
+          </p>
+          {status.loginExpiresAt && <p className="text-neutral-400">续期成功后会更新；实际登录状态以检测结果为准。</p>}
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" disabled={busy} onClick={() => void openQr("qq")} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">

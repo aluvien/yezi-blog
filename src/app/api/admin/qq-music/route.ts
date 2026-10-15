@@ -17,6 +17,7 @@ import {
   validateNativeQQMusicRuntime,
 } from "@/lib/qq-music-native-login";
 import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
+import { qqMusicSessionExpiresAt } from "@/lib/qq-music-credential";
 import { inspectQQMusicHealth, qqMusicHealthStatusLabel } from "@/lib/qq-music-health";
 import { cleanupUnusedQQMusicCache, upsertQQMusicMetadata } from "@/lib/db";
 import { listReferencedQQMusicPlaylistIds, listReferencedQQMusicSongIds } from "@/lib/qq-music-access";
@@ -64,13 +65,14 @@ async function status() {
   const health = await inspectQQMusicHealth();
   return {
     available: health.status !== "unavailable",
-    loggedIn: Boolean(session),
-    playable: health.status === "healthy",
+    loggedIn: health.authenticated ?? Boolean(session),
+    playable: health.playable,
     healthStatus: health.status,
     label: qqMusicHealthStatusLabel(health.status),
     detail: health.detail,
     checkedAt: health.checkedAt,
     uin: session?.uin ?? null,
+    loginExpiresAt: qqMusicSessionExpiresAt(session),
   };
 }
 
@@ -186,8 +188,8 @@ export async function POST(request: Request) {
     try {
       const result = await pollNativeQQMusicQr(key);
       if (result.state === "success" && result.cookie && result.uin) {
-        saveQQMusicSession({ cookie: result.cookie, uin: result.uin }, epoch);
-        return noCache({ state: "success", uin: result.uin, message: result.message, source: result.source });
+        saveQQMusicSession({ cookie: result.cookie, uin: result.uin, nativeAuth: result.nativeAuth }, epoch);
+        return noCache({ state: "success", uin: result.uin, message: result.message, source: result.source, loginExpiresAt: qqMusicSessionExpiresAt(getQQMusicSession()) });
       }
       return noCache(result);
     } catch (error) {
@@ -210,7 +212,7 @@ export async function POST(request: Request) {
       // account cookie in the blog's protected data directory and pass it only
       // over the localhost request header on subsequent API calls.
       saveQQMusicSession({ cookie, uin }, epoch);
-      return noCache({ state: "success", uin });
+      return noCache({ state: "success", uin, loginExpiresAt: null });
     }
     const message = findString(raw, ["message", "msg", "error", "status"]);
     return noCache({ state: "pending", message: message || "请使用手机 QQ 扫码并确认登录", source: QQ_LOGIN_SOURCE });

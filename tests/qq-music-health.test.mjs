@@ -9,4 +9,5 @@ test("QQ Music health requires attention whenever playback was not verified", ()
   assert.equal(qqMusicHealthNeedsAttention("expired"), true);
   assert.equal(qqMusicHealthNeedsAttention("unavailable"), true);
   assert.equal(qqMusicHealthNeedsAttention("unverified"), true);
+  assert.equal(qqMusicHealthNeedsAttention("playback_unavailable"), true);
 });

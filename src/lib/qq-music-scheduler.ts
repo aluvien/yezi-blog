@@ -1,6 +1,7 @@
 import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import { getSiteSettings } from "@/lib/db";
 import { checkAndNotifyQQMusicHealth } from "@/lib/qq-music-health";
+import { maintainQQMusicSession } from "@/lib/qq-music-credential";
 
 export const QQ_MUSIC_HEALTH_INTERVALS = [1, 6, 12, 24] as const;
 
@@ -52,6 +53,7 @@ async function runScheduledCheck(): Promise<void> {
 
   current.running = true;
   try {
+    await maintainQQMusicSession();
     await checkAndNotifyQQMusicHealth();
   } catch (error) {
     // The health-check function normally turns upstream failures into a result.

@@ -1,4 +1,5 @@
 import { getQQMusicSession } from "@/lib/qq-music-session";
+import { nativeQQMusicPlay } from "@/lib/qq-music-native-login";
 
 /**
  * QQ Music sidecar adapter.
@@ -40,6 +41,9 @@ export async function qqMusicRequest(pathname: string, options: {
   signal?: AbortSignal;
 } = {}): Promise<unknown> {
   const session = options.useSession === false ? null : getQQMusicSession();
+  if (pathname === "/getMusicPlay" && session?.nativeAuth && options.query?.songmid) {
+    return { data: await nativeQQMusicPlay(session.nativeAuth, options.query.songmid, options.query.quality, options.signal) };
+  }
   const response = await fetch(apiUrl(pathname, options.query), {
     method: options.method ?? "GET",
     headers: {
