@@ -46,17 +46,18 @@ test("moment drafts restore text and metadata on mobile", async ({ page }) => {
 });
 test("attachment recycle bin restores a deleted upload at its original URL", async ({ page }) => {
   await login(page);
-  const response = await page.request.post("/api/admin/upload", { multipart: {file:{name:"recoverable.txt",mimeType:"text/plain",buffer:Buffer.from("Recoverable attachment")}} });
+  const fileName = `recoverable-${Date.now()}.txt`;
+  const response = await page.request.post("/api/admin/upload", { multipart: {file:{name:fileName,mimeType:"text/plain",buffer:Buffer.from("Recoverable attachment")}} });
   expect(response.ok()).toBe(true);
   const uploaded = await response.json();
   await page.goto("/admin/attachments");
-  const row = page.locator("li").filter({has:page.getByText("recoverable.txt",{exact:true})});
+  const row = page.locator("li").filter({has:page.getByText(fileName,{exact:true})});
   page.once("dialog", dialog=>dialog.accept());
   await row.getByRole("button",{name:"删除",exact:true}).click();
   const trash = page.getByRole("region",{name:/附件回收站/});
-  await expect(trash.getByText("recoverable.txt",{exact:true})).toBeVisible();
+  await expect(trash.getByText(fileName,{exact:true})).toBeVisible();
   expect((await page.request.get(uploaded.path)).status()).toBe(404);
-  await trash.getByRole("button",{name:"恢复",exact:true}).click();
-  await expect(trash.getByText("recoverable.txt",{exact:true})).toHaveCount(0);
+  await trash.locator("li").filter({ has: page.getByText(uploaded.path, { exact: true }) }).getByRole("button",{name:"恢复",exact:true}).click();
+  await expect(trash.getByText(fileName,{exact:true})).toHaveCount(0);
   expect(await (await page.request.get(uploaded.path)).text()).toBe("Recoverable attachment");
 });
