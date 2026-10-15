@@ -1150,8 +1150,7 @@ body.admin-page .sidebar-actions .icon-button[data-tooltip]::after {
   transition: transform 0.25s ease;
 }
 
-.theme-toggle .icon-moon,
-.theme-toggle .icon-system {
+.theme-toggle .icon-moon {
   display: none;
 }
 
@@ -1163,13 +1162,16 @@ body.admin-page .sidebar-actions .icon-button[data-tooltip]::after {
   display: none;
 }
 
-:root[data-theme-mode="system"] .theme-toggle .icon-system {
-  display: block;
-}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-theme="dark"]) .theme-toggle:hover .icon-moon,
+  :root[data-theme="dark"] .theme-toggle:hover .icon-sun {
+    display: block;
+  }
 
-:root[data-theme-mode="system"] .theme-toggle .icon-moon,
-:root[data-theme-mode="system"] .theme-toggle .icon-sun {
-  display: none;
+  :root:not([data-theme="dark"]) .theme-toggle:hover .icon-sun,
+  :root[data-theme="dark"] .theme-toggle:hover .icon-moon {
+    display: none;
+  }
 }
 
 /* 阅读模式按钮（侧栏） */

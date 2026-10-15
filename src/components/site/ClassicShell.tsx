@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Book, BookOpen, Moon, Rss, Sun } from "lucide-react";
 import { SiteSearch } from "@/components/site/SiteSearch";
 import { CLASSIC_NAV_ITEMS, PUBLIC_ROUTES, getPublicSection, isPublicNavActive, isPublicPostDetailPath } from "@/lib/site-navigation";
@@ -13,9 +13,25 @@ type ClassicShellProps = {
   sidebarIntroHtml?: string;
 };
 
+function subscribeTheme(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => observer.disconnect();
+}
+
+function getThemeSnapshot() {
+  return document.documentElement.dataset.theme === "dark";
+}
+
+function getServerThemeSnapshot() {
+  return false;
+}
+
 /* Classic layout attribution is source-only; see LICENSES/cxro-classic-theme-MIT.txt. */
 export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: ClassicShellProps) {
   const pathname = usePathname();
+  const darkTheme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getServerThemeSnapshot);
+  const themeLabel = darkTheme ? "日间模式" : "夜间模式";
   const isHome = pathname === "/";
   const [readingState, setReadingState] = useState({ path: "", active: false });
   const [urlReading, setUrlReading] = useState(false);
@@ -120,7 +136,7 @@ export function ClassicShell({ children, siteSettings, sidebarIntroHtml = "" }: 
           ) : null}
           {isHome ? <div className="classic-mobile-search"><SiteSearch placeholder="搜索：标题 / 摘要 / 标签" /></div> : null}
           <Link className="icon-button rss-link sidebar-action--rail-hidden" href={PUBLIC_ROUTES.rss} aria-label="RSS 订阅" data-tooltip="RSS 订阅"><Rss className="icon" strokeWidth={2} aria-hidden="true" /></Link>
-          <button id="theme-toggle" className="icon-button theme-toggle" type="button" aria-label="夜间模式" data-tooltip="夜间模式" onClick={toggleTheme}>
+          <button id="theme-toggle" className="icon-button theme-toggle" type="button" aria-label={themeLabel} data-tooltip={themeLabel} onClick={toggleTheme}>
             <Moon className="icon icon-moon" strokeWidth={2} aria-hidden="true" />
             <Sun className="icon icon-sun" strokeWidth={2} aria-hidden="true" />
           </button>
