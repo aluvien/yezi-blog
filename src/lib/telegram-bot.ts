@@ -313,7 +313,7 @@ async function pollPendingQQLogin(state: TelegramBotState, epoch: string): Promi
         return;
       }
       if (result.state !== "success" || !result.cookie || !result.uin) return;
-      saveQQMusicSession({ cookie: result.cookie, uin: result.uin }, epoch);
+      saveQQMusicSession({ cookie: result.cookie, uin: result.uin, nativeAuth: result.nativeAuth }, epoch);
       delete state.pendingQQLogin;
       await sendTelegramMessage("✅ QQ 音乐 App 扫码登录成功，Cookie 与播放授权已更新。", { chatId: pending.chatId });
       return;

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { QQ_MUSIC_APP_SOURCE, type ServiceSource, withSource } from "@/lib/service-source";
+import type { QQMusicNativeAuth } from "@/lib/qq-music-session";
 
 const EXPECTED_PACKAGE_VERSION = "3.1.0";
 const PACKAGE_NAME = "@yakult-green-tea/qq-music-api";
@@ -26,12 +27,7 @@ const runtimeRequire = createOpaqueRuntimeRequire();
 
 type NativeCredential = Record<string, unknown>;
 
-type NativeAuthSession = {
-  token: string;
-  credential: NativeCredential;
-  device: Record<string, unknown>;
-  expiresAt: number;
-};
+type NativeAuthSession = QQMusicNativeAuth;
 
 type NativeQrCheck = {
   code: 800 | 801 | 802 | 803;
@@ -46,6 +42,7 @@ type NativeQrService = {
   createQr(key: string): Promise<string>;
   checkQr(key: string): Promise<NativeQrCheck>;
   cancelSession(key: string): void;
+  getMusicPlay(token: string, songmid: string, quality?: string): Promise<Record<string, unknown> | null>;
   configureAuthSessionRepository(repository: {
     readonly kind: string;
     load(): unknown;
@@ -54,6 +51,7 @@ type NativeQrService = {
 };
 
 type NativeQrCoreModule = {
+  buildAndroidComm(device: Record<string, unknown>, credential: NativeCredential): Record<string, unknown>;
   createQrLoginService(dependencies: {
     http: unknown;
     createSessionHttp(): unknown;
@@ -85,6 +83,7 @@ export type NativeQQMusicPollResult = {
   source: ServiceSource;
   cookie?: string;
   uin?: string;
+  nativeAuth?: QQMusicNativeAuth;
   retryAfterMs?: number;
   upstreamCode?: number;
 };
@@ -133,8 +132,7 @@ export function resolveNativeQQMusicPackageJsonPath(): string {
   return resolved;
 }
 
-function nativeService(): NativeQrService {
-  if (service) return service;
+function createNativeService(http?: unknown): NativeQrService {
   const packageJsonPath = resolveNativeQQMusicPackageJsonPath();
   const packageRoot = path.dirname(packageJsonPath);
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
@@ -155,13 +153,18 @@ function nativeService(): NativeQrService {
   const deviceContext = Reflect.apply(runtimeRequire, undefined, [path.join(authDirectory, "deviceContext.js")]) as NativeDeviceContextModule;
   const crypto = runtimeRequire("node:crypto") as typeof import("node:crypto");
   const webSocket = runtimeRequire("ws") as unknown;
-  const created = core.createQrLoginService({
-    http: httpClient.default(),
+  return core.createQrLoginService({
+    http: http ?? httpClient.default(),
     createSessionHttp: httpClient.default,
     deviceRepository: deviceContext.createFileDeviceContextRepository(resolveNativeQQMusicDevicePath()),
     listen: core.createMqttListen(webSocket),
     randomBytes: crypto.randomBytes,
   });
+}
+
+function nativeService(): NativeQrService {
+  if (service) return service;
+  const created = createNativeService();
   created.configureAuthSessionRepository({
     kind: "yezi-capture",
     load: () => capturedSessions,
@@ -211,10 +214,37 @@ export function qqMusicCredentialCookie(credential: NativeCredential): { cookie:
   };
 }
 
-function credentialForCheck(checkCookie: string): NativeCredential | null {
+function sessionForCheck(checkCookie: string): NativeAuthSession | null {
   const token = /(?:^|;\s*)qqmusic_session=([^;\s]+)/.exec(checkCookie)?.[1] ?? "";
   if (!token) return null;
-  return capturedSessions.find((session) => session.token === token)?.credential ?? null;
+  return capturedSessions.find((session) => session.token === token) ?? null;
+}
+
+export function nativeQQMusicComm(auth: QQMusicNativeAuth): Record<string, unknown> {
+  const authDirectory = path.join(path.dirname(resolveNativeQQMusicPackageJsonPath()), "dist", "src", "services", "auth");
+  const core = Reflect.apply(runtimeRequire, undefined, [path.join(authDirectory, "qrLogin.js")]) as NativeQrCoreModule;
+  return core.buildAndroidComm(auth.device, auth.credential);
+}
+
+export async function nativeQQMusicPlay(auth: QQMusicNativeAuth, mid: string, quality?: string, signal?: AbortSignal): Promise<unknown> {
+  const restored = createNativeService({
+    post: async (url: string, body: unknown, options: { headers: Record<string, string> }) => {
+      const response = await fetch(url, {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json", ...options.headers },
+        body: JSON.stringify(body),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12_000)]) : AbortSignal.timeout(12_000),
+      });
+      if (!response.ok) throw new Error(`QQ 音乐播放服务错误（${response.status}）`);
+      return { data: await response.json(), status: response.status };
+    },
+  });
+  restored.configureAuthSessionRepository({
+    kind: "yezi-restored",
+    load: () => [{ ...auth, expiresAt: Math.max(auth.expiresAt, Date.now() + 60_000) }],
+    save: () => {},
+  });
+  return restored.getMusicPlay(auth.token, mid, quality);
 }
 
 function validKey(key: string): boolean {
@@ -236,14 +266,15 @@ export async function pollNativeQQMusicQr(key: string): Promise<NativeQQMusicPol
   if (!validKey(key)) throw new Error(withSource("QQ 音乐二维码信息无效", QQ_MUSIC_APP_SOURCE));
   const result = await nativeService().checkQr(key);
   if (result.code === 803 && result.cookie) {
-    const credential = credentialForCheck(result.cookie);
-    const login = credential ? qqMusicCredentialCookie(credential) : null;
+    const nativeAuth = sessionForCheck(result.cookie);
+    const login = nativeAuth ? qqMusicCredentialCookie(nativeAuth.credential) : null;
     if (!login) throw new Error(withSource("QQ 音乐已确认登录，但未返回可保存的账号凭证", QQ_MUSIC_APP_SOURCE));
     return {
       state: "success",
       message: "QQ 音乐 App 扫码登录成功",
       source: QQ_MUSIC_APP_SOURCE,
       ...login,
+      nativeAuth: nativeAuth ?? undefined,
     };
   }
   if (result.code === 802) {

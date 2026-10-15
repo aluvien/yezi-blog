@@ -13,7 +13,7 @@ export default function AdminDashboard() {
   const comments = listCommentsForAdmin(5);
   const metrics = getOverallMetrics();
   const music = getQQMusicHealthAlertState();
-  const labels = { healthy: "上次检测正常", missing_session: "未登录", expired: "登录已失效", unavailable: "服务不可用", unverified: "尚未确认" };
+  const labels = { healthy: "上次检测正常", missing_session: "未登录", expired: "登录已失效", unavailable: "服务不可用", unverified: "尚未确认", playback_unavailable: "已登录 · 播放异常" };
   const stats = [
     { label: "文章", count: countPosts(), href: "/admin/posts", hint: "管理文章与草稿" },
     { label: "絮语", count: countMoments(), href: "/admin/moments", hint: "记录日常的点滴" },
