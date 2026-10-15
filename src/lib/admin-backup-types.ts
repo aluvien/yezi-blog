@@ -9,6 +9,7 @@ export type AdminBackupStatus = {
   sizeBytes?: number;
   fileCount?: number;
   error?: string;
+  warning?: string;
 };
 
 export type LocalBackupKind = "admin" | "database" | "data" | "restore";

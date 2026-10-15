@@ -1,3 +1,5 @@
+import { withDataFilesLock } from "@/lib/data-files-lock";
+import { verifyBackupUploads } from "@/lib/backup-upload-verification";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -48,7 +50,7 @@ const RESTORE_GUIDE = `# 叶子博客完整数据备份
 5. 恢复相应环境文件和 PM2 配置。对照 runtime.env 合并由 PM2 注入的值；迁移机器时必须调整 BLOG_ROOT、BLOG_DB_PATH、BLOG_ENV_FILE、DEPLOY_PROJECT_DIR、PM2_HOME 等绝对路径。不要不加检查地直接 source runtime.env。
 6. 环境文件权限设为 0600，数据目录归网站运行用户所有。构建并按现有方式启动，验证文章、图片、后台登录后再开放访问。
 
-文件复制与数据库快照不是整个文件系统的原子快照。备份期间请避免删除附件或修改配置；可继续浏览网站。
+数据库快照与附件复制期间，附件上传、删除、压缩和数据恢复会排队等待；可继续浏览网站。外部程序直接修改文件或环境配置不受此保护。
 不包含历史备份、临时文件、可再生成的 QQ 音频缓存、依赖和构建产物。服务器 Nginx、证书和系统级 PM2 配置不在应用备份范围内。
 `;
 
@@ -182,6 +184,7 @@ async function listFiles(root: string, directory = root): Promise<FileEntry[]> {
 async function copyData(source: string, target: string, dataRoot: string, ancestors: string[] = [], excluded: string[] = []): Promise<void> {
   const relative = path.relative(dataRoot, source);
   if (excluded.includes(path.resolve(source))) return;
+  if (relative.split(path.sep)[0].startsWith(".data-files.lock")) return;
   if (relative && (["backups", "qq-music-audio", "npm-cache"].includes(relative.split(path.sep)[0]) || /\.tmp$/.test(relative) || excluded.includes(path.resolve(source)) || /(?:^|\/)blog\.db(?:-wal|-shm)?$/.test(relative))) return;
   const real = await fs.promises.realpath(source);
   if (real !== dataRoot && !real.startsWith(`${dataRoot}${path.sep}`)) throw new Error("数据软链接指向备份范围外");
@@ -254,6 +257,7 @@ export async function verifyAdminBackupContents(extractRoot: string): Promise<{ 
   if (JSON.stringify(files) !== JSON.stringify(manifest.files)) throw new Error("备份文件校验失败");
   const verified = verifyDatabaseBackup(path.join(extractRoot, "data", "blog.db"));
   if (verified.schemaVersion !== manifest.schemaVersion || !files.some((file) => file.path === "config/runtime.env")) throw new Error("备份配置校验失败");
+  verifyBackupUploads(path.join(extractRoot, "data"));
   return { files: files.length, schemaVersion: verified.schemaVersion };
 }
 
@@ -266,6 +270,7 @@ export async function executeAdminBackup(id: string, onProgress?: (phase: AdminB
   const stage = path.join(root, `.stage-${id}`);
   const temporary = path.join(root, `${id}.tar.gz.tmp`);
   const destination = path.join(root, `${id}.tar.gz`);
+  let promoted = false;
   let phase: AdminBackupPhase = "database";
   const progress = (next: AdminBackupPhase) => {
     phase = next;
@@ -274,27 +279,31 @@ export async function executeAdminBackup(id: string, onProgress?: (phase: AdminB
   };
   try {
     await fs.promises.mkdir(stage, { mode: 0o700 });
-    const snapshot = await runDbBackup({ backupDir: path.join(stage, ".database") });
-    const stateRoot = getProjectRoot();
-    const dataRoot = await fs.promises.realpath(path.join(stateRoot, "data"));
-    const dbPath = await fs.promises.realpath(path.resolve(process.env.BLOG_DB_PATH?.trim() || path.join(stateRoot, "data", "blog.db")));
-    const snapshotDirectory = await fs.promises.realpath(path.dirname(snapshot.path));
-    progress("files");
-    await copyData(dataRoot, path.join(stage, "data"), dataRoot, [], [snapshotDirectory, dbPath, `${dbPath}-wal`, `${dbPath}-shm`]);
-    await fs.promises.copyFile(snapshot.path, path.join(stage, "data", "blog.db"));
-    await fs.promises.chmod(path.join(stage, "data", "blog.db"), 0o600);
-    await fs.promises.rm(path.dirname(snapshot.path), { recursive: true, force: true });
-    // These stores follow BLOG_DB_PATH or a separately configured session path.
-    const sessionPath = path.resolve(process.env.QQ_MUSIC_SESSION_PATH?.trim() || path.join(path.dirname(dbPath), "qq-music-session.json"));
-    const telegramPath = path.join(path.dirname(dbPath), "telegram-bot-state.json");
-    for (const [source, name] of [[sessionPath, "qq-music-session.json"], [telegramPath, "telegram-bot-state.json"]]) {
-      if (fs.existsSync(source)) {
-        await fs.promises.copyFile(source, path.join(stage, "data", name));
-        await fs.promises.chmod(path.join(stage, "data", name), 0o600);
+    const { snapshot, stateRoot, dbPath, sessionPath, telegramPath, configuration } = await withDataFilesLock(async () => {
+      const snapshot = await runDbBackup({ backupDir: path.join(stage, ".database") });
+      const stateRoot = getProjectRoot();
+      const dataRoot = await fs.promises.realpath(path.join(stateRoot, "data"));
+      const dbPath = await fs.promises.realpath(path.resolve(process.env.BLOG_DB_PATH?.trim() || path.join(stateRoot, "data", "blog.db")));
+      const snapshotDirectory = await fs.promises.realpath(path.dirname(snapshot.path));
+      progress("files");
+      await copyData(dataRoot, path.join(stage, "data"), dataRoot, [], [snapshotDirectory, dbPath, `${dbPath}-wal`, `${dbPath}-shm`]);
+      await fs.promises.copyFile(snapshot.path, path.join(stage, "data", "blog.db"));
+      await fs.promises.chmod(path.join(stage, "data", "blog.db"), 0o600);
+      await fs.promises.rm(path.dirname(snapshot.path), { recursive: true, force: true });
+      // These stores follow BLOG_DB_PATH or a separately configured session path.
+      const sessionPath = path.resolve(process.env.QQ_MUSIC_SESSION_PATH?.trim() || path.join(path.dirname(dbPath), "qq-music-session.json"));
+      const telegramPath = path.join(path.dirname(dbPath), "telegram-bot-state.json");
+      for (const [source, name] of [[sessionPath, "qq-music-session.json"], [telegramPath, "telegram-bot-state.json"]]) {
+        if (fs.existsSync(source)) {
+          await fs.promises.copyFile(source, path.join(stage, "data", name));
+          await fs.promises.chmod(path.join(stage, "data", name), 0o600);
+        }
       }
-    }
-    progress("config");
-    const configuration = await copyConfiguration(stage, stateRoot);
+      progress("config");
+      const configuration = await copyConfiguration(stage, stateRoot);
+      verifyBackupUploads(path.join(stage, "data"));
+      return { snapshot, stateRoot, dbPath, sessionPath, telegramPath, configuration };
+    });
     await fs.promises.writeFile(path.join(stage, "RESTORE.md"), RESTORE_GUIDE, { mode: 0o600 });
     const commit = fs.existsSync(path.join(stateRoot, "data", "deploy-commit")) ? fs.readFileSync(path.join(stateRoot, "data", "deploy-commit"), "utf8").trim() : "";
     const manifest: AdminBackupManifest = {
@@ -316,15 +325,23 @@ export async function executeAdminBackup(id: string, onProgress?: (phase: AdminB
     await fs.promises.mkdir(verifiedRoot, { mode: 0o700 });
     const verified = await verifyAdminBackupArchive(temporary, verifiedRoot);
     await fs.promises.rename(temporary, destination);
+    promoted = true;
     const sizeBytes = (await fs.promises.stat(destination)).size;
-    writeStatus(root, { ...initial, status: "completed", phase: "complete", updatedAt: new Date().toISOString(), sizeBytes, fileCount: verified.files });
-    const archives = (await fs.promises.readdir(root)).filter((name) => ID_PATTERN.test(name.replace(/\.tar\.gz$/, "")) && name.endsWith(".tar.gz"));
-    const sorted = await Promise.all(archives.map(async (name) => ({ name, time: (await fs.promises.stat(path.join(root, name))).mtimeMs })));
-    for (const entry of sorted.sort((a, b) => b.time - a.time).slice(3)) await fs.promises.rm(path.join(root, entry.name), { force: true });
+    const completed: AdminBackupStatus = { ...initial, status: "completed", phase: "complete", updatedAt: new Date().toISOString(), sizeBytes, fileCount: verified.files };
+    // A retention error must never turn a verified archive into a failed/deleted backup.
+    writeStatus(root, completed);
+    try {
+      const archives = (await fs.promises.readdir(root)).filter((name) => name !== `${id}.tar.gz` && ID_PATTERN.test(name.replace(/\.tar\.gz$/, "")) && name.endsWith(".tar.gz"));
+      const sorted = await Promise.all(archives.map(async (name) => ({ name, time: (await fs.promises.stat(path.join(root, name))).mtimeMs })));
+      for (const entry of sorted.sort((a, b) => b.time - a.time).slice(2)) await fs.promises.rm(path.join(root, entry.name), { force: true });
+    } catch {
+      completed.warning = "新备份已完成并通过校验，旧备份清理未完成，请检查备份目录权限。";
+      writeStatus(root, completed);
+    }
   } catch (error) {
     console.error("[admin-backup] failed", phase, error instanceof Error ? error.name : "unknown", (error as NodeJS.ErrnoException)?.code ?? "unknown");
-    await fs.promises.rm(destination, { force: true });
-    writeStatus(root, { ...initial, status: "failed", phase, updatedAt: new Date().toISOString(), error: "备份未完成，请检查磁盘空间、数据和配置文件读取权限，以及 tar 是否可用后重试。" });
+    if (!promoted) await fs.promises.rm(destination, { force: true });
+    writeStatus(root, { ...initial, status: "failed", phase, updatedAt: new Date().toISOString(), error: error instanceof Error && error.message.startsWith("备份缺少内容引用的附件：") ? error.message : "备份未完成，请检查磁盘空间、数据和配置文件读取权限，以及 tar 是否可用后重试。" });
   } finally {
     await fs.promises.rm(stage, { recursive: true, force: true });
     await fs.promises.rm(temporary, { force: true });

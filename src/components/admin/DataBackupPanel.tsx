@@ -164,7 +164,7 @@ export default function DataBackupPanel({ onSummary }: { onSummary?: (summary: B
         <h2 id="data-backup-title" className="text-base font-semibold text-neutral-900">数据备份</h2>
       </div>
       <p className="mt-2 text-sm leading-6 text-neutral-600">一键下载数据库、上传图片与附件、引用归档、环境文件和 PM2 等应用配置。备份在后台执行，网站可以继续访问。</p>
-      <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">下载包未加密，包含后台密码、接口密钥和 QQ Cookie，请妥善保存，不要上传公开仓库。备份期间请避免删除附件或修改配置。</p>
+      <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">下载包未加密，包含后台密码、接口密钥和 QQ Cookie，请妥善保存，不要上传公开仓库。备份复制期间附件操作会排队等待，请避免直接修改环境配置。</p>
       <p className="mt-2 text-xs leading-5 text-neutral-500">服务器保留最近 3 份手动完整备份；“下载最近备份”下载最新一份。备份包不包含历史备份、临时文件和可再生成的 QQ 音频缓存，附带恢复说明与文件校验清单。</p>
       <div aria-live="polite" className="mt-4 text-sm text-neutral-600">
         {loading ? <p>正在读取备份状态…</p> : status?.status === "running" ? (
@@ -176,6 +176,7 @@ export default function DataBackupPanel({ onSummary }: { onSummary?: (summary: B
         ) : status?.status === "completed" ? (
           <p>最近备份：{new Date(status.updatedAt).toLocaleString("zh-CN")} · {((status.sizeBytes ?? 0) / 1024 / 1024).toFixed(2)} MB · {status.fileCount} 个文件，校验通过</p>
         ) : status?.status === "failed" ? <p className="text-red-600">{status.error}</p> : <p>{latest ? "已保存的手动完整备份可从下方下载。" : "尚未创建手动完整备份。"}</p>}
+        {status?.warning && <p role="status" className="mt-2 text-amber-700">{status.warning}</p>}
         {error && <p role="alert" className="mt-2 text-red-600">{error}</p>}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">

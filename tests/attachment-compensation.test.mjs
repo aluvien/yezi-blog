@@ -161,17 +161,19 @@ test("fault injection: DB delete failure plus failed restore must report the qua
     assert.equal(result.ok, false);
     assert.match(String(result.error), /恢复失败/);
     assert.ok(getAttachment(attachment.id), "数据库锁释放后记录必须仍在（删除被拒绝）");
-    const quarantined = leftoverQuarantineFiles();
+    const { listTrashedAttachments } = await import("../src/lib/attachment-trash.ts");
+    const quarantined = listTrashedAttachments().filter(item => item.path === attachment.path);
     assert.equal(quarantined.length, 1, "恢复失败时隔离副本必须留在磁盘上");
-    assert.ok(String(result.error).includes(quarantined[0]), "错误信息必须指出隔离文件位置");
+    assert.ok(String(result.error).includes(quarantined[0].id), "错误信息必须指出隔离文件位置");
   } finally {
     fs.promises.rename = originalRename;
     locker.exec("ROLLBACK");
     locker.close();
   }
-  // 清理：手动把隔离文件放回并删除记录，避免影响 leftover 断言之外的状态。
-  const [quarantined] = leftoverQuarantineFiles();
-  if (quarantined) fs.renameSync(path.join(uploadDir, quarantined), absolute);
+  const { listTrashedAttachments, restoreTrashedAttachment } = await import("../src/lib/attachment-trash.ts");
+  const entry = listTrashedAttachments().find(item => item.path === attachment.path);
+  await restoreTrashedAttachment(entry.id);
+  assert.ok(fs.existsSync(absolute));
   await deleteAttachmentById(attachment.id);
 });
 

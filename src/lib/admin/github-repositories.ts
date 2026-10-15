@@ -1,3 +1,4 @@
+import { currentDataEpoch, dataWriteRejection } from "@/lib/cloud-restore-guard";
 // GitHub 仓库登记与元数据同步的业务核心。与 admin/deploy 的服务器代码同步无关：
 // 这里只同步仓库展示元数据。鉴权由调用方负责。
 import { revalidatePath } from "next/cache";
@@ -47,6 +48,9 @@ function normalizeCustomInput(data: GithubCustomFormInput): { error: string } | 
 
 /** 登记仓库；随后尽力同步一次元数据。同步失败不回滚登记，只反映到 sync_status。 */
 export async function registerGithubRepositoryEntry(input: string, custom: GithubCustomFormInput = {}): Promise<ActionResult> {
+  const epoch = currentDataEpoch();
+  const rejected = dataWriteRejection(epoch);
+  if (rejected) return { ok: false, error: rejected };
   const ref = parseGithubRepositoryRef(input);
   if (!ref) return { ok: false, error: "请输入有效的 GitHub 仓库，例如 https://github.com/owner/repo 或 owner/repo" };
   if (getGithubRepositoryByFullName(ref.fullName)) return { ok: false, error: "该仓库已经登记过了" };
@@ -69,6 +73,9 @@ export async function registerGithubRepositoryEntry(input: string, custom: Githu
 }
 
 export async function updateGithubRepositoryEntry(id: number, custom: GithubCustomFormInput): Promise<ActionResult> {
+  const epoch = currentDataEpoch();
+  const rejected = dataWriteRejection(epoch);
+  if (rejected) return { ok: false, error: rejected };
   if (!Number.isInteger(id) || id < 1 || !getGithubRepository(id)) return { ok: false, error: "仓库不存在" };
   const normalized = normalizeCustomInput(custom);
   if ("error" in normalized) return { ok: false, error: normalized.error };
@@ -78,6 +85,9 @@ export async function updateGithubRepositoryEntry(id: number, custom: GithubCust
 }
 
 export async function deleteGithubRepositoryEntry(id: number): Promise<ActionResult> {
+  const epoch = currentDataEpoch();
+  const rejected = dataWriteRejection(epoch);
+  if (rejected) return { ok: false, error: rejected };
   if (!Number.isInteger(id) || id < 1 || !getGithubRepository(id)) return { ok: false, error: "仓库不存在" };
   deleteGithubRepository(id);
   revalidateGithubPages();
@@ -95,9 +105,14 @@ const ERROR_FALLBACK: Record<GithubSyncError, string> = {
 
 /** 同步单个仓库元数据。成功写自动字段并置 success；失败只记状态与可读原因，保留上次成功数据。 */
 export async function syncGithubRepositoryMetadata(id: number): Promise<ActionResult> {
+  const epoch = currentDataEpoch();
+  const rejected = dataWriteRejection(epoch);
+  if (rejected) return { ok: false, error: rejected };
   const repo = getGithubRepository(id);
   if (!repo) return { ok: false, error: "仓库不存在" };
   const result = await fetchGithubRepositoryMetadata({ owner: repo.owner, name: repo.name, fullName: repo.full_name, repoUrl: repo.repo_url });
+  const changed = dataWriteRejection(epoch);
+  if (changed) return { ok: false, error: changed };
   if (!result.ok) {
     const message = ERROR_FALLBACK[result.error] || result.message;
     markGithubSyncError(id, message);
@@ -111,11 +126,16 @@ export async function syncGithubRepositoryMetadata(id: number): Promise<ActionRe
 
 /** 批量同步：单个失败不中止整体，返回成功/失败统计（失败项含可读原因，不含内部栈）。 */
 export async function syncAllGithubRepositoryMetadata(): Promise<ActionResult> {
+  const epoch = currentDataEpoch();
+  const rejected = dataWriteRejection(epoch);
+  if (rejected) return { ok: false, error: rejected };
   const repos = listGithubRepositories();
   let succeeded = 0;
   const failures: Array<{ id: number; fullName: string; reason: string }> = [];
   for (const repo of repos) {
     const result = await fetchGithubRepositoryMetadata({ owner: repo.owner, name: repo.name, fullName: repo.full_name, repoUrl: repo.repo_url });
+    const changed = dataWriteRejection(epoch);
+    if (changed) return { ok: false, error: changed };
     if (result.ok) {
       applyGithubSyncResult(repo.id, result.metadata);
       succeeded += 1;

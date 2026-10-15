@@ -174,7 +174,7 @@ export interface Attachment {
 }
 
 export interface AttachmentReference {
-  type: "post" | "moment" | "setting";
+  type: "post" | "moment" | "setting" | "life_event" | "work" | "github_repository" | "reference";
   id: number;
   label: string;
   slug?: string;

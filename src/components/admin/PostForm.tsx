@@ -1,5 +1,8 @@
 "use client";
 
+import EditorDraftNotice from "./EditorDraftNotice";
+import { useEditorDraft } from "@/hooks/useEditorDraft";
+import { isPostEditorDraft } from "@/lib/editor-draft";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createPostAction, generatePostSlugAction, updatePostAction } from "@/lib/actions/posts";
@@ -74,17 +77,29 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     .filter((attachment) => attachment.id > 0 && attachment.mime_type.startsWith("image/"))
     .filter((attachment, index, all) => all.findIndex((item) => item.id === attachment.id) === index);
 
+  const draftValue = { title, slug, category, tags, content, cover, status, attachments, referenceSnapshots };
+  const draft = useEditorDraft({
+    draftKey: `post:${post?.id ?? "new"}`,
+    value: draftValue,
+    initial: { title: post?.title ?? "", slug: post?.slug ?? "", category: post?.category ?? "", tags: parsePostTags(post?.tags).join(", "), content: post?.content ?? "", cover: post?.cover ?? null, status: post?.status ?? "draft", attachments: initialAttachments, referenceSnapshots: initialReferences },
+    validate: isPostEditorDraft,
+    restore: value => { setTitle(value.title); setSlug(value.slug); setCategory(value.category); setTags(value.tags); setContent(value.content); setCover(value.cover); setStatus(value.status); setAttachments(value.attachments); setReferenceSnapshots(value.referenceSnapshots); },
+  });
+
   function submit() {
     setError("");
     startTransition(async () => {
-      const data = { title, slug, content, cover, category, tags, attachmentIds: attachments.map((attachment) => attachment.id), referenceSnapshots, status };
-      const r = post ? await updatePostAction(post.id, data) : await createPostAction(data);
-      if (!r.ok) {
-        setError(r.error);
-        return;
-      }
-      router.push("/admin/posts");
-      router.refresh();
+      try {
+        const data = { title, slug, content, cover, category, tags, attachmentIds: attachments.map((attachment) => attachment.id), referenceSnapshots, status };
+        const r = post ? await updatePostAction(post.id, data) : await createPostAction(data);
+        if (!r.ok) {
+          setError(r.error);
+          return;
+        }
+        draft.saved();
+        router.push("/admin/posts");
+        router.refresh();
+      } catch { setError("保存失败，请检查网络后重试，浏览器草稿已保留。"); }
     });
   }
 
@@ -398,8 +413,9 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
   }
 
   return (
-    <div className="admin-form admin-editor-layout">
+    <fieldset disabled={pending} className="admin-form admin-editor-layout min-w-0">
       <div className="admin-card admin-form-panel admin-editor-main">
+        <EditorDraftNotice draft={draft} />
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">标题</label>
           <input
@@ -806,6 +822,6 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           }}
         />
       )}
-    </div>
+    </fieldset>
   );
 }

@@ -1,4 +1,4 @@
-import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
+import { currentDataEpoch, dataWriteRejection } from "@/lib/cloud-restore-guard";
 import fs from "node:fs";
 import path from "node:path";
 import { getQQMusicSession } from "@/lib/qq-music-session";
@@ -151,8 +151,9 @@ function shouldRepeatAlert(state: QQMusicHealthAlertState, status: QQMusicHealth
  * recovery message.
  */
 export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult & { notified: boolean }> {
+  const epoch = currentDataEpoch();
   const result = await inspectQQMusicHealth();
-  if (isCloudRestoreActive()) return { ...result, notified: false };
+  if (dataWriteRejection(epoch)) return { ...result, notified: false };
   const previous = getQQMusicHealthAlertState();
   const next: QQMusicHealthAlertState = {
     ...previous,
@@ -194,7 +195,7 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
     }
   }
 
-  if (!isCloudRestoreActive()) saveQQMusicHealthAlertState(next);
+  if (!dataWriteRejection(epoch)) saveQQMusicHealthAlertState(next);
   return { ...result, notified };
 }
 

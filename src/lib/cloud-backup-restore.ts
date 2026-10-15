@@ -1,3 +1,4 @@
+import { withDataFilesLock } from "@/lib/data-files-lock";
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -81,8 +82,10 @@ export async function recoverInterruptedCloudRestore(): Promise<void> {
   }
   const journal = JSON.parse(fs.readFileSync(file, "utf8")) as Journal;
   validateJournal(journal);
-  if (!journal.committed) await rollback(journal);
-  finishJournal(journal);
+  await withDataFilesLock(async () => {
+    if (!journal.committed) await rollback(journal);
+    finishJournal(journal);
+  });
   const task = getCloudTask();
   if (task?.id === journal.id) {
     task.status = journal.committed ? "completed" : "failed";
@@ -103,87 +106,89 @@ export async function applyCloudRestore(id: string, confirmation: string): Promi
   if (metadata.settingsVersion !== requireCloudSettings().version || metadata.archiveHash !== await fileHash(download.path)) throw new Error("云备份校验已失效，请重新下载校验。");
   if (countActiveArticleReferenceArchiveJobs() > 0) throw new Error("恢复失败：正文归档任务仍在执行，请完成后重试。");
   acquireCloudLock(id);
-  let journal: Journal | undefined;
-  let held = false;
-  try {
-    const content = path.join(stage, "content");
-    const verified = await verifyAdminBackupContents(content);
-    if (verified.schemaVersion > LATEST_DB_SCHEMA_VERSION) throw new Error("备份版本比当前网站新，请先更新网站。");
-    const restoredDb = path.join(stage, "restore.db");
-    fs.copyFileSync(path.join(content, "data", "blog.db"), restoredDb);
-    const restored = new Database(restoredDb);
+  try { return await withDataFilesLock(async () => {
+    let journal: Journal | undefined;
+    let held = false;
     try {
-      runMigrations(restored); ensureFtsIndexes(restored);
-      restored.exec("DELETE FROM sessions; DELETE FROM maintenance_leases; DELETE FROM qq_music_audio_cache;");
-      restored.prepare("UPDATE auth_state SET session_generation = session_generation + 1 WHERE singleton = 1").run();
-      restored.pragma("wal_checkpoint(TRUNCATE)");
-    } finally { restored.close(); }
-    verifyDatabaseBackup(restoredDb);
-    task.status = "running"; updateCloudPhase(task, "safety");
-    fs.writeFileSync(path.join(cloudBackupRoot(), "restore-epoch"), id, { mode: 0o600 });
-    fs.writeFileSync(cloudRestoreGuardPath(), id, { mode: 0o600, flag: "wx" }); held = true;
-    // Allow already accepted short requests to finish before taking the rollback snapshot.
-    await delay(2000);
-    if (countActiveArticleReferenceArchiveJobs() > 0) throw new Error("恢复失败：正文归档任务仍在执行，请完成后重试。");
-    const safety = startAdminBackup();
-    if (!safety.started) throw new Error("另一个本地备份任务正在执行，请稍后重试。");
-    await executeAdminBackup(safety.status.id);
-    const complete = getAdminBackupDownload(safety.status.id);
-    if (!complete) throw new Error("备份文件生成失败，已取消恢复。");
-    const safetyName = `rollback-${id}.tar.gz`;
-    fs.copyFileSync(complete.path, path.join(cloudBackupRoot(), safetyName));
-    fs.chmodSync(path.join(cloudBackupRoot(), safetyName), 0o600);
-    task.safetyBackup = safetyName;
-    const before = await runDbBackup({ backupDir: path.join(stage, "rollback-db") });
-    journal = { id, dbPath: databasePath(), rollbackDb: before.path, committed: false, moves: [] };
-    storeJournal(journal);
-    const dataRoot = path.join(getProjectRoot(), "data");
-    const fromRoot = path.join(content, "data");
-    const names = new Set([...fs.readdirSync(dataRoot), ...fs.readdirSync(fromRoot)]);
-    const external = externalStateFiles();
-    const plan: Array<{ target: string; source: string }> = [];
-    for (const name of names) {
-      if ([databasePath(), `${databasePath()}-wal`, `${databasePath()}-shm`, ...external.map(file => file.target)].includes(path.join(dataRoot, name)) || preserved(name) || name.startsWith(".") || /\.yezi-[0-9a-f-]{36}\.(?:old|new)$/.test(name) || external.some(file => file.name === name)) continue;
-      plan.push({ target: path.join(dataRoot, name), source: path.join(fromRoot, name) });
+      const content = path.join(stage, "content");
+      const verified = await verifyAdminBackupContents(content);
+      if (verified.schemaVersion > LATEST_DB_SCHEMA_VERSION) throw new Error("备份版本比当前网站新，请先更新网站。");
+      const restoredDb = path.join(stage, "restore.db");
+      fs.copyFileSync(path.join(content, "data", "blog.db"), restoredDb);
+      const restored = new Database(restoredDb);
+      try {
+        runMigrations(restored); ensureFtsIndexes(restored);
+        restored.exec("DELETE FROM sessions; DELETE FROM maintenance_leases; DELETE FROM qq_music_audio_cache;");
+        restored.prepare("UPDATE auth_state SET session_generation = session_generation + 1 WHERE singleton = 1").run();
+        restored.pragma("wal_checkpoint(TRUNCATE)");
+      } finally { restored.close(); }
+      verifyDatabaseBackup(restoredDb);
+      task.status = "running"; updateCloudPhase(task, "safety");
+      fs.writeFileSync(path.join(cloudBackupRoot(), "restore-epoch"), id, { mode: 0o600 });
+      fs.writeFileSync(cloudRestoreGuardPath(), id, { mode: 0o600, flag: "wx" }); held = true;
+      // Allow already accepted short requests to finish before taking the rollback snapshot.
+      await delay(2000);
+      if (countActiveArticleReferenceArchiveJobs() > 0) throw new Error("恢复失败：正文归档任务仍在执行，请完成后重试。");
+      const safety = startAdminBackup();
+      if (!safety.started) throw new Error("另一个本地备份任务正在执行，请稍后重试。");
+      await executeAdminBackup(safety.status.id);
+      const complete = getAdminBackupDownload(safety.status.id);
+      if (!complete) throw new Error("备份文件生成失败，已取消恢复。");
+      const safetyName = `rollback-${id}.tar.gz`;
+      fs.copyFileSync(complete.path, path.join(cloudBackupRoot(), safetyName));
+      fs.chmodSync(path.join(cloudBackupRoot(), safetyName), 0o600);
+      task.safetyBackup = safetyName;
+      const before = await runDbBackup({ backupDir: path.join(stage, "rollback-db") });
+      journal = { id, dbPath: databasePath(), rollbackDb: before.path, committed: false, moves: [] };
+      storeJournal(journal);
+      const dataRoot = path.join(getProjectRoot(), "data");
+      const fromRoot = path.join(content, "data");
+      const names = new Set([...fs.readdirSync(dataRoot), ...fs.readdirSync(fromRoot)]);
+      const external = externalStateFiles();
+      const plan: Array<{ target: string; source: string }> = [];
+      for (const name of names) {
+        if ([databasePath(), `${databasePath()}-wal`, `${databasePath()}-shm`, ...external.map(file => file.target)].includes(path.join(dataRoot, name)) || preserved(name) || name.startsWith(".") || /\.yezi-[0-9a-f-]{36}\.(?:old|new)$/.test(name) || external.some(file => file.name === name)) continue;
+        plan.push({ target: path.join(dataRoot, name), source: path.join(fromRoot, name) });
+      }
+      for (const state of external) {
+        const source = path.join(fromRoot, state.name);
+        if (fs.existsSync(source) || fs.existsSync(state.target)) plan.push({ target: state.target, source });
+      }
+      for (const item of plan) {
+        if (fs.existsSync(item.target) && fs.lstatSync(item.target).isSymbolicLink()) throw new Error("恢复失败：目标包含软链接，请先核对数据目录。");
+        const move: Move = { target: item.target, old: `${item.target}.yezi-${id}.old`, next: `${item.target}.yezi-${id}.new`, hadOriginal: fs.existsSync(item.target) };
+        if (fs.existsSync(move.old) || fs.existsSync(move.next)) throw new Error("恢复失败：目标存在未清理的恢复临时文件。");
+        journal.moves.push(move); storeJournal(journal);
+        if (fs.existsSync(item.source)) fs.cpSync(item.source, move.next, { recursive: true, errorOnExist: true, force: false });
+      }
+      updateCloudPhase(task, "restore");
+      for (const move of journal.moves) {
+        if (move.hadOriginal) fs.renameSync(move.target, move.old);
+        if (fs.existsSync(move.next)) fs.renameSync(move.next, move.target);
+      }
+      await replaceDatabase(restoredDb, journal.dbPath);
+      if (db.pragma("integrity_check", { simple: true }) !== "ok" || (db.pragma("foreign_key_check") as unknown[]).length) throw new Error("恢复失败：数据库最终校验未通过。");
+      invalidateQQMusicAccessCache();
+      journal.committed = true; storeJournal(journal);
+      finishJournal(journal); held = false;
+      task.status = "completed"; updateCloudPhase(task, "complete");
+      fs.rmSync(stage, { recursive: true, force: true });
+      // Keep three complete pre-restore archives, independently from ordinary backup retention.
+      const archives = fs.readdirSync(cloudBackupRoot()).filter(name => /^rollback-[0-9a-f-]{36}\.tar\.gz$/.test(name)).sort((a, b) => fs.statSync(path.join(cloudBackupRoot(), b)).mtimeMs - fs.statSync(path.join(cloudBackupRoot(), a)).mtimeMs);
+      for (const old of archives.slice(3)) fs.rmSync(path.join(cloudBackupRoot(), old));
+      return task;
+    } catch (error) {
+      let rollbackFailed = false;
+      if (journal && !journal.committed) {
+        try { await rollback(journal); finishJournal(journal); held = false; }
+        catch { rollbackFailed = true; }
+      }
+      if (held && !rollbackFailed && !journal?.committed) fs.rmSync(cloudRestoreGuardPath(), { force: true });
+      task.status = "failed"; task.error = rollbackFailed ? "恢复失败，自动回滚未完成。网站已保持维护状态，请重启网站重试回滚；恢复前的完整备份已保留。" : publicCloudError(error);
+      task.updatedAt = new Date().toISOString(); writeCloudTask(task);
+      throw new Error(task.error);
     }
-    for (const state of external) {
-      const source = path.join(fromRoot, state.name);
-      if (fs.existsSync(source) || fs.existsSync(state.target)) plan.push({ target: state.target, source });
-    }
-    for (const item of plan) {
-      if (fs.existsSync(item.target) && fs.lstatSync(item.target).isSymbolicLink()) throw new Error("恢复失败：目标包含软链接，请先核对数据目录。");
-      const move: Move = { target: item.target, old: `${item.target}.yezi-${id}.old`, next: `${item.target}.yezi-${id}.new`, hadOriginal: fs.existsSync(item.target) };
-      if (fs.existsSync(move.old) || fs.existsSync(move.next)) throw new Error("恢复失败：目标存在未清理的恢复临时文件。");
-      journal.moves.push(move); storeJournal(journal);
-      if (fs.existsSync(item.source)) fs.cpSync(item.source, move.next, { recursive: true, errorOnExist: true, force: false });
-    }
-    updateCloudPhase(task, "restore");
-    for (const move of journal.moves) {
-      if (move.hadOriginal) fs.renameSync(move.target, move.old);
-      if (fs.existsSync(move.next)) fs.renameSync(move.next, move.target);
-    }
-    await replaceDatabase(restoredDb, journal.dbPath);
-    if (db.pragma("integrity_check", { simple: true }) !== "ok" || (db.pragma("foreign_key_check") as unknown[]).length) throw new Error("恢复失败：数据库最终校验未通过。");
-    invalidateQQMusicAccessCache();
-    journal.committed = true; storeJournal(journal);
-    finishJournal(journal); held = false;
-    task.status = "completed"; updateCloudPhase(task, "complete");
-    fs.rmSync(stage, { recursive: true, force: true });
-    // Keep three complete pre-restore archives, independently from ordinary backup retention.
-    const archives = fs.readdirSync(cloudBackupRoot()).filter(name => /^rollback-[0-9a-f-]{36}\.tar\.gz$/.test(name)).sort((a, b) => fs.statSync(path.join(cloudBackupRoot(), b)).mtimeMs - fs.statSync(path.join(cloudBackupRoot(), a)).mtimeMs);
-    for (const old of archives.slice(3)) fs.rmSync(path.join(cloudBackupRoot(), old));
-    return task;
-  } catch (error) {
-    let rollbackFailed = false;
-    if (journal && !journal.committed) {
-      try { await rollback(journal); finishJournal(journal); held = false; }
-      catch { rollbackFailed = true; }
-    }
-    if (held && !rollbackFailed && !journal?.committed) fs.rmSync(cloudRestoreGuardPath(), { force: true });
-    task.status = "failed"; task.error = rollbackFailed ? "恢复失败，自动回滚未完成。网站已保持维护状态，请重启网站重试回滚；恢复前的完整备份已保留。" : publicCloudError(error);
-    task.updatedAt = new Date().toISOString(); writeCloudTask(task);
-    throw new Error(task.error);
-  } finally { releaseCloudLock(id); }
+  }); } finally { releaseCloudLock(id); }
 }
 export function safetyCloudDownload(id: string): { path: string; size: number } {
   if (!UUID.test(id)) throw new Error("恢复备份编号无效。");

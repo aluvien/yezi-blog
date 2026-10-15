@@ -1,3 +1,4 @@
+import { currentDataEpoch, dataWriteRejection } from "@/lib/cloud-restore-guard";
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
 import {
@@ -150,6 +151,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const epoch = currentDataEpoch();
   if (!await requireAdminApi(request)) return noCache({ error: "未登录或请求来源无效" }, 401);
   let body: { op?: unknown; qrsig?: unknown; ptqrtoken?: unknown; key?: unknown };
   try {
@@ -157,6 +159,8 @@ export async function POST(request: Request) {
   } catch (error) {
     return noCache({ error: error instanceof Error ? error.message : "请求格式错误" }, error instanceof RequestBodyError ? error.status : 400);
   }
+  const rejected = dataWriteRejection(epoch);
+  if (rejected) return noCache({ error: rejected }, 409);
   if (body.op === "native-cancel") {
     const key = String(body.key ?? "").trim();
     cancelNativeQQMusicQr(key);
@@ -182,7 +186,7 @@ export async function POST(request: Request) {
     try {
       const result = await pollNativeQQMusicQr(key);
       if (result.state === "success" && result.cookie && result.uin) {
-        saveQQMusicSession({ cookie: result.cookie, uin: result.uin });
+        saveQQMusicSession({ cookie: result.cookie, uin: result.uin }, epoch);
         return noCache({ state: "success", uin: result.uin, message: result.message, source: result.source });
       }
       return noCache(result);
@@ -205,7 +209,7 @@ export async function POST(request: Request) {
       // The upstream API does not persist QR sessions reliably. Keep the
       // account cookie in the blog's protected data directory and pass it only
       // over the localhost request header on subsequent API calls.
-      saveQQMusicSession({ cookie, uin });
+      saveQQMusicSession({ cookie, uin }, epoch);
       return noCache({ state: "success", uin });
     }
     const message = findString(raw, ["message", "msg", "error", "status"]);

@@ -1,3 +1,4 @@
+import { currentDataEpoch } from "@/lib/cloud-restore-guard";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { promises as fsPromises } from "node:fs";
@@ -13,6 +14,7 @@ export const runtime = "nodejs";
 
 /** 按选区裁切图片,另存为新附件(保留原图)。 */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const epoch = currentDataEpoch();
   const session = await requireAdminApi(request);
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
@@ -62,7 +64,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const ym = new Date().toISOString().slice(0, 7).replace("-", "");
     const name = `${crypto.randomBytes(8).toString("hex")}.webp`;
     const dir = path.join(getUploadDir(), ym);
-    await fsPromises.mkdir(dir, { recursive: true });
     const relativePath = `/uploads/${ym}/${name}`;
     const absolutePath = path.join(dir, name);
     const newAttachment = await writeUploadWithRecord(absolutePath, cropped, () => createAttachment({
@@ -71,7 +72,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         original_name: `crop-${attachment.original_name}`.slice(0, 160),
         mime_type: "image/webp",
         size: cropped.length,
-      }));
+      }), epoch);
     return NextResponse.json({ attachment: newAttachment });
   } catch {
     return NextResponse.json({ error: "裁切失败,请检查选区是否超出图片范围" }, { status: 500 });

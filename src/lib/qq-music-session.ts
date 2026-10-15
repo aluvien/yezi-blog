@@ -1,4 +1,4 @@
-import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
+import { currentDataEpoch, dataWriteRejection } from "@/lib/cloud-restore-guard";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -39,8 +39,9 @@ export function getQQMusicSession(): QQMusicSession | null {
  * Persist atomically next to the database, never in Git or browser storage.
  * `mode` and chmod protect the file even if the process umask is permissive.
  */
-export function saveQQMusicSession(session: Pick<QQMusicSession, "cookie" | "uin">): void {
-  if (isCloudRestoreActive()) throw new Error("正在恢复数据，请稍后保存 QQ 音乐登录信息");
+export function saveQQMusicSession(session: Pick<QQMusicSession, "cookie" | "uin">, epoch = currentDataEpoch()): void {
+  const rejected = dataWriteRejection(epoch);
+  if (rejected) throw new Error(rejected);
   if (!validCookie(session.cookie) || !validUin(session.uin)) throw new Error("QQ 音乐登录信息无效");
   const destination = sessionPath();
   const directory = path.dirname(destination);
