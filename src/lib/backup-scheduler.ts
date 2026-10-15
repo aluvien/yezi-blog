@@ -1,3 +1,5 @@
+import { runBackupAttempt, type BackupAttemptState } from "@/lib/backup-retry";
+export { backupRetryDelay, isDatabaseNotInitializedError } from "@/lib/backup-retry";
 import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
 import { runDbBackup, lastBackupTimestamp } from "@/lib/backup";
 import { runCompleteDataBackup } from "@/lib/data-backup";
@@ -11,6 +13,7 @@ const BACKUP_MINUTE = 17;
 type SchedulerState = {
   started: boolean;
   running: boolean;
+  attempt: BackupAttemptState;
   timer?: ReturnType<typeof setTimeout>;
 };
 
@@ -21,7 +24,7 @@ type SchedulerGlobal = typeof globalThis & {
 function state(): SchedulerState {
   const globalState = globalThis as SchedulerGlobal;
   if (!globalState.__yeziBackupScheduler) {
-    globalState.__yeziBackupScheduler = { started: false, running: false };
+    globalState.__yeziBackupScheduler = { started: false, running: false, attempt: { failures: 0, localComplete: false, alerted: false } };
   }
   return globalState.__yeziBackupScheduler;
 }
@@ -41,15 +44,6 @@ function clearScheduledRun(current: SchedulerState): void {
   current.timer = undefined;
 }
 
-/** A newly deployed site may not have served its first request and created SQLite yet. */
-export function isDatabaseNotInitializedError(error: unknown): boolean {
-  return error instanceof Error && error.message.startsWith("数据库不存在：");
-}
-
-export function backupRetryDelay(error: unknown, normalDelay: number): number {
-  return isDatabaseNotInitializedError(error) ? Math.min(INITIALIZATION_RETRY_MS, normalDelay) : normalDelay;
-}
-
 function schedule(current: SchedulerState, delayMs: number): void {
   clearScheduledRun(current);
   current.timer = setTimeout(() => {
@@ -66,23 +60,19 @@ async function runScheduledBackup(): Promise<void> {
   current.running = true;
   let nextDelay = msUntilNextBackup();
   try {
-    if (process.env.DATA_BACKUP_KEY?.trim()) {
-      const result = await runCompleteDataBackup();
-      console.log(`[backup-scheduler] 每日完整加密备份完成：${result.mirroredPath || result.path}`);
-    } else {
-      const result = await runDbBackup();
-      console.log(`[backup-scheduler] 每日数据库备份完成：${result.path}；未配置 DATA_BACKUP_KEY，完整数据归档未启用`);
-    }
-    await (await import("@/lib/cloud-backup")).runDailyCloudBackup();
-  } catch (error) {
-    nextDelay = backupRetryDelay(error, nextDelay);
-    if (isDatabaseNotInitializedError(error)) {
-      // 首次请求会创建数据库；不要在新部署尚未有数据时制造一次伪失败或等到次日才重试。
-      console.info("[backup-scheduler] 数据库尚未初始化，将在一分钟后重试");
-    } else {
-      // 备份失败不影响站点运行，下个周期自动重试。
-      console.error("[backup-scheduler] 每日备份失败", error instanceof Error ? error.message : error);
-    }
+    nextDelay = await runBackupAttempt(current.attempt, {
+      local: async () => {
+        if (process.env.DATA_BACKUP_KEY?.trim()) {
+          const result = await runCompleteDataBackup();
+          console.log(`[backup-scheduler] 每日完整加密备份完成：${result.mirroredPath || result.path}`);
+        } else {
+          const result = await runDbBackup();
+          console.log(`[backup-scheduler] 每日数据库备份完成：${result.path}；未配置 DATA_BACKUP_KEY，完整数据归档未启用`);
+        }
+      },
+      cloud: async () => { await (await import("@/lib/cloud-backup")).runDailyCloudBackup(); },
+      notify: async message => (await (await import("@/lib/telegram")).sendTelegramMessage(message)).ok,
+    }, nextDelay);
   } finally {
     current.running = false;
     schedule(current, nextDelay);

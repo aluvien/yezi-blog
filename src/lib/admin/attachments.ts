@@ -1,10 +1,13 @@
+import { currentDataEpoch } from "@/lib/cloud-restore-guard";
+import { withDataFileMutation } from "@/lib/data-files-lock";
+import { trashAttachment, restoreTrashedAttachment } from "@/lib/attachment-trash";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { promises as fsPromises } from "node:fs";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import sharp from "sharp";
-import { deleteAttachment, listAttachments, updateAttachmentSize } from "@/lib/db";
+import { listAttachments, updateAttachmentSize } from "@/lib/db";
 import { uploadAbsolutePath } from "@/lib/uploads";
 import type { ActionResult } from "@/lib/actions/posts";
 import type { CompressionProfile } from "@/lib/actions/attachments";
@@ -67,93 +70,51 @@ function revalidateAttachmentPages() {
   revalidatePath("/admin/posts");
 }
 
-/** 先把文件隔离，再删数据库记录；数据库失败时把文件移回原位。 */
-async function deleteAttachmentRecordAndFile(attachment: { id: number; path: string }): Promise<ActionResult> {
-  const target = uploadAbsolutePath(attachment.path);
-  let quarantine: string | null = null;
-  if (target) {
-    try {
-      quarantine = await moveFileToQuarantine(target, "deleting");
-    } catch {
-      return { ok: false, error: "附件文件无法移动，未改动数据库记录" };
+async function mutate(run: () => Promise<ActionResult>, epoch: string): Promise<ActionResult> {
+  try { return await withDataFileMutation(run, epoch); }
+  catch (error) { return { ok: false, error: error instanceof Error ? error.message : "附件操作失败，请重试" }; }
+}
+
+export async function deleteAttachmentById(id: number, epoch = currentDataEpoch()): Promise<ActionResult> {
+  return mutate(async () => {
+    const usage = listAttachments().find(item => item.id === id && item.tracked);
+    if (!usage) return { ok: false, error: "附件不存在" };
+    await trashAttachment(usage);
+    revalidateAttachmentPages();
+    return { ok: true };
+  }, epoch);
+}
+
+export async function deleteUntrackedAttachmentByPath(relativePath: string, epoch = currentDataEpoch()): Promise<ActionResult> {
+  return mutate(async () => {
+    const usage = listAttachments().find(item => item.path === relativePath && !item.tracked);
+    if (!usage) return { ok: false, error: "目录附件不存在" };
+    await trashAttachment(usage);
+    revalidateAttachmentPages();
+    return { ok: true, data: { path: usage.path, deletedCount: 1, skippedCount: 0 } };
+  }, epoch);
+}
+
+export async function clearUnusedAttachments(epoch = currentDataEpoch()): Promise<ActionResult> {
+  return mutate(async () => {
+    const unused = listAttachments().filter(item => !item.referenced);
+    let deletedCount = 0;
+    let skippedCount = 0;
+    for (const attachment of unused) {
+      try { await trashAttachment(attachment); deletedCount += 1; }
+      catch { skippedCount += 1; }
     }
-  }
+    revalidateAttachmentPages();
+    return { ok: true, data: { deletedCount, skippedCount } };
+  }, epoch);
+}
+
+export async function restoreAttachmentFromTrash(id: string, epoch = currentDataEpoch()): Promise<ActionResult> {
   try {
-    const deleted = deleteAttachment(attachment.id);
-    if (!deleted) {
-      if (quarantine && target && !await restoreQuarantinedFile(quarantine, target)) {
-        return { ok: false, error: `附件记录已不存在，但隔离文件未能移回，请检查 ${quarantine}` };
-      }
-      return { ok: false, error: "附件不存在" };
-    }
-  } catch (error) {
-    let restored = true;
-    if (quarantine && target) restored = await restoreQuarantinedFile(quarantine, target);
-    console.error("[attachments] 删除附件记录失败", error instanceof Error ? error.message : error);
-    return {
-      ok: false,
-      error: restored
-        ? "附件记录删除失败，文件已恢复原位"
-        : `附件记录删除失败，且文件恢复失败；隔离副本在 ${quarantine}，请人工移回 ${attachment.path}`,
-    };
-  }
-  if (quarantine) await discardQuarantinedFile(quarantine);
-  return { ok: true };
-}
-
-export async function deleteAttachmentById(id: number): Promise<ActionResult> {
-  const usage = listAttachments().find((attachment) => attachment.id === id);
-  if (!usage) return { ok: false, error: "附件不存在" };
-  if (usage.referenced) return { ok: false, error: "附件正在文章中使用，请先移除引用" };
-  const result = await deleteAttachmentRecordAndFile({ id: usage.id, path: usage.path });
-  if (!result.ok) return result;
-  revalidateAttachmentPages();
-  return { ok: true };
-}
-
-export async function deleteUntrackedAttachmentByPath(relativePath: string): Promise<ActionResult> {
-  const usage = listAttachments().find((attachment) => attachment.path === relativePath);
-  if (!usage || usage.tracked) return { ok: false, error: "目录附件不存在" };
-  if (usage.referenced) return { ok: false, error: "附件正在网站中使用，请先移除引用" };
-  const target = uploadAbsolutePath(usage.path);
-  if (target) {
-    try {
-      const quarantine = await moveFileToQuarantine(target, "deleting");
-      if (quarantine) await discardQuarantinedFile(quarantine);
-    } catch {
-      return { ok: false, error: "附件文件删除失败，请检查上传目录权限" };
-    }
-  }
-  revalidateAttachmentPages();
-  return { ok: true, data: { path: usage.path, deletedCount: 1, skippedCount: 0 } };
-}
-
-export async function clearUnusedAttachments(): Promise<ActionResult> {
-  const unused = listAttachments().filter((attachment) => !attachment.referenced);
-  let deletedCount = 0;
-  let skippedCount = 0;
-  for (const attachment of unused) {
-    if (attachment.tracked) {
-      const result = await deleteAttachmentRecordAndFile({ id: attachment.id, path: attachment.path });
-      if (result.ok) deletedCount += 1;
-      else skippedCount += 1;
-    } else {
-      const target = uploadAbsolutePath(attachment.path);
-      if (!target) {
-        skippedCount += 1;
-        continue;
-      }
-      try {
-        const quarantine = await moveFileToQuarantine(target, "deleting");
-        if (quarantine) await discardQuarantinedFile(quarantine);
-        deletedCount += 1;
-      } catch {
-        skippedCount += 1;
-      }
-    }
-  }
-  revalidateAttachmentPages();
-  return { ok: true, data: { deletedCount, skippedCount } };
+    await restoreTrashedAttachment(id, epoch);
+    revalidateAttachmentPages();
+    return { ok: true };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : "附件恢复失败" }; }
 }
 
 async function compressImageFile(relativePath: string, profile: CompressionProfile, attachmentId?: number): Promise<ActionResult> {
@@ -253,16 +214,20 @@ async function compressImageFile(relativePath: string, profile: CompressionProfi
   }
 }
 
-export async function compressAttachmentById(id: number, profile: CompressionProfile = "balanced"): Promise<ActionResult> {
+export async function compressAttachmentById(id: number, profile: CompressionProfile = "balanced", epoch = currentDataEpoch()): Promise<ActionResult> {
+  return mutate(async () => {
   const attachment = listAttachments().find((item) => item.id === id && item.tracked);
   if (!attachment) return { ok: false, error: "附件不存在" };
   if (!Object.prototype.hasOwnProperty.call(COMPRESSION_QUALITY, profile)) return { ok: false, error: "压缩级别无效" };
   return compressImageFile(attachment.path, profile, attachment.id);
+  }, epoch);
 }
 
-export async function compressUntrackedAttachmentByPath(relativePath: string, profile: CompressionProfile = "balanced"): Promise<ActionResult> {
+export async function compressUntrackedAttachmentByPath(relativePath: string, profile: CompressionProfile = "balanced", epoch = currentDataEpoch()): Promise<ActionResult> {
+  return mutate(async () => {
   const attachment = listAttachments().find((item) => item.path === relativePath && !item.tracked);
   if (!attachment) return { ok: false, error: "目录中的附件不存在" };
   if (!Object.prototype.hasOwnProperty.call(COMPRESSION_QUALITY, profile)) return { ok: false, error: "压缩级别无效" };
   return compressImageFile(attachment.path, profile);
+  }, epoch);
 }

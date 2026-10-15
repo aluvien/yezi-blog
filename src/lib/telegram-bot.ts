@@ -1,5 +1,5 @@
 import { getSiteUrl } from "@/lib/site-config";
-import { isCloudRestoreActive } from "@/lib/cloud-restore-guard";
+import { currentDataEpoch, dataWriteRejection } from "@/lib/cloud-restore-guard";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -290,7 +290,7 @@ async function beginQQLogin(state: TelegramBotState, chatId: string, userId: str
   }
 }
 
-async function pollPendingQQLogin(state: TelegramBotState): Promise<void> {
+async function pollPendingQQLogin(state: TelegramBotState, epoch: string): Promise<void> {
   const pending = state.pendingQQLogin;
   if (!pending) return;
   if (!isTelegramAdminUser({ chatId: pending.chatId, chatType: "private", userId: pending.userId })) {
@@ -313,7 +313,7 @@ async function pollPendingQQLogin(state: TelegramBotState): Promise<void> {
         return;
       }
       if (result.state !== "success" || !result.cookie || !result.uin) return;
-      saveQQMusicSession({ cookie: result.cookie, uin: result.uin });
+      saveQQMusicSession({ cookie: result.cookie, uin: result.uin }, epoch);
       delete state.pendingQQLogin;
       await sendTelegramMessage("✅ QQ 音乐 App 扫码登录成功，Cookie 与播放授权已更新。", { chatId: pending.chatId });
       return;
@@ -327,7 +327,7 @@ async function pollPendingQQLogin(state: TelegramBotState): Promise<void> {
     const cookie = findString(raw, ["cookie"]);
     const uin = readUin(raw);
     if (!cookie || !uin) return;
-    saveQQMusicSession({ cookie, uin });
+    saveQQMusicSession({ cookie, uin }, epoch);
     delete state.pendingQQLogin;
     await sendTelegramMessage("✅ QQ 音乐登录成功，播放授权已更新。", { chatId: pending.chatId });
   } catch (error) {
@@ -474,14 +474,16 @@ async function handleMessage(state: TelegramBotState, message: JsonRecord): Prom
 /** Poll administrator commands and callbacks. Called by the in-process scheduler. */
 export async function processTelegramBotUpdates(): Promise<void> {
   if (!isTelegramConfigured()) return;
+  const epoch = currentDataEpoch();
+  if (dataWriteRejection(epoch)) return;
   const state = readState();
   const firstPoll = !state.offset;
   const updates = await getTelegramUpdates(state.offset);
-  if (!updates.ok || isCloudRestoreActive()) return;
+  if (!updates.ok || dataWriteRejection(epoch)) return;
   const nowSeconds = Math.floor(Date.now() / 1_000);
 
   for (const raw of updates.updates) {
-    if (isCloudRestoreActive()) return;
+    if (dataWriteRejection(epoch)) return;
     if (!isRecord(raw)) continue;
     const updateId = numberValue(raw.update_id);
     if (updateId !== null) state.offset = Math.max(state.offset ?? 0, updateId + 1);
@@ -492,7 +494,7 @@ export async function processTelegramBotUpdates(): Promise<void> {
     else if (isRecord(raw.message)) await handleMessage(state, raw.message);
   }
 
-  if (isCloudRestoreActive()) return;
-  await pollPendingQQLogin(state);
-  if (!isCloudRestoreActive()) saveState(state);
+  if (dataWriteRejection(epoch)) return;
+  await pollPendingQQLogin(state, epoch);
+  if (!dataWriteRejection(epoch)) saveState(state);
 }

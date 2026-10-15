@@ -1,22 +1,22 @@
-import { currentDataEpoch, isCloudRestoreActive } from "@/lib/cloud-restore-guard";
+import { currentDataEpoch, dataWriteRejection } from "@/lib/cloud-restore-guard";
+import { withDataFileMutation } from "@/lib/data-files-lock";
 import { promises as fs } from "node:fs";
+import path from "node:path";
 
-/** Write the file first, then remove it again if the database transaction cannot create its record. */
-export async function writeUploadWithRecord<T>(absolutePath: string, contents: Buffer, createRecord: () => T): Promise<T> {
-  if (isCloudRestoreActive()) throw new Error("正在恢复数据，请稍后上传文件");
-  const epoch = currentDataEpoch();
-  try {
-    await fs.writeFile(absolutePath, contents, { mode: 0o640 });
-  } catch (error) {
-    // 磁盘写满或进程中断时 writeFile 仍可能留下部分文件，不能让它成为永久孤儿。
-    await fs.unlink(absolutePath).catch(() => undefined);
-    throw error;
-  }
-  try {
-    if (isCloudRestoreActive() || currentDataEpoch() !== epoch) throw new Error("数据已进入恢复流程，请重新上传文件");
-    return createRecord();
-  } catch (error) {
-    await fs.unlink(absolutePath).catch(() => undefined);
-    throw error;
-  }
+/** File, record and compensation share the restore/backup lease. Capture epoch before parsing a request. */
+export async function writeUploadWithRecord<T>(absolutePath: string, contents: Buffer, createRecord: () => T, epoch = currentDataEpoch()): Promise<T> {
+  return withDataFileMutation(async () => {
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    // Generated names must never overwrite an existing upload.
+    const handle = await fs.open(absolutePath, "wx", 0o640);
+    try {
+      await handle.writeFile(contents);
+      const rejected = dataWriteRejection(epoch);
+      if (rejected) throw new Error(rejected);
+      return createRecord();
+    } catch (error) {
+      await fs.unlink(absolutePath).catch(() => undefined);
+      throw error;
+    } finally { await handle.close(); }
+  }, epoch);
 }

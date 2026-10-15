@@ -1,5 +1,8 @@
 "use client";
 
+import EditorDraftNotice from "./EditorDraftNotice";
+import { useEditorDraft } from "@/hooks/useEditorDraft";
+import { isMomentEditorDraft } from "@/lib/editor-draft";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createMomentAction, updateMomentAction } from "@/lib/actions/moments";
@@ -33,6 +36,14 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
   const [error, setError] = useState("");
   const [musicDialog, setMusicDialog] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const draft = useEditorDraft({
+    draftKey: `moment:${moment?.id ?? "new"}`,
+    value: { content, tags, images, location },
+    initial: { content: moment?.content ?? "", tags: parsePostTags(moment?.tags).join(", "), images: initialImages(moment), location: moment?.location ?? "" },
+    validate: isMomentEditorDraft,
+    restore: value => { setContent(value.content); setTags(value.tags); setImages(value.images); setLocation(value.location); },
+  });
 
   async function handleFiles(files: FileList | null) {
     if (!files) return;
@@ -111,26 +122,30 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
   function submit() {
     setError("");
     startTransition(async () => {
-      const r = moment
-        ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags), location })
-        : await createMomentAction({ content, images, tags: parsePostTags(tags), location });
-      if (!r.ok) {
-        setError(r.error);
-        return;
-      }
-      if (onSuccess) {
-        onSuccess();
-        router.refresh();
-      } else {
-        router.push("/admin/moments");
-        router.refresh();
-      }
+      try {
+        const r = moment
+          ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags), location })
+          : await createMomentAction({ content, images, tags: parsePostTags(tags), location });
+        if (!r.ok) {
+          setError(r.error);
+          return;
+        }
+        draft.saved();
+        if (onSuccess) {
+          onSuccess();
+          router.refresh();
+        } else {
+          router.push("/admin/moments");
+          router.refresh();
+        }
+      } catch { setError("保存失败，请检查网络后重试，浏览器草稿已保留。"); }
     });
   }
 
   if (compact) {
     return (
-      <div className="flex flex-col gap-2">
+      <fieldset disabled={pending} className="flex min-w-0 flex-col gap-2">
+        <EditorDraftNotice draft={draft} />
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -208,7 +223,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
             {moment && onCancel && (
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={() => { if (draft.confirmLeave()) onCancel?.(); }}
                 className="rounded-md border border-neutral-300 px-3 py-1 text-sm text-neutral-600 hover:bg-neutral-50"
               >
                 取消
@@ -234,12 +249,13 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
             }}
           />
         )}
-      </div>
+      </fieldset>
     );
   }
 
   return (
-    <div className="admin-form admin-card admin-form-panel admin-form-stack">
+    <fieldset disabled={pending} className="admin-form admin-card admin-form-panel admin-form-stack min-w-0">
+      <EditorDraftNotice draft={draft} />
       <label htmlFor="moment-content" className="admin-field-label">絮语内容</label>
       <textarea
         id="moment-content"
@@ -338,6 +354,6 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
           }}
         />
       )}
-    </div>
+    </fieldset>
   );
 }

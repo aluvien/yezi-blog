@@ -206,7 +206,11 @@ export function preparedCloudDownload(id: string): { path: string; size: number 
 }
 export async function runDailyCloudBackup(): Promise<void> {
   const settings: StoredCloudSettings | null = (await import("@/lib/cloud-backup-config")).readCloudSettings();
-  if (!settings?.dailyEnabled || isCloudBusy()) return;
+  if (!settings?.dailyEnabled) return;
+  if (isCloudBusy()) throw new Error("云备份任务正在进行，稍后重试自动备份。");
   const started = startCloudTask("backup");
-  if (started.started) await executeCloudTask(started.task.id);
+  if (!started.started) throw new Error("云备份任务正在进行，稍后重试自动备份。");
+  await executeCloudTask(started.task.id);
+  const completed = getCloudTask();
+  if (completed?.id !== started.task.id || completed.status !== "completed") throw new Error(completed?.error ?? "自动云备份未完成，请检查备份设置。");
 }

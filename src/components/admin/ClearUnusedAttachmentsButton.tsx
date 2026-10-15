@@ -13,7 +13,7 @@ export default function ClearUnusedAttachmentsButton({ count }: { count: number 
       type="button"
       disabled={pending || count === 0}
       onClick={() => {
-        if (!window.confirm(`确定清理 ${count} 个未引用附件？此操作不可恢复。`)) return;
+        if (!window.confirm(`确定清理 ${count} 个未引用附件？文件会移入回收站，可以恢复。`)) return;
         startTransition(async () => {
           const result = await clearUnusedAttachmentsAction();
           if (!result.ok) window.alert(result.error);

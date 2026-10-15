@@ -1,6 +1,6 @@
+import { currentDataEpoch } from "@/lib/cloud-restore-guard";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { promises as fsPromises } from "node:fs";
 import path from "path";
 import sharp from "sharp";
 import { requireAdminApi } from "@/lib/auth";
@@ -19,6 +19,7 @@ const UPLOAD_WINDOW_MS = 60 * 1000;
 const UPLOAD_MAX = 30;
 const allowUpload = createSlidingWindowLimiter({ windowMs: UPLOAD_WINDOW_MS, maxRequests: UPLOAD_MAX, maxKeys: 1_000 });
 export async function POST(request: Request) {
+  const epoch = currentDataEpoch();
   const session = await requireAdminApi(request);
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const rateKey = hashIp(getClientIp(request));
@@ -95,14 +96,13 @@ export async function POST(request: Request) {
   // 所有上传（封面/配图/Logo/头像/附件）都入库，便于在附件管理统一查看与清理
   let attachment: Attachment;
   try {
-    await fsPromises.mkdir(dir, { recursive: true });
     attachment = await writeUploadWithRecord(absolutePath, finalBuffer, () => createAttachment({
       post_id: postId,
       path: relativePath,
       original_name: file.name.slice(0, 160).replace(/[\\/\0]/g, "_") || name,
       mime_type: finalMime,
       size: finalBuffer.length,
-    }));
+    }), epoch);
   } catch (error) {
     console.error("[upload] 文件保存失败", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "文件保存失败，请稍后再试" }, { status: 500 });

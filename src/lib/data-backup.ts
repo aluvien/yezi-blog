@@ -1,3 +1,5 @@
+import { withDataFilesLock } from "@/lib/data-files-lock";
+import { verifyBackupUploads } from "@/lib/backup-upload-verification";
 import { acquireProcessLock, releaseProcessLock } from "../../scripts/process-lock.mjs";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
@@ -49,6 +51,7 @@ async function copyPersistentData(dataRoot: string, stagingData: string): Promis
       const relative = path.relative(dataRoot, source);
       if (!relative) return true;
       const first = relative.split(path.sep, 1)[0];
+      if (first.startsWith(".data-files.lock")) return false;
       if (first === "backups") return false;
       // QQ 音频降级缓存是可再生的派生数据（授权正常时会重新预热），且可能达到
       // GB 级、压缩率极低。放进完整备份会让每次备份体积和耗时都失控，因此排除。
@@ -108,12 +111,16 @@ export async function runCompleteDataBackup(options: { keep?: number } = {}): Pr
   let stagingRoot: string | undefined;
   try {
     stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), "yezi-data-backup-"));
-    const database = await runDbBackup();
     const stagingData = path.join(stagingRoot, "data");
-    await copyPersistentData(dataRoot, stagingData);
-    fs.mkdirSync(stagingData, { recursive: true, mode: 0o700 });
-    fs.copyFileSync(database.path, path.join(stagingData, "blog.db"));
-    fs.chmodSync(path.join(stagingData, "blog.db"), 0o600);
+    const database = await withDataFilesLock(async () => {
+      const database = await runDbBackup();
+      await copyPersistentData(dataRoot, stagingData);
+      fs.mkdirSync(stagingData, { recursive: true, mode: 0o700 });
+      fs.copyFileSync(database.path, path.join(stagingData, "blog.db"));
+      fs.chmodSync(path.join(stagingData, "blog.db"), 0o600);
+      verifyBackupUploads(stagingData);
+      return database;
+    });
     const manifest = {
       format: 1,
       createdAt: new Date().toISOString(),
@@ -185,6 +192,7 @@ export async function verifyCompleteDataBackup(inputPath: string): Promise<{ pat
     const manifest = JSON.parse(fs.readFileSync(path.join(extractRoot, "manifest.json"), "utf8")) as { format?: number };
     if (manifest.format !== 1) throw new Error("完整数据备份 manifest 版本不支持");
     const verification = verifyDatabaseBackup(path.join(extractRoot, "data", "blog.db"));
+    verifyBackupUploads(path.join(extractRoot, "data"));
     const entries: string[] = [];
     const count = (directory: string) => {
       for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {

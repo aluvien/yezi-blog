@@ -2,9 +2,9 @@
 import fs from "fs";
 import path from "path";
 import { db, now } from "./core";
-import { getSiteSettings } from "./settings";
+import { attachmentSources, attachmentReferences } from "@/lib/attachment-usage";
 import { getUploadDir } from "@/lib/uploads";
-import type { Attachment, AttachmentReference, AttachmentWithUsage } from "./types";
+import type { Attachment, AttachmentWithUsage } from "./types";
 
 export function createAttachment(data: {
   path: string;
@@ -63,15 +63,9 @@ export function isKnownArticleReferenceCover(coverUrl: string): boolean {
 
 export function listAttachments(): AttachmentWithUsage[] {
   const rows = db.prepare("SELECT * FROM attachments ORDER BY created_at DESC").all() as Attachment[];
-  const posts = db
-    .prepare("SELECT id, title, slug, content, cover FROM posts")
-    .all() as Array<{ id: number; title: string; slug: string; content: string; cover: string | null }>;
-  const moments = db
-    .prepare("SELECT id, content, images FROM moments")
-    .all() as Array<{ id: number; content: string; images: string }>;
-  const settings = getSiteSettings();
+  const sources = attachmentSources(db);
   const tracked = rows.map((row) => {
-    const references = findAttachmentReferences(row.path, posts, moments, settings);
+    const references = attachmentReferences(row.path, sources);
     return { ...row, references, referenced: references.length > 0, tracked: true };
   });
 
@@ -80,7 +74,7 @@ export function listAttachments(): AttachmentWithUsage[] {
   const untracked = diskFiles
     .filter((file) => !trackedPaths.has(file.path))
     .map((file) => {
-      const references = findAttachmentReferences(file.path, posts, moments, settings);
+      const references = attachmentReferences(file.path, sources);
       return {
         ...file,
         id: 0,
@@ -112,44 +106,6 @@ interface DiskAttachment extends Omit<Attachment, "id" | "post_id"> {
   post_id: null;
 }
 
-function findAttachmentReferences(
-  attachmentPath: string,
-  posts: Array<{ id: number; title: string; slug: string; content: string; cover: string | null }>,
-  moments: Array<{ id: number; content: string; images: string }>,
-  settings: Record<string, string>,
-): AttachmentReference[] {
-  const references: AttachmentReference[] = [];
-  for (const post of posts) {
-    const inContent = Boolean(post.content && post.content.includes(attachmentPath));
-    const isCover = Boolean(post.cover && post.cover === attachmentPath);
-    if (inContent || isCover) {
-      references.push({
-        type: "post",
-        id: post.id,
-        label: post.title,
-        slug: post.slug,
-        usage: inContent && isCover ? "content+cover" : isCover ? "cover" : "content",
-      });
-    }
-  }
-  for (const moment of moments) {
-    if (moment.images && moment.images.includes(attachmentPath)) {
-      const summary = moment.content.replace(/\s+/g, " ").trim().slice(0, 30);
-      references.push({ type: "moment", id: moment.id, label: summary || "想法" });
-    }
-  }
-  if (settings.site_logo && settings.site_logo === attachmentPath) {
-    references.push({ type: "setting", id: 0, label: "站点 Logo" });
-  }
-  if (settings.author_avatar && settings.author_avatar === attachmentPath) {
-    references.push({ type: "setting", id: 0, label: "作者头像" });
-  }
-  if (settings.about_content && settings.about_content.includes(attachmentPath)) {
-    references.push({ type: "setting", id: 0, label: "关于页内容", usage: "content" });
-  }
-  return references;
-}
-
 function scanUploadDirectory(): DiskAttachment[] {
   const root = getUploadDir();
   const files: DiskAttachment[] = [];
@@ -162,7 +118,7 @@ function scanUploadDirectory(): DiskAttachment[] {
       return;
     }
     for (const entry of entries) {
-      if (entry.name.startsWith(".")) continue;
+      if (entry.name.startsWith(".") || entry.name.includes(".compressing-")) continue;
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         walk(root, absolute);

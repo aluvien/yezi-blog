@@ -363,3 +363,16 @@ test("retention follows a stable site ID across domain changes and preserves sam
   assert.equal(remote.has(foreign), true); assert.equal(remote.has(legacy), true);
   assert.equal(getBackupSiteIdentity().siteId, identity.siteId);
 });
+
+test("scheduled cloud backup propagates upload failures so the scheduler can retry", async () => {
+  const { runDailyCloudBackup } = await import("../src/lib/cloud-backup.ts");
+  saveCloudSettings({ ...settings, dailyEnabled: true });
+  uploadStatus = 413;
+  try {
+    await assert.rejects(runDailyCloudBackup(), /413/);
+    assert.equal(getCloudTask().status, "failed");
+  } finally {
+    uploadStatus = 201;
+    saveCloudSettings(settings);
+  }
+});

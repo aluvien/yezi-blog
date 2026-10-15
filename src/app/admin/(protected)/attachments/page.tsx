@@ -1,3 +1,6 @@
+import AttachmentTrash from "@/components/admin/AttachmentTrash";
+import { listTrashedAttachments } from "@/lib/attachment-trash";
+import type { AttachmentReference } from "@/lib/db";
 import Link from "next/link";
 import { listAttachments } from "@/lib/db";
 import { compressAttachmentAction, compressUntrackedAttachmentAction, deleteAttachmentAction, deleteUntrackedAttachmentAction } from "@/lib/actions/attachments";
@@ -14,6 +17,19 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+function referenceLink(ref: AttachmentReference): string {
+  switch (ref.type) {
+    case "post": return `/admin/posts/${ref.id}/edit`;
+    case "moment": return `/admin/moments/${ref.id}/edit`;
+    case "life_event": return `/admin/life/milestones/${ref.id}/edit`;
+    case "work": return `/admin/works/${ref.id}/edit`;
+    case "github_repository": return "/admin/life/github";
+    case "reference": return "/admin/references";
+    default: return ref.label === "关于页内容" ? "/admin/pages/about" : "/admin/settings";
+  }
+}
+const referenceLabels: Record<AttachmentReference["type"], string> = { post: "文章", moment: "絮语", setting: "站点设置", life_event: "小记", work: "作品", github_repository: "仓库", reference: "引用" };
 
 export default function AdminAttachmentsPage() {
   const attachments = listAttachments();
@@ -59,20 +75,10 @@ export default function AdminAttachmentsPage() {
                   {attachment.references.map((ref, i) => (
                     <Link
                       key={`${ref.type}-${ref.id}-${i}`}
-                      href={ref.type === "post"
-                        ? `/admin/posts/${ref.id}/edit`
-                        : ref.type === "moment"
-                          ? `/admin/moments/${ref.id}/edit`
-                          : ref.label === "关于页内容"
-                            ? "/admin/pages/about"
-                            : "/admin/settings"}
+                      href={referenceLink(ref)}
                       className="admin-link min-w-0 truncate text-blue-700 no-underline hover:text-blue-900"
                     >
-                      {ref.type === "post"
-                        ? `${ref.usage === "cover" ? "封面：" : ref.usage === "content+cover" ? "正文+封面：" : "文章："}${ref.label}`
-                        : ref.type === "moment"
-                          ? `絮语：${ref.label}`
-                          : `站点设置：${ref.label}`}
+                      {`${referenceLabels[ref.type]}：${ref.label}`}
                     </Link>
                   ))}
                 </div>
@@ -88,7 +94,7 @@ export default function AdminAttachmentsPage() {
                 {!attachment.referenced && (
                   <DeleteButton
                     action={attachment.tracked ? deleteAttachmentAction.bind(null, attachment.id) : deleteUntrackedAttachmentAction.bind(null, attachment.path)}
-                    confirmText={attachment.tracked ? "确定删除这个未引用附件？此操作不可恢复。" : "确定删除这个目录中未入库的附件？此操作不可恢复。"}
+                    confirmText={attachment.tracked ? "将这个未引用附件移入回收站？之后可以恢复。" : "将这个目录附件移入回收站？之后可以恢复。"}
                   />
                 )}
               </div>
@@ -96,6 +102,7 @@ export default function AdminAttachmentsPage() {
           ))}
         </ul>
       )}
+      <AttachmentTrash files={listTrashedAttachments()} />
     </div>
   );
 }

@@ -104,7 +104,7 @@ export async function fetchGithubRepositoryMetadata(ref: GithubRepositoryRef, fe
 
   let response: FetchResponseLike;
   try {
-    response = await fetchImpl(githubRepositoryApiUrl(ref), { headers, cache: "no-store", redirect: "error" });
+    response = await fetchImpl(githubRepositoryApiUrl(ref), { headers, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(15_000) });
   } catch {
     return { ok: false, error: "network", message: "无法连接 GitHub，请检查网络或稍后重试" };
   }
