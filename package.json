@@ -6,7 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "postinstall": "node scripts/patch-aplayer.mjs",
+    "postinstall": "node scripts/ensure-sqlite.mjs && node scripts/patch-aplayer.mjs",
     "dev": "next dev -p 3030",
     "dev:qq-music": "node scripts/start-local-qq-music-api.mjs",
     "build": "node scripts/build.mjs",

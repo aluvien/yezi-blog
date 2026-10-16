@@ -2,9 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { ensureSqlite } from "./ensure-sqlite.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const env = { ...process.env };
+
+// Also covers installs performed with lifecycle scripts disabled.
+ensureSqlite({ root, env });
 
 // PM2、宝塔和开发终端可能残留其他 bundler 标记。项目固定用 webpack，
 // 子进程只保留一个明确选择，避免 “Multiple bundler flags set”。
