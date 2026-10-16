@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { getQQMusicSession } from "@/lib/qq-music-session";
 import { nativeQQMusicPlay } from "@/lib/qq-music-native-login";
 
@@ -181,6 +182,64 @@ export type QQSearchTrack = {
   album: string;
   cover: string;
 };
+
+/** Public song metadata does not require the owner's playback credentials. */
+export async function searchQQTracks(keyword: string, limit = 30): Promise<QQSearchTrack[]> {
+  const query = keyword.trim().slice(0, 80);
+  if (!query) return [];
+  const size = Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), 30)) : 30;
+
+  try {
+    const response = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
+      method: "POST",
+      headers: { "content-type": "application/json", referer: "https://y.qq.com/", "user-agent": "Mozilla/5.0" },
+      body: JSON.stringify({
+        // The desktop method with web ct=24 can silently return an empty list.
+        // Verified on the deployed host: desktop ct=19 / cv=2201 returns songs.
+        comm: { ct: 19, cv: 2201 },
+        req_0: {
+          module: "music.search.SearchCgiService",
+          method: "DoSearchForQQMusicDesktop",
+          param: {
+            query, num_per_page: size, page_num: 1, search_type: 0, grp: true, highlight: false,
+            searchid: randomBytes(8).readBigUInt64BE().toString(),
+          },
+        },
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) throw new Error("搜索请求失败");
+    const raw: unknown = await response.json();
+    const item = isRecord(raw) && isRecord(raw.req_0) ? raw.req_0 : null;
+    const data = item && isRecord(item.data) ? item.data : null;
+    const body = data && isRecord(data.body) ? data.body : null;
+    const song = body && isRecord(body.song) ? body.song : null;
+    if (!isRecord(raw) || raw.code !== 0 || item?.code !== 0
+      || !data || (data.code !== undefined && data.code !== 0) || !song || !Array.isArray(song.list)) {
+      throw new Error("搜索响应无效");
+    }
+    // A successful empty list is a real no-results response, not an outage.
+    return normalizeQQSearchTracks({ song }).slice(0, size);
+  } catch {
+    // Keep compatibility with deployments whose existing sidecar search works.
+  }
+
+  try {
+    const raw = await qqMusicRequest("/getSearchByKey", { query: { key: query, limit: String(size) }, useSession: false });
+    const envelope = isRecord(raw) && isRecord(raw.response) ? raw.response : raw;
+    const data = unwrapData(envelope);
+    const song = findRecord(data, ["song", "songs"]);
+    const list = song?.list ?? (isRecord(data) ? data.list : undefined);
+    if ((isRecord(envelope) && envelope.code !== undefined && envelope.code !== 0)
+      || (isRecord(data) && data.code !== undefined && data.code !== 0) || !Array.isArray(list)) {
+      throw new Error("搜索响应无效");
+    }
+    return normalizeQQSearchTracks(envelope).slice(0, size);
+  } catch {
+    throw new Error("QQ 音乐歌曲搜索暂不可用，请稍后重试");
+  }
+}
 
 export type QQPlaylistKind = "created" | "collected" | "search";
 

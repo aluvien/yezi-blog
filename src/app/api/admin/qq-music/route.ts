@@ -4,10 +4,10 @@ import { requireAdminApi } from "@/lib/auth";
 import {
   findString,
   normalizeQQPlaylists,
-  normalizeQQSearchTracks,
   qqMusicRequest,
   readUin,
   searchQQPlaylists,
+  searchQQTracks,
   type QQPlaylistSummary,
 } from "@/lib/qq-music-api";
 import {
@@ -110,8 +110,7 @@ export async function GET(request: Request) {
       if (type === "playlist") {
         return noCache({ playlists: await searchQQPlaylists(key, 30) });
       }
-      const raw = await qqMusicRequest("/getSearchByKey", { query: { key, limit: "30" } });
-      const tracks = normalizeQQSearchTracks(raw);
+      const tracks = await searchQQTracks(key, 30);
       upsertQQMusicMetadata(tracks);
       return noCache({ tracks });
     }
