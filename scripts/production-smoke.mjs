@@ -102,6 +102,27 @@ try {
   const pageHtml = await page.text();
   if (!pageHtml.includes(`nonce=\"${nonce}\"`)) throw new Error("页面主题脚本或框架脚本未携带 CSP nonce");
 
+  const fontManifest = JSON.parse(fs.readFileSync(path.join(root, "public/fonts/subsets/manifest.json"), "utf8"));
+  const font = fontManifest.files.find((file) => file.source === "noto-serif-sc-400-cjk-common.woff2");
+  if (!font) throw new Error("未找到正文中文字体分片");
+  const stylesheets = [...pageHtml.matchAll(/href="([^" ]+\.css(?:\?[^" ]*)?)"/g)];
+  const styles = await Promise.all(stylesheets.map(async ([, href]) => {
+    const response = await fetch(new URL(href, baseUrl));
+    if (!response.ok) throw new Error(`页面样式加载失败：HTTP ${response.status}`);
+    return response.text();
+  }));
+  if (!styles.some((style) => style.includes(`/fonts/subsets/${font.file}`))) {
+    throw new Error("构建样式未包含中文字体分片");
+  }
+  const fontResponse = await fetch(`${baseUrl}/fonts/subsets/${font.file}`);
+  const fontBytes = Buffer.from(await fontResponse.arrayBuffer());
+  if (!fontResponse.ok || fontBytes.toString("ascii", 0, 4) !== "wOF2" || fontBytes.length !== font.bytes) {
+    throw new Error(`standalone 中文字体分片不可用：HTTP ${fontResponse.status}`);
+  }
+  if (!fontResponse.headers.get("cache-control")?.includes("max-age=604800")) {
+    throw new Error("中文字体分片缺少预期缓存策略");
+  }
+
   // Public HTTPS terminates at Nginx while Node speaks HTTP. Test the same
   // forwarded scheme that previously turned /image into an HTTPS loopback proxy.
   const uploads = path.join(smokeRoot, "data", "uploads");
@@ -240,7 +261,7 @@ try {
       throw new Error(`生产域名变更未立即更新 ${route} 或仍有旧域名缓存`);
     }
   }
-  console.log(`production smoke passed: relocated standalone + SQLite + FTS + CSP + HTTPS images on ${baseUrl}`);
+  console.log(`production smoke passed: relocated standalone + subset fonts + SQLite + FTS + CSP + HTTPS images on ${baseUrl}`);
 } finally {
   await stop(child);
   fs.rmSync(smokeRoot, { recursive: true, force: true });
