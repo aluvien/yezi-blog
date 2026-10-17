@@ -17,7 +17,7 @@ import {
   validateNativeQQMusicRuntime,
 } from "@/lib/qq-music-native-login";
 import { getQQMusicSession, saveQQMusicSession } from "@/lib/qq-music-session";
-import { qqMusicSessionExpiresAt } from "@/lib/qq-music-credential";
+import { qqMusicSessionExpiresAt, readQQMusicAccountPlaylists } from "@/lib/qq-music-credential";
 import { inspectQQMusicHealth, qqMusicHealthStatusLabel } from "@/lib/qq-music-health";
 import { cleanupUnusedQQMusicCache, upsertQQMusicMetadata } from "@/lib/db";
 import { listReferencedQQMusicPlaylistIds, listReferencedQQMusicSongIds } from "@/lib/qq-music-access";
@@ -118,10 +118,10 @@ export async function GET(request: Request) {
       const session = getQQMusicSession();
       if (!session) return noCache({ error: "请先扫码登录 QQ 音乐" }, 409);
       const [createdResult, collectedResult] = await Promise.allSettled([
-        qqMusicRequest("/user/getUserPlaylists", {
+        session.nativeAuth ? readQQMusicAccountPlaylists(session, "created") : qqMusicRequest("/user/getUserPlaylists", {
           query: { uin: session.uin, offset: "0", limit: "100" },
         }),
-        qqMusicRequest("/user/getUserCollectedSongLists", {
+        session.nativeAuth ? readQQMusicAccountPlaylists(session, "collected") : qqMusicRequest("/user/getUserCollectedSongLists", {
           query: { uin: session.uin, page: "1", limit: "100" },
         }),
       ]);
