@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { getQQMusicSession } from "@/lib/qq-music-session";
 import { nativeQQMusicPlay } from "@/lib/qq-music-native-login";
+import { searchQQMusicWithSession } from "@/lib/qq-music-credential";
 
 /**
  * QQ Music sidecar adapter.
@@ -62,7 +63,7 @@ export async function qqMusicRequest(pathname: string, options: {
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
-    throw new Error("QQ 音乐服务返回了无效数据");
+    throw new Error(response.ok ? "QQ 音乐服务返回了无效数据" : `QQ 音乐服务错误（${response.status}）`);
   }
   if (!response.ok) {
     const message = findString(data, ["message", "msg", "error"]) || `QQ 音乐服务错误（${response.status}）`;
@@ -183,11 +184,21 @@ export type QQSearchTrack = {
   cover: string;
 };
 
-/** Public song metadata does not require the owner's playback credentials. */
+/** Prefer authenticated search when available; public metadata still has anonymous fallbacks. */
 export async function searchQQTracks(keyword: string, limit = 30): Promise<QQSearchTrack[]> {
   const query = keyword.trim().slice(0, 80);
   if (!query) return [];
   const size = Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), 30)) : 30;
+
+  const session = getQQMusicSession();
+  if (session?.nativeAuth) {
+    try {
+      const list = await searchQQMusicWithSession(session, query, "song", size);
+      return normalizeQQSearchTracks({ song: { list } }).slice(0, size);
+    } catch {
+      // A rejected search is not evidence that playback or the login has expired.
+    }
+  }
 
   try {
     const response = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
@@ -341,6 +352,13 @@ export async function searchQQPlaylists(keyword: string, limit = 30): Promise<QQ
   if (!query) return [];
   const size = Math.max(1, Math.min(limit, 30));
   const session = getQQMusicSession();
+  if (session?.nativeAuth) {
+    try {
+      return normalizeQQPlaylists(await searchQQMusicWithSession(session, query, "playlist", size), "search", size);
+    } catch {
+      // Retain compatibility with existing anonymous search services.
+    }
+  }
   const headers = {
     "content-type": "application/json",
     referer: "https://y.qq.com/",

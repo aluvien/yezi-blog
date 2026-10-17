@@ -1,4 +1,5 @@
 import { currentDataEpoch } from "@/lib/cloud-restore-guard";
+import { randomBytes } from "node:crypto";
 import { getQQMusicSession, updateQQMusicSession, type QQMusicSession } from "@/lib/qq-music-session";
 import { nativeQQMusicComm, qqMusicCredentialCookie } from "@/lib/qq-music-native-login";
 
@@ -101,6 +102,42 @@ export async function inspectQQMusicAccount(session: QQMusicSession): Promise<QQ
   } catch (error) {
     return error instanceof CredentialRequestError ? { status: error.status, code: error.code } : { status: "unverified" };
   }
+}
+
+function responseList(value: unknown): Credential[] {
+  if (!Array.isArray(value) || value.some((item) => !item || typeof item !== "object" || Array.isArray(item))) {
+    throw new Error("QQ 音乐返回的列表格式无效");
+  }
+  return value as Credential[];
+}
+
+/** Read with the saved device and credential; a native token is not a sidecar session. */
+export async function readQQMusicAccountPlaylists(session: QQMusicSession, kind: "created" | "collected"): Promise<Credential[]> {
+  if (kind === "created") {
+    const data = await musicu(session, "music.musicasset.PlaylistBaseRead", "GetPlaylistByUin", { uin: session.uin });
+    return responseList(data.v_playlist).slice(0, 100);
+  }
+  const encryptedUin = credentialFor(session).encryptUin;
+  if (typeof encryptedUin !== "string" || !encryptedUin.trim()) {
+    throw new Error("当前登录凭据缺少收藏歌单标识，请使用 QQ 音乐 App 重新扫码");
+  }
+  const data = await musicu(session, "music.musicasset.PlaylistFavRead", "CgiGetPlaylistFavInfo", {
+    uin: encryptedUin, offset: 0, size: 100,
+  });
+  return responseList(data.v_list).slice(0, 100);
+}
+
+/** The Lite protocol accepts the same native credential used by playback. */
+export async function searchQQMusicWithSession(session: QQMusicSession, query: string, type: "song" | "playlist", limit: number): Promise<Credential[]> {
+  const size = Math.max(1, Math.min(Math.trunc(limit), 20));
+  const data = await musicu(session, "music.search.SearchCgiService", "DoSearchForQQMusicLite", {
+    search_id: randomBytes(6).readUIntBE(0, 6).toString(),
+    remoteplace: "search.android.keyboard", query: query.trim().slice(0, 60),
+    search_type: type === "song" ? 0 : 3, num_per_page: size, page_num: 1,
+    highlight: 0, nqc_flag: 0, page_id: 1, grp: 1,
+  });
+  if (data.code !== undefined && data.code !== 0) throw new Error("QQ 音乐搜索响应无效");
+  return responseList(record(data.body)[type === "song" ? "item_song" : "item_songlist"]).slice(0, size);
 }
 
 function refreshParameters(session: QQMusicSession): Credential {
