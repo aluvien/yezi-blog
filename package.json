@@ -39,12 +39,12 @@
     "linkedom": "^0.18.13",
     "lucide-react": "^1.34.0",
     "marked": "^18.0.9",
-    "next": "16.3.8",
+    "next": "16.4.3",
     "pinyin-pro": "^3.28.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-image-crop": "^11.1.2",
-    "sanitize-html": "^2.17.7",
+    "sanitize-html": "^2.18.1",
     "sharp": "0.35.5",
     "tar": "^7.5.22"
   },
@@ -57,7 +57,7 @@
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.1",
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

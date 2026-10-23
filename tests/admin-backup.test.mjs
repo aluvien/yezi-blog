@@ -16,7 +16,7 @@ process.env.ADMIN_PASSWORD = "backup-private-password";
 process.env.HOST_ONLY_SECRET = "must-not-export";
 process.env.DATA_BACKUP_KEY = ""; // Manual backups must work without encryption setup.
 const { db, createPost } = await import("../src/lib/db.ts");
-const { executeAdminBackup, getAdminBackupStatus, startAdminBackup, getAdminBackupDownload, verifyAdminBackupArchive } = await import("../src/lib/admin-backup.ts");
+const { executeAdminBackup, getAdminBackupStatus, startAdminBackup, getAdminBackupDownload, verifyAdminBackupArchive, withAdminBackupTaskLock, withAdminBackupMaintenanceLock } = await import("../src/lib/admin-backup.ts");
 
 const backupRoot = path.join(root, "data", "backups", "admin");
 test.after(() => {
@@ -42,6 +42,8 @@ function fixtures() {
   fs.writeFileSync(path.join(root, "data", "reference-archives", "reader.md"), "reference");
   fs.writeFileSync(path.join(root, "data", "qq-music-audio", "song.m4a"), "cache");
   fs.writeFileSync(path.join(root, "data", "upload.tmp"), "temporary");
+  fs.mkdirSync(path.join(root, "data", "backup-jobs"), { recursive: true });
+  fs.writeFileSync(path.join(root, "data", "backup-jobs", "latest.json"), '{"status":"succeeded"}');
   fs.writeFileSync(path.join(root, ".env.local"), "ADMIN_PASSWORD=original-file-password\n");
   fs.writeFileSync(path.join(root, "ecosystem.config.js"), "module.exports = { apps: [] };\n");
   fs.writeFileSync(process.env.BLOG_ENV_FILE, "PRIVATE_KEY=external-file-secret\n");
@@ -87,6 +89,7 @@ test("one-click backup is recoverable with committed WAL rows, files and actual 
   assert.match(env, /backup-private-password/);
   assert.equal(env.includes("must-not-export"), false);
   assert.equal(fs.existsSync(path.join(restored, "data", "backups")), false);
+  assert.equal(fs.existsSync(path.join(restored, "data", "backup-jobs")), false);
   assert.equal(fs.existsSync(path.join(restored, "data", "qq-music-audio")), false);
   assert.equal(fs.existsSync(path.join(restored, "data", "npm-cache")), false);
   assert.equal(fs.readFileSync(path.join(root, "data", "npm-cache", "_cacache", "package"), "utf8"), "regenerable dependencies");
@@ -99,6 +102,19 @@ test("one-click backup is recoverable with committed WAL rows, files and actual 
   assert.equal(db.prepare("SELECT content FROM posts WHERE id = ?").get(post.id).content, "WAL 中已提交的内容");
   assert.equal(getAdminBackupDownload("../../.env.local"), null);
   assert.equal(getAdminBackupDownload("00000000-0000-4000-8000-000000000000"), null);
+});
+
+test("native asynchronous tasks retain the website producer lease until completion and release on failure", async () => {
+  let finish;
+  const gate = new Promise(resolve => { finish = resolve; });
+  const task = withAdminBackupTaskLock(() => gate);
+  assert.throws(() => startAdminBackup(), /备份锁不可用/);
+  assert.throws(() => withAdminBackupMaintenanceLock(() => {}), /正在执行/);
+  assert.equal(fs.existsSync(path.join(backupRoot, ".lock")), true);
+  finish(); await task;
+  assert.equal(fs.existsSync(path.join(backupRoot, ".lock")), false);
+  await assert.rejects(withAdminBackupTaskLock(async () => { throw new Error("simulated failure"); }), /simulated failure/);
+  assert.equal(fs.existsSync(path.join(backupRoot, ".lock")), false);
 });
 
 test("verification rejects modified file contents even in a valid gzip archive", async () => {

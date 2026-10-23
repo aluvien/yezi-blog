@@ -23,10 +23,19 @@ export async function GET(request: Request) {
     return adminError("INVALID_STATUS", "status 必须是 all、pending 或 approved", 400);
   }
   const status = rawStatus as AdminCommentStatus;
+  const query = new URL(request.url).searchParams;
+  const targetType = query.get("target_type");
+  const rawTargetId = query.get("target_id");
+  if ((targetType !== null || rawTargetId !== null) &&
+      ((targetType !== "post" && targetType !== "moment") || !rawTargetId || !/^[1-9]\d*$/.test(rawTargetId) || !Number.isSafeInteger(Number(rawTargetId)))) {
+    return adminError("INVALID_TARGET", "请提供有效的 target_type 和 target_id", 400);
+  }
+  const target = targetType === "post" || targetType === "moment" ? targetType : undefined;
+  const targetId = rawTargetId ? Number(rawTargetId) : undefined;
 
   try {
-    const comments = listCommentsForAdmin({ limit: pagination.limit, offset: pagination.offset, status });
-    const total = countCommentsForAdmin(status);
+    const comments = listCommentsForAdmin({ limit: pagination.limit, offset: pagination.offset, status, targetType: target, targetId });
+    const total = countCommentsForAdmin(status, target, targetId);
     return adminSuccess(
       comments.map(serializeAdminComment),
       paginationMeta(pagination.page, pagination.limit, total),

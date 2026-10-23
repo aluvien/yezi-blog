@@ -223,7 +223,7 @@ function cachedPlaylistMetadata(playlistId: string) {
   if (!cached) return null;
   return {
     total: cached.total,
-    tracks: cached.tracks.slice(0, MAX_PLAYLIST_TRACKS).map((track) => ({
+    tracks: cached.tracks.map((track) => ({
       name: normalizeMusicDisplayText(track.name, "QQ 音乐"),
       artist: normalizeMusicDisplayText(track.artist),
       cover: safeHttpsUrl(track.cover),
@@ -359,7 +359,7 @@ function cachePlaylistSongs(playlistId: string, songs: JsonRecord[]) {
   upsertQQMusicPlaylistMetadata(playlistId, songs.length, records);
   return {
     total: songs.length,
-    tracks: records.slice(0, MAX_PLAYLIST_TRACKS).map((record) => ({
+    tracks: records.map((record) => ({
       name: record.name,
       artist: record.artist,
       cover: record.cover,
@@ -536,14 +536,28 @@ export async function GET(request: Request) {
     }
   }
   if (kind === "playlist-metadata") {
+    const offsetText = url.searchParams.get("offset");
+    const limitText = url.searchParams.get("limit");
+    const paged = offsetText !== null || limitText !== null;
+    if (paged && (!/^(0|[1-9]\d*)$/.test(offsetText ?? "") || !/^[1-9]\d*$/.test(limitText ?? "") ||
+        !Number.isSafeInteger(Number(offsetText)) || Number(limitText) > 100)) {
+      return jsonError("offset 和 limit 必须是有效整数，limit 不超过 100", 400);
+    }
+    const offset = paged ? Number(offsetText) : 0;
+    const limit = paged ? Number(limitText) : MAX_PLAYLIST_TRACKS;
+    const page = (data: { total: number; tracks: unknown[] }) => ({
+      total: data.total,
+      tracks: data.tracks.slice(offset, offset + limit),
+      ...(paged ? { availableTotal: data.tracks.length, nextOffset: offset + limit < data.tracks.length ? offset + limit : null } : {}),
+    });
     const cached = cachedPlaylistMetadata(identifier);
     if (cached) {
-      return NextResponse.json(cached, { headers: { "cache-control": "private, max-age=86400" } });
+      return NextResponse.json(page(cached), { headers: { "cache-control": "private, max-age=86400" } });
     }
     if (!allowQQMusicRequest(hashIp(getClientIp(request)))) return jsonError("请求过于频繁，请稍后再试", 429);
     try {
       const metadata = await expensiveResolution.run(`playlist-metadata:${identifier}`, (signal) => resolvePlaylistMetadata(identifier, signal));
-      return NextResponse.json(metadata, { headers: { "cache-control": "private, max-age=86400" } });
+      return NextResponse.json(page(metadata), { headers: { "cache-control": "private, max-age=86400" } });
     } catch (error) {
       const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
       return jsonError(timedOut ? "QQ 音乐歌单信息解析超时，请稍后再试" : "QQ 音乐歌单信息暂不可用，请稍后再试", timedOut ? 504 : 502);

@@ -1,19 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { getProjectRoot } from "@/lib/uploads";
+import { cloudBackupRoot } from "@/lib/cloud-backup-lock";
+export { cloudBackupRoot } from "@/lib/cloud-backup-lock";
 import { normalizeWebDavLocation, type WebDavConfig } from "@/lib/webdav";
 import { getBackupSiteIdentity } from "@/lib/site-config";
 import type { CloudBackupSettings } from "@/lib/cloud-backup-types";
 
 export type StoredCloudSettings = WebDavConfig & { format: 1; key: string; version: string; dailyEnabled: boolean; keep: number };
-export function cloudBackupRoot(): string {
-  const directory = path.join(getProjectRoot(), "data", "backups", "cloud");
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  if (!fs.lstatSync(directory).isDirectory()) throw new Error("云备份目录不可用。");
-  fs.chmodSync(directory, 0o700);
-  return directory;
-}
 export function writePrivateJson(file: string, value: unknown): void {
   const temporary = `${file}.${crypto.randomUUID()}.tmp`;
   fs.writeFileSync(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600, flag: "wx" });

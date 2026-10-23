@@ -52,7 +52,7 @@ async function copyPersistentData(dataRoot: string, stagingData: string): Promis
       if (!relative) return true;
       const first = relative.split(path.sep, 1)[0];
       if (first.startsWith(".data-files.lock")) return false;
-      if (first === "backups") return false;
+      if (first === "backups" || first === "backup-jobs") return false;
       // QQ 音频降级缓存是可再生的派生数据（授权正常时会重新预热），且可能达到
       // GB 级、压缩率极低。放进完整备份会让每次备份体积和耗时都失控，因此排除。
       if (first === "qq-music-audio" || first === "npm-cache") return false;

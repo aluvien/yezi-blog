@@ -115,6 +115,8 @@ test("encrypted complete backup contains persistent data and only the online SQL
   fs.writeFileSync(path.join(tempRoot, "data", "qq-music-audio", "CacheMid01.m4a"), "audio");
   fs.mkdirSync(path.join(tempRoot, "data", "npm-cache", "_cacache"), { recursive: true });
   fs.writeFileSync(path.join(tempRoot, "data", "npm-cache", "_cacache", "package"), "dependencies");
+  fs.mkdirSync(path.join(tempRoot, "data", "backup-jobs"), { recursive: true });
+  fs.writeFileSync(path.join(tempRoot, "data", "backup-jobs", "latest.json"), '{"status":"succeeded"}');
   process.env.DATA_BACKUP_KEY = Buffer.alloc(32, 7).toString("base64");
   process.env.DATA_BACKUP_MIRROR_DIR = mirrorRoot;
 

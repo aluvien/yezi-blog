@@ -3,6 +3,8 @@ export const MAX_UPLOAD_REQUEST_SIZE = 21 * 1024 * 1024;
 export const MAX_UPLOAD_PIXELS = 60 * 1024 * 1024;
 
 export const ALLOWED_UPLOAD_TYPES: Readonly<Record<string, string>> = {
+  "video/mp4": ".mp4",
+  "video/quicktime": ".mov",
   "image/jpeg": ".jpg",
   "image/png": ".png",
   "image/webp": ".webp",
@@ -29,6 +31,18 @@ function hasZipSignature(buffer: Buffer): boolean {
  * be recorded or served as a Word document.
  */
 export function hasValidUploadSignature(mime: string, buffer: Buffer): boolean {
+  if (mime === "video/mp4" || mime === "video/quicktime") {
+    // ISO BMFF / QuickTime: validate the file-type box and a compatible brand.
+    if (buffer.length < 16 || buffer.toString("ascii", 4, 8) !== "ftyp") return false;
+    const boxSize = buffer.readUInt32BE(0);
+    if (boxSize < 16 || boxSize > buffer.length || (boxSize - 16) % 4 !== 0) return false;
+    const accepted = mime === "video/quicktime" ? ["qt  "] : ["isom", "iso2", "mp41", "mp42", "avc1", "M4V "];
+    if (accepted.includes(buffer.toString("ascii", 8, 12))) return true;
+    for (let offset = 16; offset < boxSize; offset += 4) {
+      if (accepted.includes(buffer.toString("ascii", offset, offset + 4))) return true;
+    }
+    return false;
+  }
   if (mime === "image/jpeg") return hasBytes(buffer, 0, [0xff, 0xd8, 0xff]);
   if (mime === "image/png") return hasBytes(buffer, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   if (mime === "image/webp") return buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP";

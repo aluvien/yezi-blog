@@ -9,6 +9,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MIME: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
   ".webp": "image/webp",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -53,14 +55,43 @@ export async function GET(request: Request) {
       headers: { ETag: etag, "Cache-Control": "public, max-age=60, must-revalidate" },
     });
   }
-  const stream = Readable.toWeb(fs.createReadStream(abs)) as ReadableStream<Uint8Array>;
+  let start = 0;
+  let end = stat.size - 1;
+  let partial = false;
+  const range = request.headers.get("range");
+  const ifRange = request.headers.get("if-range");
+  const rangeAllowed = !ifRange || ifRange === etag || ifRange === stat.mtime.toUTCString();
+  if (range && rangeAllowed) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (!match || (!match[1] && !match[2]) || !stat.size) {
+      return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${stat.size}` } });
+    }
+    if (!match[1]) {
+      const suffix = Number(match[2]);
+      if (!Number.isSafeInteger(suffix) || suffix <= 0) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${stat.size}` } });
+      start = Math.max(0, stat.size - suffix);
+    } else {
+      start = Number(match[1]);
+      if (match[2]) end = Math.min(end, Number(match[2]));
+    }
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= stat.size || end < start) {
+      return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${stat.size}` } });
+    }
+    partial = true;
+  }
+  const stream = request.method === "HEAD" ? null : Readable.toWeb(fs.createReadStream(abs, partial ? { start, end } : undefined)) as ReadableStream<Uint8Array>;
   return new Response(stream, {
+    status: partial ? 206 : 200,
     headers: {
       "Content-Type": mime,
-      "Content-Length": String(stat.size),
+      "Content-Length": String(partial ? end - start + 1 : stat.size),
+      "Accept-Ranges": "bytes",
+      ...(partial ? { "Content-Range": `bytes ${start}-${end}/${stat.size}` } : {}),
       "Last-Modified": stat.mtime.toUTCString(),
       ETag: etag,
       "Cache-Control": "public, max-age=60, must-revalidate",
     },
   });
 }
+
+export const HEAD = GET;

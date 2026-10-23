@@ -19,7 +19,7 @@ fs.chmodSync(logFile, 0o600);
 
 try {
   fs.writeSync(logFd, `\n[deploy-launcher] ${new Date().toISOString()} launcher=${process.pid}\n`);
-  const child = spawn(process.execPath, [runner], {
+  const child = spawn(process.execPath, process.env.BACKUP_JOB_ID ? ["--experimental-strip-types", runner] : [runner], {
     cwd: projectDir,
     detached: true,
     stdio: ["ignore", logFd, logFd],

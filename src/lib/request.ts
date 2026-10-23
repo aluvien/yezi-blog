@@ -11,7 +11,7 @@ export class RequestBodyError extends Error {
   }
 }
 
-/** Parse a JSON body without allowing an unbounded request to be buffered in memory. */
+/** Parse a JSON object without allowing an unbounded request to be buffered in memory. */
 export async function readLimitedJson<T = unknown>(request: Request, maxBytes: number): Promise<T> {
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) throw new RequestBodyError("请求内容过大", 413);
@@ -42,11 +42,16 @@ export async function readLimitedJson<T = unknown>(request: Request, maxBytes: n
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  let value: unknown;
   try {
-    return JSON.parse(new TextDecoder().decode(bytes)) as T;
+    value = JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     throw new RequestBodyError("请求格式错误");
   }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new RequestBodyError("请求体必须是 JSON 对象");
+  }
+  return value as T;
 }
 
 /**

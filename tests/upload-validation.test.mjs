@@ -62,3 +62,19 @@ test("database record failures remove the file that was just written", async () 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+
+test("video uploads require a bounded file-type box and a compatible brand", () => {
+  const box = (brand, size = 20) => {
+    const value = Buffer.alloc(20);
+    value.writeUInt32BE(size, 0);
+    value.write("ftyp", 4);
+    value.write(brand, 8);
+    return value;
+  };
+  assert.equal(hasValidUploadSignature("video/mp4", box("mp42")), true);
+  assert.equal(hasValidUploadSignature("video/quicktime", box("qt  ")), true);
+  assert.equal(hasValidUploadSignature("video/mp4", box("heic")), false);
+  assert.equal(hasValidUploadSignature("video/mp4", box("mp42", 99)), false);
+  assert.equal(hasValidUploadSignature("video/mp4", Buffer.from("not a video")), false);
+});

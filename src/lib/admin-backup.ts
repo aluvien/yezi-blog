@@ -122,6 +122,17 @@ export function getAdminBackupStatus(): AdminBackupStatus | null {
 
 /** Share the producer lock with synchronous local archive maintenance. */
 export function withAdminBackupMaintenanceLock<T>(run: () => T): T {
+  const release = acquireAdminBackupMaintenanceLease();
+  try { return run(); } finally { release(); }
+}
+
+/** Detached native tasks share the website backup producer's lease. */
+export async function withAdminBackupTaskLock<T>(run: () => Promise<T>): Promise<T> {
+  const release = acquireAdminBackupMaintenanceLease();
+  try { return await run(); } finally { release(); }
+}
+
+function acquireAdminBackupMaintenanceLease(): () => void {
   const root = prepareDirectory();
   reconcileInterrupted(root);
   const id = crypto.randomUUID();
@@ -133,8 +144,10 @@ export function withAdminBackupMaintenanceLock<T>(run: () => T): T {
   }
   try {
     fs.writeFileSync(fd, JSON.stringify({ id, pid: process.pid, bootId: runtime.yeziBackupBootId }));
-    return run();
-  } finally { fs.closeSync(fd); fs.rmSync(path.join(root, ".lock"), { force: true }); }
+  } catch (error) {
+    fs.closeSync(fd); fs.rmSync(path.join(root, ".lock"), { force: true }); throw error;
+  }
+  return () => { fs.closeSync(fd); fs.rmSync(path.join(root, ".lock"), { force: true }); };
 }
 export function clearDeletedAdminBackupStatus(id: string): void {
   const file = path.join(backupDirectory(), "status.json");
@@ -185,7 +198,7 @@ async function copyData(source: string, target: string, dataRoot: string, ancest
   const relative = path.relative(dataRoot, source);
   if (excluded.includes(path.resolve(source))) return;
   if (relative.split(path.sep)[0].startsWith(".data-files.lock")) return;
-  if (relative && (["backups", "qq-music-audio", "npm-cache"].includes(relative.split(path.sep)[0]) || /\.tmp$/.test(relative) || excluded.includes(path.resolve(source)) || /(?:^|\/)blog\.db(?:-wal|-shm)?$/.test(relative))) return;
+  if (relative && (["backups", "backup-jobs", "qq-music-audio", "npm-cache"].includes(relative.split(path.sep)[0]) || /\.tmp$/.test(relative) || excluded.includes(path.resolve(source)) || /(?:^|\/)blog\.db(?:-wal|-shm)?$/.test(relative))) return;
   const real = await fs.promises.realpath(source);
   if (real !== dataRoot && !real.startsWith(`${dataRoot}${path.sep}`)) throw new Error("数据软链接指向备份范围外");
   const stat = await fs.promises.stat(source);
@@ -312,7 +325,7 @@ export async function executeAdminBackup(id: string, onProgress?: (phase: AdminB
       schemaVersion: snapshot.verification.schemaVersion,
       locations: { BLOG_ROOT: stateRoot, BLOG_DB_PATH: dbPath, QQ_MUSIC_SESSION_PATH: sessionPath, TELEGRAM_STATE_PATH: telegramPath },
       configuration,
-      excludes: ["data/backups", "data/qq-music-audio", "data/npm-cache", "SQLite WAL/SHM", "*.tmp", "node_modules", ".next"],
+      excludes: ["data/backups", "data/backup-jobs", "data/qq-music-audio", "data/npm-cache", "SQLite WAL/SHM", "*.tmp", "node_modules", ".next"],
       files: await listFiles(stage),
     };
     await fs.promises.writeFile(path.join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
