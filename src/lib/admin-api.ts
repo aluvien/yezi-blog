@@ -6,6 +6,7 @@ import type { Comment, CommentWithTarget, Moment, Post, ReferenceLibraryItem, Se
 import { normalizeArticleReferenceSnapshot, type ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { parseMomentImages } from "@/lib/moments";
 import { parsePostTags } from "@/lib/post-tags";
+import { stripMarkdown } from "@/lib/markdown";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
 
 export const ADMIN_API_VERSION = "v1";
@@ -195,6 +196,7 @@ export function serializeAdminPostSummary(post: Post, metrics?: { views: number;
     id: post.id,
     title: post.title,
     slug: post.slug,
+    excerpt: stripMarkdown(post.content, 180),
     cover: post.cover,
     category: post.category,
     tags: parsePostTags(post.tags),

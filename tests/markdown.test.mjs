@@ -245,3 +245,17 @@ test("local article references render as a compact link with an inline summary t
   assert.ok(!html.includes('class="article-reference-card"'));
   assert.equal(stripMarkdown(`正文\n${marker}`, 200), "正文");
 });
+
+
+test("native video shortcodes render uploaded media with user-controlled playback", () => {
+  for (const marker of ["!video /uploads/example.mp4", "!video:/uploads/example.mov"]) {
+    const html = renderMarkdown(marker);
+    assert.match(html, /<video/);
+    assert.match(html, /controls/);
+    assert.match(html, /preload="none"/);
+    assert.doesNotMatch(html, /autoplay/);
+    assert.equal(stripMarkdown(marker), "");
+  }
+  assert.doesNotMatch(renderMarkdown("!video javascript:alert(1)"), /<video/);
+  assert.doesNotMatch(renderMarkdown("!video https://example.com/movie.mp4\" onerror=\"alert(1)"), /<video[^>]+onerror/);
+});

@@ -26,6 +26,8 @@ const { GET: siteGet } = await import("../src/app/api/v1/site/route.ts");
 const { GET: referencesGet } = await import("../src/app/api/v1/references/route.ts");
 const { GET: referenceCategoriesGet } = await import("../src/app/api/v1/reference-categories/route.ts");
 const { POST: interactionsPost } = await import("../src/app/api/v1/interactions/route.ts");
+const { POST: commentsPost } = await import("../src/app/api/v1/comments/route.ts");
+const { POST: legacyCommentsPost } = await import("../src/app/api/comments/route.ts");
 
 test.after(() => {
   db.close();
@@ -183,4 +185,51 @@ test("public reference endpoints opt into short shared-cache TTLs while metric-b
 
   const posts = await postsGet(new Request("http://yezi.test/api/v1/posts?limit=5"));
   assert.equal(posts.headers.get("cache-control"), "no-store", "含实时 views/likes 的列表不得进入共享缓存");
+});
+
+test("public writes return 400 for null, arrays, primitives and malformed JSON", async () => {
+  const initialComments = db.prepare("SELECT COUNT(*) AS count FROM comments").get().count;
+  for (const handler of [interactionsPost, commentsPost, legacyCommentsPost]) {
+    for (const body of ["null", "[]", "[{}]", '"text"', "0", "true", "{"]) {
+      const response = await handler(new Request("https://yezi.test/api/v1/write", {
+        method: "POST",
+        headers: { origin: "https://yezi.test", "content-type": "application/json" },
+        body,
+      }));
+      assert.equal(response.status, 400, body);
+      assert.ok((await response.json()).error);
+    }
+  }
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM comments").get().count, initialComments);
+});
+
+
+test("admin post summaries include a bounded plain-text excerpt without full content", async () => {
+  const { serializeAdminPostSummary } = await import("../src/lib/admin-api.ts");
+  const post = createPost({ title: "摘要验收", content: "## 标题\n\n**正文** ".repeat(100), status: "draft", tags: ["测试"] });
+  const summary = serializeAdminPostSummary(post);
+  assert.ok(summary.excerpt.length <= 181);
+  assert.match(summary.excerpt, /标题 正文/);
+  assert.equal(summary.excerpt.includes("**"), false);
+  assert.equal("content" in summary, false);
+  assert.deepEqual(summary.tags, ["测试"]);
+});
+
+test("uploaded video supports MIME, byte ranges, HEAD and invalid-range responses", async () => {
+  const { GET, HEAD } = await import("../src/app/uploads/[...path]/route.ts");
+  const directory = path.join(tempRoot, "data", "uploads");
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, "range-test.mp4"), Buffer.from("0123456789"));
+  const request = (range) => new Request("http://yezi.test/uploads/range-test.mp4", { headers: { Range: range } });
+  const part = await GET(request("bytes=2-5"));
+  assert.equal(part.status, 206);
+  assert.equal(part.headers.get("content-type"), "video/mp4");
+  assert.equal(part.headers.get("content-range"), "bytes 2-5/10");
+  assert.equal(await part.text(), "2345");
+  const suffix = await GET(request("bytes=-3"));
+  assert.equal(await suffix.text(), "789");
+  assert.equal((await GET(request("bytes=11-"))).status, 416);
+  const head = await HEAD(new Request("http://yezi.test/uploads/range-test.mp4", { method: "HEAD" }));
+  assert.equal(head.headers.get("content-length"), "10");
+  assert.equal(await head.text(), "");
 });

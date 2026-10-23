@@ -19,7 +19,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "strong", "em", "del", "blockquote", "cite", "code", "pre",
     "ul", "ol", "li", "a", "img", "hr", "table", "thead", "tbody", "tr", "th", "td", "div", "span", "aside", "details", "summary", "time", "iframe", "button", "svg", "path", "rect",
-    "figure", "figcaption", "template",
+    "figure", "figcaption", "template", "video",
   ],
   allowedAttributes: {
     a: ["href", "title", "target", "rel", "class", "aria-label"],
@@ -38,6 +38,7 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     details: ["class", "open"],
     summary: ["class"],
     time: ["class", "datetime"],
+    video: ["src", "controls", "preload", "playsinline", "width"],
     iframe: ["src", "title", "loading", "allow", "referrerpolicy", "allowfullscreen", "data-video-platform"],
     span: ["class", "aria-hidden", "role"],
     button: ["class", "type", "aria-label", "aria-expanded", "title", "data-state", "data-code-copy", "data-code-expand"],
@@ -116,7 +117,7 @@ function renderMarkdownImage(src: string, alt: string, titleAttribute: string): 
  *   !video https://www.bilibili.com/video/BV13JMi6yE4p
  */
 function renderEmbedShortcode(text: string): string | null {
-  const match = text.trim().match(/^!(music|video)\s+(.+?)\s*$/i);
+  const match = text.trim().match(/^!(music|video)(?:\s+|:)(.+?)\s*$/i);
   if (!match) return null;
 
   if (match[1].toLowerCase() === "music") {
@@ -124,7 +125,16 @@ function renderEmbedShortcode(text: string): string | null {
     return spec ? musicContainerHtml(spec) : null;
   }
 
-  const spec = parseVideoBlock(match[2])[0];
+  const raw = match[2].trim();
+  try {
+    const url = new URL(raw, "https://local.invalid");
+    const local = raw.startsWith("/uploads/") && !raw.includes("\\");
+    const remote = /^https?:\/\//i.test(raw) && !url.username && !url.password;
+    if ((local || remote) && /\.(mp4|mov|m4v|webm)$/i.test(url.pathname)) {
+      return `<video src="${escapeHtml(raw)}" controls preload="none" playsinline width="100%"></video>`;
+    }
+  } catch { /* Fall through to the supported provider parser. */ }
+  const spec = parseVideoBlock(raw)[0];
   return spec ? videoContainerHtml(spec) : null;
 }
 
@@ -433,7 +443,7 @@ export function stripMarkdown(content: string, maxLength = 100): string {
   let text = content
     .replace(/^[ \t]*!reference(?::|[ \t]+)\S+[ \t]*$/gm, " ")
     .replace(/^[ \t]*!site-reference(?::|[ \t]+)\S+[ \t]*$/gm, " ")
-    .replace(/^[ \t]*!(?:music|video)\s+.+?[ \t]*$/gmi, " ")
+    .replace(/^[ \t]*!(?:music|video)(?:\s+|:).+?[ \t]*$/gmi, " ")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")

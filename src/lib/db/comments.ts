@@ -9,6 +9,8 @@ export type AdminCommentQuery = {
   limit?: number;
   offset?: number;
   status?: AdminCommentStatus;
+  targetType?: "post" | "moment";
+  targetId?: number;
 };
 
 const ADMIN_COMMENT_SELECT = `SELECT c.*,
@@ -27,9 +29,19 @@ function normalizeAdminCommentQuery(input: number | AdminCommentQuery | undefine
   return input ?? {};
 }
 
-function adminCommentFilter(status: AdminCommentStatus = "all"): { where: string; params: string[] } {
-  if (status === "pending" || status === "approved") return { where: " WHERE c.status = ?", params: [status] };
-  return { where: "", params: [] };
+function adminCommentFilter(status: AdminCommentStatus = "all", targetType?: "post" | "moment", targetId?: number): { where: string; params: Array<string | number> } {
+  const clauses: string[] = [];
+  const params: Array<string | number> = [];
+  if (status === "pending" || status === "approved") { clauses.push("c.status = ?"); params.push(status); }
+  if (targetType && targetId !== undefined) { clauses.push("c.target_type = ?", "c.target_id = ?"); params.push(targetType, targetId); }
+  return { where: clauses.length ? " WHERE " + clauses.join(" AND ") : "", params };
+}
+
+/** One query for a whole admin feed page, including pending comments. */
+export function countMomentCommentsBulk(ids: number[]): Map<number, number> {
+  if (!ids.length) return new Map();
+  const rows = db.prepare(`SELECT target_id, COUNT(*) AS count FROM comments WHERE target_type = 'moment' AND target_id IN (${ids.map(() => "?").join(",")}) GROUP BY target_id`).all(...ids) as Array<{ target_id: number; count: number }>;
+  return new Map(rows.map(row => [row.target_id, row.count]));
 }
 
 /** 后台审核列表：pending 优先，组内按时间倒序，附带评论对象标签。 */
@@ -37,7 +49,7 @@ export function listCommentsForAdmin(input?: number | AdminCommentQuery): Commen
   const options = normalizeAdminCommentQuery(input);
   const safeLimit = options.limit === undefined ? null : Math.min(100, Math.max(1, Math.trunc(options.limit)));
   const safeOffset = options.offset === undefined ? 0 : Math.max(0, Math.trunc(options.offset));
-  const filter = adminCommentFilter(options.status);
+  const filter = adminCommentFilter(options.status, options.targetType, options.targetId);
   const limitSql = safeLimit === null ? "" : " LIMIT ?";
   const offsetSql = safeLimit !== null && safeOffset > 0 ? " OFFSET ?" : "";
   const params: Array<string | number> = [...filter.params];
@@ -55,8 +67,8 @@ export function getCommentForAdmin(id: number): CommentWithTarget | undefined {
   return db.prepare(`${ADMIN_COMMENT_SELECT} WHERE c.id = ?`).get(id) as CommentWithTarget | undefined;
 }
 
-export function countCommentsForAdmin(status: AdminCommentStatus = "all"): number {
-  const filter = adminCommentFilter(status);
+export function countCommentsForAdmin(status: AdminCommentStatus = "all", targetType?: "post" | "moment", targetId?: number): number {
+  const filter = adminCommentFilter(status, targetType, targetId);
   return (
     db.prepare(`SELECT COUNT(*) AS c FROM comments c${filter.where}`).get(...filter.params) as { c: number }
   ).c;

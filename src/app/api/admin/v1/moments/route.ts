@@ -9,7 +9,7 @@ import {
   serializeAdminMoment,
 } from "@/lib/admin-api";
 import { createMomentEntry } from "@/lib/admin/moments";
-import { countMoments, getContentMetricsBulk, getMoment, listMoments } from "@/lib/db";
+import { countMomentCommentsBulk, countMoments, getContentMetricsBulk, getMoment, listMoments } from "@/lib/db";
 import { parsePostTags } from "@/lib/post-tags";
 
 export const runtime = "nodejs";
@@ -23,9 +23,10 @@ export async function GET(request: Request) {
 
   try {
     const moments = listMoments({ limit: pagination.limit, offset: pagination.offset });
+    const counts = countMomentCommentsBulk(moments.map(moment => moment.id));
     const metrics = getContentMetricsBulk("moment", moments.map((moment) => moment.id));
     return adminSuccess(
-      moments.map((moment) => serializeAdminMoment(moment, metrics.get(moment.id) ?? { views: 0, likes: 0 })),
+      moments.map((moment) => ({ ...serializeAdminMoment(moment, metrics.get(moment.id) ?? { views: 0, likes: 0 }), comment_count: counts.get(moment.id) ?? 0 })),
       paginationMeta(pagination.page, pagination.limit, countMoments()),
     );
   } catch (error) {
