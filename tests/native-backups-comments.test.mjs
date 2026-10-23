@@ -51,6 +51,9 @@ test("backup API authenticates, validates IDs and streams the exact backup", asy
   const snapshot = await runDbBackup();
   const id = `database:${path.basename(snapshot.path)}`;
   assert.ok(listBackups().some(item => item.id === id));
+  const overview = await backups(request("/api/admin/v1/native-backups"));
+  assert.equal(overview.status, 200);
+  assert.ok((await overview.json()).data.backups.some(item => item.id === id));
   assert.throws(() => backupFile("database:../../blog.db"));
   const link = path.join(path.dirname(snapshot.path), "blog-symlink.db"); fs.symlinkSync(snapshot.path, link);
   assert.throws(() => backupFile("database:blog-symlink.db")); fs.unlinkSync(link);
