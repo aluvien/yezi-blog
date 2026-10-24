@@ -383,6 +383,33 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 18,
+    name: "ios-push-notifications",
+    up(db) {
+      db.exec(`
+        CREATE TABLE push_devices (
+          installation_id TEXT PRIMARY KEY, token TEXT NOT NULL,
+          environment TEXT NOT NULL CHECK(environment IN ('development','production')),
+          site_root TEXT NOT NULL, session_id TEXT NOT NULL,
+          comments INTEGER NOT NULL DEFAULT 1, music INTEGER NOT NULL DEFAULT 1,
+          enabled INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL,
+          last_test_at INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(token, environment)
+        );
+        CREATE TABLE push_outbox (
+          id INTEGER PRIMARY KEY, event_key TEXT NOT NULL,
+          installation_id TEXT NOT NULL, payload TEXT NOT NULL,
+          kind TEXT NOT NULL, created_at INTEGER NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL,
+          state TEXT NOT NULL DEFAULT 'pending', last_reason TEXT,
+          UNIQUE(event_key, installation_id)
+        );
+        CREATE INDEX idx_push_outbox_due ON push_outbox(state,next_attempt_at);
+        CREATE TABLE push_health_state (name TEXT PRIMARY KEY, invalid INTEGER NOT NULL, session_version TEXT);
+      `);
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

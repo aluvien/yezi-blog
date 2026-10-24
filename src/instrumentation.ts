@@ -31,6 +31,8 @@ export async function register(): Promise<void> {
         console.error("[security] 密码轮换指纹检查失败，本次启动跳过；下次启动会重试", error instanceof Error ? error.message : error);
       }
       startMaintenanceScheduler();
+      const { startPushScheduler } = await import("./lib/ios-push");
+      startPushScheduler();
       startQQMusicHealthScheduler();
       startTelegramBotScheduler();
       resumeArticleReferenceArchiveJobs();
