@@ -5,6 +5,7 @@ import { validateCommentInput } from "@/lib/comment-validation";
 import { getClientIp, readLimitedJson, RequestBodyError } from "@/lib/request";
 import { notifyNewComment } from "@/lib/telegram";
 import { validatePublicWriteRequest } from "@/lib/request-security";
+import { enqueuePush, drainPushOutbox } from "@/lib/ios-push";
 
 export type CommentResult = { data: unknown; status: number };
 
@@ -40,6 +41,11 @@ export async function submitComment(request: Request): Promise<CommentResult> {
 
   const comment = createComment({ target_type: targetType, target_id: targetId, nickname, email, website, content, ip });
   const siteSettings = getSiteSettings();
+  try {
+    enqueuePush({ key: `comment:${comment.id}`, kind: "comment", comment_id: comment.id,
+      title: `${comment.nickname.slice(0, 30)} 留下了新评论`, body: comment.content });
+    after(() => drainPushOutbox());
+  } catch { console.warn("[push] comment notification could not be queued"); }
   // `after` keeps the async delivery in the request lifecycle without making a
   // visitor wait for Telegram or allowing a delivery failure to reject a valid
   // comment submission.

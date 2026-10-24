@@ -6,6 +6,7 @@ import { findString, normalizeQQAudio, qqMusicRequest, unwrapData } from "@/lib/
 import { canManageFromNotificationChat, escapeTelegramHtml, isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
 import { QQ_MUSIC_WEB_SOURCE, withSource } from "@/lib/service-source";
 import { inspectQQMusicAccount } from "@/lib/qq-music-credential";
+import { notifyMusicPushHealth, drainPushOutbox } from "@/lib/ios-push";
 
 export type QQMusicHealthStatus = "healthy" | "missing_session" | "expired" | "unavailable" | "unverified" | "playback_unavailable";
 
@@ -175,6 +176,8 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
   const now = Date.now();
   let notified = false;
   const needsLogin = result.status === "missing_session" || result.status === "expired";
+  try { notifyMusicPushHealth(result.status, result.sessionVersion, previous.sessionVersion); }
+  catch { console.warn("[push] music notification could not be queued"); }
 
   if (isTelegramConfigured() && qqMusicHealthNeedsAttention(result.status) && shouldRepeatAlert(previous, result.status, now)) {
     const sent = await sendTelegramMessage([
@@ -210,6 +213,7 @@ export async function checkAndNotifyQQMusicHealth(): Promise<QQMusicHealthResult
   }
 
   if (!dataWriteRejection(epoch)) saveQQMusicHealthAlertState(next);
+  if (!dataWriteRejection(epoch)) await drainPushOutbox().catch(() => {});
   return { ...result, notified };
 }
 

@@ -19,6 +19,15 @@ import { getComment, getCommentForAdmin } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeAdminApi(request);
+  if (!auth.ok) return auth.response;
+  const id = parseAdminId((await params).id);
+  if (id === null) return adminError("INVALID_ID", "评论 ID 必须是正整数", 400);
+  const comment = getCommentForAdmin(id);
+  return comment ? adminSuccess(serializeAdminComment(comment)) : adminError("COMMENT_NOT_FOUND", "评论已删除或不存在", 404);
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await authorizeAdminApi(request);
   if (!auth.ok) return auth.response;

@@ -25,6 +25,8 @@
 # misc
 .DS_Store
 *.pem
+*.p8
+/.private/
 
 # debug
 npm-debug.log*
