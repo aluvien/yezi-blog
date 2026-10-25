@@ -33,6 +33,10 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm run test:unit
+      - name: Installer checks
+        run: |
+          bash -n scripts/install.sh
+          python3 -m unittest discover -s tests -p install_test.py
       - name: Integration tests
         run: npm run test:integration
       - name: Coverage baseline

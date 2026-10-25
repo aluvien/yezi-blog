@@ -56,3 +56,8 @@ next-env.d.ts
 
 # Temporary online deployment builds
 /.deploy-work-*/
+
+# Installer journals and Python test caches
+/.yezi-install.json
+/ecosystem.install.config.cjs
+__pycache__/
