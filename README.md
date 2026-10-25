@@ -36,6 +36,24 @@
 
 Next.js 16（App Router）· React 19 · TypeScript · Tailwind CSS v4 · better-sqlite3 · marked
 
+## 新服务器安装
+
+新服务器可使用[一键安装](docs/one-command-install.md)，自动安装博客、QQ 音乐服务和运行依赖，识别宝塔/aaPanel 并登记两个 PM2 项目。安装后进入后台「设置 → 备份与恢复」恢复旧站数据。安装器只用于新环境；已有网站继续使用后台「同步 GitHub」。
+
+支持 Debian 11+、Ubuntu 22.04+，以及 x86_64 / arm64。宝塔/aaPanel 需已有 Nginx、Node.js 版本管理器及新版 PM2 项目功能；Node 运行时、PM2 和编译依赖由安装器准备。建议至少预留 6 GiB 磁盘空间，内存与 swap 合计至少 2 GiB。
+
+将域名解析到新服务器后，在服务器 root 终端执行，替换 `example.com`：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aluvien/yezi-blog/main/scripts/install.sh | bash -s -- --domain example.com --https --accept-acme-terms
+```
+
+该命令自动申请 HTTPS 证书，需公网 80/443 端口可达，并同意 [Let’s Encrypt 服务条款](https://letsencrypt.org/repository/)。如需由宝塔/aaPanel 管理证书，去掉 `--https --accept-acme-terms`，先完成 HTTP 安装，再按[说明](docs/one-command-install.md)配置 HTTPS。
+
+默认目录为 `/www/wwwroot/example.com` 和 `/www/wwwroot/api.music.example.com`，后台入口为 `/admin`。初始密码在安装完成时显示，也保存在博客 `.env.local` 的 `ADMIN_PASSWORD` 中。安装会保护已有目录和同名项目；中断后可用相同参数继续。
+
+迁移旧站时，进入后台「设置 → 备份与恢复」上传完整备份，或配置 WebDAV 并导入旧站恢复密钥。恢复保留新服务器的环境文件和 PM2 配置，Telegram、LLM、Apple 推送等密钥需对照备份配置补回。详见[安装、恢复流程与验证范围](docs/one-command-install.md)。
+
 ## 本地开发
 
 ```bash
@@ -49,7 +67,7 @@ npm run dev                        # http://localhost:3030
 本地同时运行网站和 QQ 音乐 API 时，先在一个终端启动内置的 QQ Music API（默认 3200 端口），再在另一个终端启动博客（默认 3030 端口）：
 
 ```bash
-PORT=3200 node node_modules/@yakult-green-tea/qq-music-api/dist/src/app.js
+npm run dev:qq-music
 npm run build && npm start
 ```
 
