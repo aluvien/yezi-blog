@@ -2,7 +2,7 @@
 
 import EditorDraftNotice from "./EditorDraftNotice";
 import { useEditorDraft } from "@/hooks/useEditorDraft";
-import { isMomentEditorDraft } from "@/lib/editor-draft";
+import { isMomentEditorDraft, type MomentEditorDraft } from "@/lib/editor-draft";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createMomentAction, updateMomentAction } from "@/lib/actions/moments";
@@ -10,6 +10,8 @@ import type { Moment } from "@/lib/db";
 import { uploadImage } from "./ImageUpload";
 import { MusicInsertDialog } from "./MusicInsertDialog";
 import { parsePostTags } from "@/lib/post-tags";
+import { momentImageCropStyle, normalizeMomentImageCrops, parseMomentImageCrops, type MomentImageCrops } from "@/lib/moment-image-crops";
+import { MomentThumbnailDialog } from "./MomentThumbnailDialog";
 
 const MAX_IMAGES = 9;
 
@@ -29,6 +31,8 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
   const [content, setContent] = useState(moment?.content ?? "");
   const [tags, setTags] = useState(() => parsePostTags(moment?.tags).join(", "));
   const [images, setImages] = useState<string[]>(() => initialImages(moment));
+  const [imageCrops, setImageCrops] = useState<MomentImageCrops>(() => parseMomentImageCrops(moment?.image_crops, initialImages(moment)));
+  const [editingImage, setEditingImage] = useState<string | null>(null);
   const [location, setLocation] = useState(moment?.location ?? "");
   const [original, setOriginal] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -37,12 +41,12 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
   const [musicDialog, setMusicDialog] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const draft = useEditorDraft({
+  const draft = useEditorDraft<MomentEditorDraft>({
     draftKey: `moment:${moment?.id ?? "new"}`,
-    value: { content, tags, images, location },
-    initial: { content: moment?.content ?? "", tags: parsePostTags(moment?.tags).join(", "), images: initialImages(moment), location: moment?.location ?? "" },
+    value: { content, tags, images, location, imageCrops: normalizeMomentImageCrops(imageCrops, images) ?? {} },
+    initial: { content: moment?.content ?? "", tags: parsePostTags(moment?.tags).join(", "), images: initialImages(moment), location: moment?.location ?? "", imageCrops: parseMomentImageCrops(moment?.image_crops, initialImages(moment)) },
     validate: isMomentEditorDraft,
-    restore: value => { setContent(value.content); setTags(value.tags); setImages(value.images); setLocation(value.location); },
+    restore: value => { setContent(value.content); setTags(value.tags); setImages(value.images); setLocation(value.location); setImageCrops(value.imageCrops ?? parseMomentImageCrops(moment?.image_crops, value.images)); },
   });
 
   async function handleFiles(files: FileList | null) {
@@ -124,8 +128,8 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
     startTransition(async () => {
       try {
         const r = moment
-          ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags), location })
-          : await createMomentAction({ content, images, tags: parsePostTags(tags), location });
+          ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags), location, imageCrops: { ...(normalizeMomentImageCrops(imageCrops, images) ?? {}) } })
+          : await createMomentAction({ content, images, tags: parsePostTags(tags), location, imageCrops: { ...(normalizeMomentImageCrops(imageCrops, images) ?? {}) } });
         if (!r.ok) {
           setError(r.error);
           return;
@@ -141,6 +145,16 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
       } catch { setError("保存失败，请检查网络后重试，浏览器草稿已保留。"); }
     });
   }
+
+  const thumbnailDialog = editingImage && <MomentThumbnailDialog key={editingImage} src={editingImage} crop={imageCrops[editingImage]} single={images.length === 1} onClose={crop => {
+    if (crop !== undefined) setImageCrops(current => {
+      const next = { ...(normalizeMomentImageCrops(current, images) ?? {}) };
+      if (crop === null) delete next[editingImage];
+      else next[editingImage] = crop;
+      return next;
+    });
+    setEditingImage(null);
+  }} />;
 
   if (compact) {
     return (
@@ -176,8 +190,10 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
           <div className="flex flex-wrap gap-2">
             {images.map((src, i) => (
               <div key={`${src}-${i}`} className="relative h-14 w-14">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt={`图片 ${i + 1}`} className="h-14 w-14 rounded-md border border-neutral-200 object-cover" />
+                <button type="button" className="block h-14 w-14 overflow-hidden rounded-md border border-neutral-200" onClick={() => setEditingImage(src)} aria-label={`编辑图片 ${i + 1} 的缩略图`} title="编辑缩略图">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={`图片 ${i + 1}`} className="h-full w-full object-cover" style={{ ...momentImageCropStyle(imageCrops[src]), width: "100%", height: "100%", objectFit: "cover" }} />
+                </button>
                 <button
                   type="button"
                   onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
@@ -249,6 +265,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
             }}
           />
         )}
+        {thumbnailDialog}
       </fieldset>
     );
   }
@@ -297,8 +314,11 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
         <div className="grid grid-cols-3 gap-2">
           {images.map((src, i) => (
             <div key={`${src}-${i}`} className="relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt={`图片 ${i + 1}`} className="aspect-square w-full rounded-lg border border-neutral-200 object-cover" />
+              <button type="button" className="relative block aspect-square w-full overflow-hidden rounded-lg border border-neutral-200" onClick={() => setEditingImage(src)} aria-label={`编辑图片 ${i + 1} 的缩略图`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={`图片 ${i + 1}`} className="h-full w-full object-cover" style={{ ...momentImageCropStyle(imageCrops[src]), width: "100%", height: "100%", objectFit: "cover" }} />
+                <span className="absolute inset-x-0 bottom-0 bg-black/50 py-1 text-xs text-white">编辑缩略图</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
@@ -354,6 +374,7 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
           }}
         />
       )}
+      {thumbnailDialog}
     </fieldset>
   );
 }

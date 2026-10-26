@@ -1,3 +1,5 @@
+import { normalizeMomentImageCrops, type MomentImageCrops } from "./moment-image-crops";
+
 export type EditorDraft = { version: 1; savedAt: string; baseline: string; value: string };
 const LIMIT = 2 * 1024 * 1024;
 export function readEditorDraft(storage: Pick<Storage, "getItem">, key: string): EditorDraft | null {
@@ -23,9 +25,10 @@ export function writeEditorDraft(storage: Pick<Storage, "setItem" | "removeItem"
 type ObjectValue = Record<string, unknown>;
 function record(value: unknown): value is ObjectValue { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function strings(value: unknown): value is string[] { return Array.isArray(value) && value.every(item => typeof item === "string"); }
-export type MomentEditorDraft = { content: string; tags: string; images: string[]; location: string };
+export type MomentEditorDraft = { content: string; tags: string; images: string[]; location: string; imageCrops?: MomentImageCrops };
 export function isMomentEditorDraft(value: unknown): value is MomentEditorDraft {
-  return record(value) && typeof value.content === "string" && typeof value.tags === "string" && strings(value.images) && typeof value.location === "string";
+  return record(value) && typeof value.content === "string" && typeof value.tags === "string" && strings(value.images) && typeof value.location === "string"
+    && (value.imageCrops === undefined || normalizeMomentImageCrops(value.imageCrops, value.images) !== null);
 }
 export type PostEditorDraft = {
   title: string; slug: string; category: string; tags: string; content: string; cover: string | null; status: "draft" | "published";

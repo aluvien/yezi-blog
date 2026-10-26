@@ -10,14 +10,14 @@ import type { ActionResult } from "@/lib/actions/posts";
 
 /** Server Action 入口：只做 Cookie 会话鉴权，业务逻辑在 @/lib/admin/moments。 */
 
-export async function createMomentAction(data: { content: string; images: string[]; tags?: string[]; location?: string }): Promise<ActionResult> {
+export async function createMomentAction(data: { content: string; images: string[]; tags?: string[]; location?: string; imageCrops?: unknown }): Promise<ActionResult> {
   await requireAdmin();
   return createMomentEntry(data);
 }
 
 export async function updateMomentAction(
   id: number,
-  data: { content: string; images: string[]; tags?: string[]; location?: string },
+  data: { content: string; images: string[]; tags?: string[]; location?: string; imageCrops?: unknown },
 ): Promise<ActionResult> {
   await requireAdmin();
   return updateMomentEntry(id, data);
