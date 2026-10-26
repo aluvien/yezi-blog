@@ -44,6 +44,39 @@ test("moment drafts restore text and metadata on mobile", async ({ page }) => {
   await expect(page).toHaveURL(/\/admin\/moments$/);
   expect(await page.evaluate(()=>localStorage.getItem("yezi:editor:v1:moment:new"))).toBeNull();
 });
+test("moment thumbnail editor persists settings through server actions and resets them", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await page.goto("/admin/moments/new");
+  const content = `Thumbnail editor ${Date.now()}`;
+  await page.getByLabel("絮语内容").fill(content);
+  await page.getByLabel("保留原图").check();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "thumbnail.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/0sAAAAASUVORK5CYII=", "base64"),
+  });
+  await page.getByRole("button", { name: "编辑图片 1 的缩略图" }).click();
+  await page.getByLabel("显示比例").selectOption("0.75");
+  await page.getByLabel("缩放").fill("2");
+  await page.getByRole("button", { name: "应用", exact: true }).click();
+  await page.getByRole("button", { name: "发布", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/moments$/);
+  const response = await page.request.get("/api/v1/moments");
+  const saved = (await response.json()).data.find((item: { content: string }) => item.content === content);
+  expect(saved).toBeTruthy();
+  expect(saved.imageCrops[saved.images[0]]).toMatchObject({ aspectRatio: 0.75, zoom: 2 });
+  await page.goto(`/admin/moments/${saved.id}/edit`);
+  await page.getByRole("button", { name: "编辑图片 1 的缩略图" }).click();
+  await expect(page.getByLabel("显示比例")).toHaveValue("0.75");
+  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
+  await page.getByRole("button", { name: "应用", exact: true }).click();
+  await page.getByRole("button", { name: "保存修改", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/moments$/);
+  const updated = (await (await page.request.get("/api/v1/moments")).json()).data.find((item: { id: number }) => item.id === saved.id);
+  expect(updated.imageCrops).toEqual({});
+  expect(updated.images).toEqual(saved.images);
+});
+
 test("attachment recycle bin restores a deleted upload at its original URL", async ({ page }) => {
   await login(page);
   const fileName = `recoverable-${Date.now()}.txt`;

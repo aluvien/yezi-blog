@@ -128,8 +128,8 @@ export default function MomentForm({ moment, onSuccess, onCancel, compact, uploa
     startTransition(async () => {
       try {
         const r = moment
-          ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags), location, imageCrops: normalizeMomentImageCrops(imageCrops, images) ?? {} })
-          : await createMomentAction({ content, images, tags: parsePostTags(tags), location, imageCrops: normalizeMomentImageCrops(imageCrops, images) ?? {} });
+          ? await updateMomentAction(moment.id, { content, images, tags: parsePostTags(tags), location, imageCrops: { ...(normalizeMomentImageCrops(imageCrops, images) ?? {}) } })
+          : await createMomentAction({ content, images, tags: parsePostTags(tags), location, imageCrops: { ...(normalizeMomentImageCrops(imageCrops, images) ?? {}) } });
         if (!r.ok) {
           setError(r.error);
           return;
