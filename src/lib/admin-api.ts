@@ -5,6 +5,7 @@ import type { PostInput } from "@/lib/actions/posts";
 import type { Comment, CommentWithTarget, Moment, Post, ReferenceLibraryItem, Session, Work } from "@/lib/db";
 import { normalizeArticleReferenceSnapshot, type ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { parseMomentImages } from "@/lib/moments";
+import { parseMomentImageCrops } from "@/lib/moment-image-crops";
 import { parsePostTags } from "@/lib/post-tags";
 import { stripMarkdown } from "@/lib/markdown";
 import { readLimitedJson, RequestBodyError } from "@/lib/request";
@@ -243,6 +244,7 @@ export function serializeAdminMoment(moment: Moment, metrics?: { views: number; 
     id: moment.id,
     content: moment.content,
     images: parseMomentImages(moment),
+    imageCrops: parseMomentImageCrops(moment.image_crops, parseMomentImages(moment)),
     tags: parsePostTags(moment.tags),
     location: moment.location,
     created_at: moment.created_at,

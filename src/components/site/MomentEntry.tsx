@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import type { ContentMetrics, Moment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
+import { parseMomentImageCrops } from "@/lib/moment-image-crops";
 import { formatDateOnly } from "@/lib/format";
 import { site } from "@/lib/site";
 import { foldedMomentMusic, splitMomentContent } from "@/lib/music";
@@ -122,7 +123,7 @@ export function MomentEntry({
             <MusicEmbed key={index} spec={seg.value} />
           ),
         )}
-        <MomentImages images={images} />
+        <MomentImages images={images} imageCrops={parseMomentImageCrops(moment.image_crops, images)} />
       </div>
       {children ? (
         <MomentCommentToggle targetId={moment.id} count={commentCount} metrics={displayMetrics} initialLiked={initialLiked}>

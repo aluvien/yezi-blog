@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContentMetrics, Moment } from "@/lib/db";
 import { parseMomentImages } from "@/lib/moments";
+import { parseMomentImageCrops } from "@/lib/moment-image-crops";
 import { formatDateOnly } from "@/lib/format";
 import type { FeedItem, PostSummary } from "@/lib/mobile-feed";
 import { MetricIcon, type MetricIconType } from "@/components/site/MetricIcon";
@@ -64,7 +65,7 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
             <MusicEmbed key={index} spec={seg.value} />
           ),
         )}
-        {images.length > 0 && <MomentImages images={images} />}
+        {images.length > 0 && <MomentImages images={images} imageCrops={parseMomentImageCrops(moment.image_crops, images)} />}
       </div>
       <div className="mobile-feed-meta">
         <LikeButton targetType="moment" targetId={moment.id} initialLikes={metrics.likes} initialLiked={initialLiked} />

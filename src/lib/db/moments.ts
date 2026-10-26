@@ -2,6 +2,7 @@
 import { db, now } from "./core";
 import type { Moment } from "./types";
 import { normalizePostTags, parsePostTags } from "@/lib/post-tags";
+import { parseMomentImageCrops, type MomentImageCrops } from "@/lib/moment-image-crops";
 
 /** 想法列表。传 options 时走 SQL 分页，不传则返回全部（首页/归档合并时间流依赖全量）。 */
 export function listMoments(options?: { limit?: number; offset?: number }): Moment[] {
@@ -23,22 +24,23 @@ export function getMoment(id: number): Moment | undefined {
   return db.prepare("SELECT * FROM moments WHERE id = ?").get(id) as Moment | undefined;
 }
 
-export function createMoment(data: { content: string; images?: string[]; tags?: string[]; location?: string }): Moment {
+export function createMoment(data: { content: string; images?: string[]; tags?: string[]; location?: string; imageCrops?: MomentImageCrops }): Moment {
   const ts = now();
   const info = db
-    .prepare("INSERT INTO moments (content, images, tags, location, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(data.content, JSON.stringify(data.images ?? []), JSON.stringify(normalizePostTags(data.tags)), data.location ?? "", ts, ts);
+    .prepare("INSERT INTO moments (content, images, tags, location, image_crops, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(data.content, JSON.stringify(data.images ?? []), JSON.stringify(normalizePostTags(data.tags)), data.location ?? "", JSON.stringify(data.imageCrops ?? {}), ts, ts);
   return getMoment(Number(info.lastInsertRowid))!;
 }
 
-export function updateMoment(id: number, data: { content: string; images?: string[]; tags?: string[]; location?: string }): Moment | undefined {
+export function updateMoment(id: number, data: { content: string; images?: string[]; tags?: string[]; location?: string; imageCrops?: MomentImageCrops }): Moment | undefined {
   const current = getMoment(id);
   const tags = data.tags === undefined ? parsePostTags(current?.tags) : normalizePostTags(data.tags);
-  db.prepare("UPDATE moments SET content = ?, images = ?, tags = ?, location = ?, updated_at = ? WHERE id = ?").run(
+  db.prepare("UPDATE moments SET content = ?, images = ?, tags = ?, location = ?, image_crops = ?, updated_at = ? WHERE id = ?").run(
     data.content,
     JSON.stringify(data.images ?? []),
     JSON.stringify(tags),
     data.location === undefined ? current?.location ?? "" : data.location,
+    JSON.stringify(data.imageCrops ?? parseMomentImageCrops(current?.image_crops, data.images ?? [])),
     now(),
     id,
   );

@@ -3,6 +3,7 @@ import type { Comment, GithubRepository, LifeEvent, LifeFeedItem, Moment, Post, 
 import { articleReferenceCoverSrc, type ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { stripMarkdown } from "@/lib/markdown";
 import { parsePostTags } from "@/lib/post-tags";
+import { parseMomentImageCrops } from "@/lib/moment-image-crops";
 import { formatLifeEventDate, normalizeLifeDatePrecision } from "@/lib/life-events";
 
 // 默认不发送跨域响应头，避免公开评论接口被任意站点调用。
@@ -118,6 +119,7 @@ export function publicMoment(moment: Moment, commentsCount: number, comments?: C
     id: moment.id,
     content: moment.content,
     images: parseImages(moment.images),
+    imageCrops: parseMomentImageCrops(moment.image_crops, parseImages(moment.images)),
     tags: parsePostTags(moment.tags),
     location: moment.location,
     created_at: moment.created_at,
