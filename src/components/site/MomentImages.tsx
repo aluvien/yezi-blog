@@ -4,9 +4,10 @@ import { useState } from "react";
 import { LightboxOverlay } from "@/components/site/ImageLightbox";
 import { SiteImage } from "@/components/site/SiteImage";
 import { groupMomentImages } from "@/lib/moments";
+import { momentImageCropStyle, momentImageFrameStyle, type MomentImageCrops } from "@/lib/moment-image-crops";
 
 /** 絮语配图：社交九宫格排列 + 点击灯箱预览。 */
-export function MomentImages({ images }: { images: string[] }) {
+export function MomentImages({ images, imageCrops = {} }: { images: string[]; imageCrops?: MomentImageCrops }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   if (images.length === 0) return null;
 
@@ -26,6 +27,7 @@ export function MomentImages({ images }: { images: string[] }) {
                   type="button"
                   onClick={() => setLightboxIndex(startIndex + colIdx)}
                   className="relative aspect-square flex-1 overflow-hidden rounded-md bg-soft"
+                  style={momentImageFrameStyle(imageCrops[src], flat.length === 1)}
                   aria-label="查看图片"
                 >
                   <SiteImage
@@ -34,6 +36,7 @@ export function MomentImages({ images }: { images: string[] }) {
                     fill
                     sizes="(max-width: 640px) 30vw, 200px"
                     className="h-full w-full object-cover"
+                    style={momentImageCropStyle(imageCrops[src])}
                   />
                 </button>
               ))}

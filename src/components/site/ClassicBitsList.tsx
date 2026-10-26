@@ -10,6 +10,7 @@ import { MusicEmbed } from "@/components/site/MusicEmbed";
 import { MomentLocation } from "@/components/site/MomentLocation";
 import { LightboxOverlay } from "@/components/site/ImageLightbox";
 import { SiteImage } from "@/components/site/SiteImage";
+import { parseMomentImageCrops, momentImageCropStyle } from "@/lib/moment-image-crops";
 
 export function ClassicBitsList({ moments, authorName, authorAvatar, commentCounts = {}, commentSections = [], showInteractions = true, showComments = true }: { moments: Moment[]; authorName: string; authorAvatar?: string; commentCounts?: Record<string, number>; commentSections?: React.ReactNode[]; showInteractions?: boolean; showComments?: boolean }) {
   return (
@@ -22,6 +23,7 @@ export function ClassicBitsList({ moments, authorName, authorAvatar, commentCoun
 function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentCount, commentSection, showInteractions, showComments }: { moment: Moment; authorName: string; authorAvatar?: string; prioritize: boolean; commentCount: number; commentSection?: React.ReactNode; showInteractions: boolean; showComments: boolean }) {
   const images = useMemo(() => parseMomentImages(moment).slice(0, 9), [moment]);
   const imageGroups = useMemo(() => groupMomentImages(images), [images]);
+  const crops = useMemo(() => parseMomentImageCrops(moment.image_crops, images), [moment.image_crops, images]);
   const tags = useMemo(() => {
     const stored = parsePostTags(moment.tags);
     return stored.length > 0 ? stored : parseMomentTags(moment.content);
@@ -48,13 +50,13 @@ function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentC
       {images.length > 0 ? (
         <div className={`bit-media ${images.length === 1 ? "bit-media--single" : "bit-media--grid"}`}>
           {images.length === 1 ? (
-            <button type="button" className="bit-media-item bit-media-item--single" onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" width={800} height={600} priority={prioritize} /></button>
+            <button type="button" className="bit-media-item bit-media-item--single" style={crops[images[0]] ? { position: "relative", aspectRatio: String(crops[images[0]].aspectRatio ?? crops[images[0]].originalAspectRatio ?? 1), overflow: "hidden" } : undefined} onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" {...(crops[images[0]] ? { fill: true, style: { ...momentImageCropStyle(crops[images[0]]), objectFit: "cover" as const } } : { width: 800, height: 600 })} priority={prioritize} /></button>
           ) : (
             <div className="bit-media-grid bit-media-grid--balanced">{imageGroups.flatMap((row, rowIndex) => {
               const startIndex = imageGroups.slice(0, rowIndex).reduce((sum, group) => sum + group.length, 0);
               return row.map((src, columnIndex) => {
                 const imageIndex = startIndex + columnIndex;
-                return <button key={`${src}-${imageIndex}`} type="button" className={`bit-media-item ${row.length === 3 ? "bit-media-item--third" : "bit-media-item--half"}`} onClick={() => setLightboxIndex(imageIndex)} aria-label={`图片 ${imageIndex + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 33vw, 360px" priority={prioritize && imageIndex === 0} /></button>;
+                return <button key={`${src}-${imageIndex}`} type="button" className={`bit-media-item ${row.length === 3 ? "bit-media-item--third" : "bit-media-item--half"}`} style={crops[src]?.aspectRatio ? { aspectRatio: String(crops[src].aspectRatio) } : undefined} onClick={() => setLightboxIndex(imageIndex)} aria-label={`图片 ${imageIndex + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 33vw, 360px" style={momentImageCropStyle(crops[src])} priority={prioritize && imageIndex === 0} /></button>;
               });
             })}</div>
           )}

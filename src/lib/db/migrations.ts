@@ -410,6 +410,11 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 19,
+    name: "moment-image-crops",
+    up(db) { ensureColumn(db, "moments", "image_crops", "TEXT NOT NULL DEFAULT '{}'"); },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

@@ -36,7 +36,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const location = hasOwn(body.value, "location") ? body.value.location : existing.location;
 
   try {
-    const result = await updateMomentEntry(id, { content: content as string, images: images as string[], tags, location: location as string });
+    const result = await updateMomentEntry(id, { content: content as string, images: images as string[], tags, location: location as string, imageCrops: body.value.imageCrops });
     if (!result.ok) return adminActionError(result);
     const moment = getMoment(id);
     if (!moment) return adminInternalError("update moment response", new Error("moment is missing"));

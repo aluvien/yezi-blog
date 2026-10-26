@@ -5,6 +5,7 @@ import { invalidateQQMusicAccessCache } from "@/lib/qq-music-access";
 import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
 import { normalizeMomentLocation } from "@/lib/moment-location";
 import { normalizePostTags } from "@/lib/post-tags";
+import { normalizeMomentImageCrops } from "@/lib/moment-image-crops";
 
 /**
  * 絮语（Moment）的业务核心。鉴权由调用方（Server Action 或已鉴权 Route Handler）负责。
@@ -28,7 +29,7 @@ function normalizeMomentImages(value: unknown): string[] | null {
   return valid ? [...new Set(images)] : null;
 }
 
-export async function createMomentEntry(data: { content: string; images: string[]; tags?: string[]; location?: string }): Promise<ActionResult> {
+export async function createMomentEntry(data: { content: string; images: string[]; tags?: string[]; location?: string; imageCrops?: unknown }): Promise<ActionResult> {
   if (!data || typeof data.content !== "string") return { ok: false, error: "絮语数据格式无效" };
   const content = normalizeMediaShortcodes(data.content.trim());
   if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "絮语内容不能超过 2 万个字符" };
@@ -37,7 +38,9 @@ export async function createMomentEntry(data: { content: string; images: string[
   const location = normalizeMomentLocation(data.location);
   if (location === null) return { ok: false, error: "位置格式无效或超过 80 个字符" };
   if (!content && images.length === 0) return { ok: false, error: "写点什么或至少传一张图" };
-  const moment = createMoment({ content, images, tags: normalizePostTags(data.tags), location });
+  const imageCrops = normalizeMomentImageCrops(data.imageCrops ?? {}, images);
+  if (!imageCrops) return { ok: false, error: "缩略图参数无效" };
+  const moment = createMoment({ content, images, tags: normalizePostTags(data.tags), location, imageCrops });
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
@@ -47,7 +50,7 @@ export async function createMomentEntry(data: { content: string; images: string[
 
 export async function updateMomentEntry(
   id: number,
-  data: { content: string; images: string[]; tags?: string[]; location?: string },
+  data: { content: string; images: string[]; tags?: string[]; location?: string; imageCrops?: unknown },
 ): Promise<ActionResult> {
   if (!Number.isInteger(id) || id < 1 || !data || typeof data.content !== "string") return { ok: false, error: "絮语数据格式无效" };
   if (!getMoment(id)) return { ok: false, error: "絮语不存在" };
@@ -59,7 +62,9 @@ export async function updateMomentEntry(
   if (location === null) return { ok: false, error: "位置格式无效或超过 80 个字符" };
   if (!content && images.length === 0) return { ok: false, error: "写点什么或至少保留一张图" };
   const tags = data.tags === undefined ? undefined : normalizePostTags(data.tags);
-  const moment = updateMoment(id, { content, images, ...(tags === undefined ? {} : { tags }), ...(location === undefined ? {} : { location }) });
+  const imageCrops = data.imageCrops === undefined ? undefined : normalizeMomentImageCrops(data.imageCrops, images);
+  if (imageCrops === null) return { ok: false, error: "缩略图参数无效" };
+  const moment = updateMoment(id, { content, images, ...(imageCrops === undefined ? {} : { imageCrops }), ...(tags === undefined ? {} : { tags }), ...(location === undefined ? {} : { location }) });
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");

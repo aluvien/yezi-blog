@@ -121,6 +121,7 @@ export interface Moment {
   content: string;
   /** JSON 数组字符串，如 '["/uploads/202607/a.jpg"]' */
   images: string;
+  image_crops?: string;
   /** JSON 数组字符串，如 '["摄影","随手记"]' */
   tags: string;
   /** 可选的公开城市文字；精确坐标不会落库。 */
