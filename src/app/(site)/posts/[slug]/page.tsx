@@ -21,6 +21,9 @@ import { getCachedPostBySlug, getCachedSiteSettings } from "@/lib/server-data";
 import { ClassicReaderExit } from "@/components/site/ClassicReaderExit";
 import { ClassicShareButton } from "@/components/site/ClassicShareButton";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
+import { getSiteUrl } from "@/lib/site-config";
+import { postSearchDescription, postStructuredData } from "@/lib/seo";
+import { StructuredData } from "@/components/site/StructuredData";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,15 +45,17 @@ function getClassicReadingStats(content: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const post = getCachedPostBySlug(slug);
-  if (!post) return { title: "文章不存在" };
+  if (!post) return { title: "文章不存在", robots: { index: false, follow: false } };
   const authorName = getSiteAuthor(getCachedSiteSettings());
-  const description = stripMarkdown(post.content, 120);
+  const description = postSearchDescription(post);
   return {
     title: post.title,
     description,
     alternates: { canonical: PUBLIC_ROUTES.post(post.slug) },
+    robots: { index: post.seo_noindex !== 1, follow: true },
     openGraph: {
       type: "article",
+      url: PUBLIC_ROUTES.post(post.slug),
       title: post.title,
       description,
       publishedTime: post.created_at,
@@ -94,6 +99,7 @@ export default async function PostPage({ params }: Props) {
     return (
       <ArticleEditZone href={`/admin/posts/${post.id}/edit`} enabled={isAuthorized} zoneClassName="article-edit-zone article-detail-edit-zone">
         <article className="classic-article-detail">
+          <StructuredData data={postStructuredData(post, siteSettings, getSiteUrl(siteSettings))} />
           <div className="article-header reader-exit-anchor">
             <h1 className="page-title" data-title-size={titleSize}>
               {titleParts.map((part, index) => index % 2 === 1
@@ -147,6 +153,7 @@ export default async function PostPage({ params }: Props) {
         zoneClassName="article-edit-zone article-detail-edit-zone"
       >
       <article className="article-shell mx-auto min-h-[70vh] max-w-none pb-6 pt-0 md:pb-8 md:pt-4">
+        <StructuredData data={postStructuredData(post, siteSettings, getSiteUrl(siteSettings))} />
         <header className="mx-auto max-w-[800px]">
           <p className="mb-3 text-[12px] font-medium tracking-[0.12em] text-accent">{articleCategory}</p>
           <h1 className="article-title text-[26px] font-bold leading-[1.35] tracking-[-0.025em] md:text-[30px]">{post.title}</h1>

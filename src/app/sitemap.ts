@@ -10,13 +10,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const siteUrl = getSiteUrl();
   const staticPages: MetadataRoute.Sitemap = [
     { url: siteUrl, changeFrequency: "daily", priority: 1 },
+    { url: `${siteUrl}${PUBLIC_ROUTES.posts}`, changeFrequency: "daily", priority: 0.8 },
     { url: `${siteUrl}${PUBLIC_ROUTES.moments}`, changeFrequency: "daily", priority: 0.8 },
     { url: `${siteUrl}${PUBLIC_ROUTES.life}`, changeFrequency: "daily", priority: 0.8 },
     { url: `${siteUrl}${PUBLIC_ROUTES.references}`, changeFrequency: "daily", priority: 0.7 },
     { url: `${siteUrl}${PUBLIC_ROUTES.archives}`, changeFrequency: "daily", priority: 0.7 },
     { url: `${siteUrl}${PUBLIC_ROUTES.about}`, changeFrequency: "monthly", priority: 0.4 },
   ];
-  const posts: MetadataRoute.Sitemap = listPosts().map((post) => ({
+  const posts: MetadataRoute.Sitemap = listPosts().filter(post => post.seo_noindex !== 1).map((post) => ({
     url: `${siteUrl}${PUBLIC_ROUTES.post(post.slug)}`,
     lastModified: new Date(post.updated_at),
     changeFrequency: "weekly",

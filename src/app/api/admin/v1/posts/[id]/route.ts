@@ -91,6 +91,8 @@ function serializePost(id: number): Record<string, unknown> {
 function getPostInputDefaults(post: NonNullable<ReturnType<typeof getPost>>): Partial<PostInput> {
   return {
     title: post.title,
+    seoDescription: post.seo_description,
+    seoNoindex: post.seo_noindex === 1,
     slug: post.slug,
     content: post.content,
     cover: post.cover,

@@ -16,6 +16,13 @@ test('drafts round-trip with their server baseline, stay separate per editor, an
  writeEditorDraft(store,'post:1',baseline,value);assert.equal(readEditorDraft(store,'post:1').value,value);assert.equal(readEditorDraft(store,'post:1').baseline,baseline);assert.equal(readEditorDraft(store,'moment:1'),null);
  writeEditorDraft(store,'post:1',baseline,baseline);assert.equal(readEditorDraft(store,'post:1'),null);
 });
+test('article drafts validate search fields while accepting older drafts',()=>{
+ const old={title:'Title',slug:'title',category:'',tags:'',content:'Body',cover:null,status:'draft',attachments:[],referenceSnapshots:[]};
+ assert.equal(isPostEditorDraft(old),true);
+ assert.equal(isPostEditorDraft({...old,seoDescription:'Search summary',seoNoindex:true}),true);
+ assert.equal(isPostEditorDraft({...old,seoDescription:'x'.repeat(301)}),false);
+ assert.equal(isPostEditorDraft({...old,seoNoindex:'false'}),false);
+});
 test('corrupt or oversized drafts are not recovered and storage failures are observable',()=>{
  const store=storage();store.setItem('x','{');assert.equal(readEditorDraft(store,'x'),null);
  store.setItem('x',JSON.stringify({version:2,savedAt:new Date().toISOString(),value:'{}',baseline:'{}'}));assert.equal(readEditorDraft(store,'x'),null);

@@ -214,6 +214,8 @@ export function serializeAdminPost(
 ): Record<string, unknown> {
   return {
     ...serializeAdminPostSummary(post, options.metrics),
+    seoDescription: post.seo_description,
+    seoNoindex: post.seo_noindex === 1,
     content: post.content,
     attachmentIds: options.attachmentIds ?? [],
     referenceSnapshots: options.referenceSnapshots ?? [],
@@ -280,6 +282,8 @@ export function parseAdminPostInput(body: Record<string, unknown>, defaults: Par
     ok: true,
     value: {
       title: get("title") as string,
+      seoDescription: get("seoDescription") as string | undefined,
+      seoNoindex: get("seoNoindex") as boolean | undefined,
       slug: get("slug") as string,
       content: get("content") as string,
       cover: get("cover") as string | null,

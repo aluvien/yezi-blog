@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "搜索",
+  robots: { index: false, follow: true },
   description: "搜索文章与絮语。",
   alternates: { canonical: PUBLIC_ROUTES.search },
 };

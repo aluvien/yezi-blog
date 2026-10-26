@@ -8,12 +8,11 @@ import { parsePostTags } from "@/lib/post-tags";
 import { stripMarkdown } from "@/lib/markdown";
 import { ClassicEntrySearch } from "@/components/site/ClassicEntrySearch";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
-
-const POSTS_PAGE_SIZE = 12;
+import { parsePostPage, POSTS_PAGE_SIZE } from "@/lib/post-pagination";
 
 export async function PostsPageView({ searchParams, classic: classicOverride }: { searchParams: Promise<{ page?: string }>; classic?: boolean }) {
   const { page } = await searchParams;
-  const current = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
+  const current = parsePostPage(page);
   const total = countPublishedPosts();
   const shown = listPosts({ limit: POSTS_PAGE_SIZE, offset: (current - 1) * POSTS_PAGE_SIZE });
   const hasMore = current * POSTS_PAGE_SIZE < total;

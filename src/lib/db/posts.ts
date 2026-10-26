@@ -208,14 +208,16 @@ export function createPost(data: {
   category?: string;
   tags?: string[];
   status?: "draft" | "published";
+  seoDescription?: string;
+  seoNoindex?: boolean;
 }): Post {
   const slug = ensureUniqueSlug(data.slug ?? "", data.title);
   const ts = now();
   const tags = normalizePostTags(data.tags);
   const id = db.transaction(() => {
     const info = db
-      .prepare("INSERT INTO posts (title, slug, content, cover, category, tags, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(data.title, slug, data.content, data.cover ?? null, data.category?.trim() ?? "", JSON.stringify(tags), ts, ts, data.status ?? "published");
+      .prepare("INSERT INTO posts (title, slug, content, cover, category, tags, created_at, updated_at, status, seo_description, seo_noindex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(data.title, slug, data.content, data.cover ?? null, data.category?.trim() ?? "", JSON.stringify(tags), ts, ts, data.status ?? "published", data.seoDescription?.trim() ?? "", data.seoNoindex ? 1 : 0);
     const postId = Number(info.lastInsertRowid);
     replacePostTagRelations(postId, tags);
     return postId;
@@ -233,12 +235,14 @@ export function updatePost(
     category?: string;
     tags?: string[];
     status?: "draft" | "published";
+    seoDescription?: string;
+    seoNoindex?: boolean;
   },
 ): Post | undefined {
   const slug = ensureUniqueSlug(data.slug ?? "", data.title, id);
   const tags = normalizePostTags(data.tags);
   db.transaction(() => {
-    const info = db.prepare("UPDATE posts SET title = ?, slug = ?, content = ?, cover = ?, category = ?, tags = ?, status = ?, updated_at = ? WHERE id = ?").run(
+    const info = db.prepare("UPDATE posts SET title = ?, slug = ?, content = ?, cover = ?, category = ?, tags = ?, status = ?, updated_at = ?, seo_description = COALESCE(?, seo_description), seo_noindex = COALESCE(?, seo_noindex) WHERE id = ?").run(
       data.title,
       slug,
       data.content,
@@ -247,6 +251,8 @@ export function updatePost(
       JSON.stringify(tags),
       data.status ?? "published",
       now(),
+      data.seoDescription === undefined ? null : data.seoDescription.trim(),
+      data.seoNoindex === undefined ? null : Number(data.seoNoindex),
       id,
     );
     if (info.changes > 0) replacePostTagRelations(id, tags);

@@ -7,11 +7,12 @@ import { getCachedSiteSettings } from "@/lib/server-data";
 import { normalizeDarkMode, normalizeLayoutTheme, normalizePalette } from "@/lib/theme";
 import "./globals.css";
 import "aplayer/dist/APlayer.min.css";
+import { siteSearchDescription } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getCachedSiteSettings();
   const siteName = settings.site_name?.trim() || site.name;
-  const description = settings.site_subtitle?.trim() || site.description;
+  const description = siteSearchDescription(settings);
   return {
     metadataBase: new URL(getSiteUrl(settings)),
     title: {
