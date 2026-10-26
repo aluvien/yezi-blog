@@ -46,6 +46,8 @@ function validOptionalAsset(value: unknown): boolean {
 
 function validatePostInput(data: PostInput): string | null {
   if (!data || typeof data !== "object") return "文章数据无效";
+  if (data.seoDescription !== undefined && (typeof data.seoDescription !== "string" || data.seoDescription.length > 300)) return "搜索摘要须为不超过 300 个字符的文字";
+  if (data.seoNoindex !== undefined && typeof data.seoNoindex !== "boolean") return "收录设置格式无效";
   if (
     typeof data.title !== "string"
     || typeof data.slug !== "string"
@@ -99,6 +101,8 @@ export async function createPostEntry(data: PostInput): Promise<ActionResult> {
         category: data.category,
         tags: normalizePostTags(data.tags),
         status: data.status,
+        seoDescription: data.seoDescription,
+        seoNoindex: data.seoNoindex,
       });
       createdPost = created;
       attachAttachmentsToPost(data.attachmentIds, created.id);
@@ -144,6 +148,8 @@ export async function updatePostEntry(id: number, data: PostInput): Promise<Acti
         category: data.category,
         tags: normalizePostTags(data.tags),
         status: data.status,
+        seoDescription: data.seoDescription,
+        seoNoindex: data.seoNoindex,
       });
       updatedPost = updated;
       updatedSlug = updated?.slug || existing.slug;

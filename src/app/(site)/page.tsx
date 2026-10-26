@@ -7,14 +7,14 @@ import { ClassicHome } from "@/components/site/ClassicHome";
 import { getSession } from "@/lib/auth";
 import { HOME_FEED_BATCH_SIZE, HOME_FEED_INITIAL_COUNT, getHomeFeedPage } from "@/lib/home-feed";
 import { getCachedSiteSettings } from "@/lib/server-data";
+import { siteSearchDescription } from "@/lib/seo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  description: site.description,
-  alternates: { canonical: "/" },
-};
+export function generateMetadata(): Metadata {
+  return { description: siteSearchDescription(getCachedSiteSettings()), alternates: { canonical: "/" } };
+}
 
 export default async function Home() {
   const siteSettings = getCachedSiteSettings();

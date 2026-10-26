@@ -31,11 +31,14 @@ export function isMomentEditorDraft(value: unknown): value is MomentEditorDraft 
     && (value.imageCrops === undefined || normalizeMomentImageCrops(value.imageCrops, value.images) !== null);
 }
 export type PostEditorDraft = {
+  seoDescription?: string; seoNoindex?: boolean;
   title: string; slug: string; category: string; tags: string; content: string; cover: string | null; status: "draft" | "published";
   attachments: import("@/lib/db/types").Attachment[]; referenceSnapshots: import("@/lib/article-reference").ArticleReferenceSnapshot[];
 };
 export function isPostEditorDraft(value: unknown): value is PostEditorDraft {
   return record(value) && ["title", "slug", "category", "tags", "content"].every(key => typeof value[key] === "string")
+    && (value.seoDescription === undefined || (typeof value.seoDescription === "string" && value.seoDescription.length <= 300))
+    && (value.seoNoindex === undefined || typeof value.seoNoindex === "boolean")
     && (value.cover === null || typeof value.cover === "string") && (value.status === "draft" || value.status === "published")
     && Array.isArray(value.attachments) && value.attachments.every(item => record(item) && Number.isSafeInteger(item.id) && Number.isFinite(item.size) && ["path", "original_name", "mime_type", "created_at"].every(key => typeof item[key] === "string"))
     && Array.isArray(value.referenceSnapshots) && value.referenceSnapshots.every(item => record(item) && ["url", "canonicalUrl", "title", "source", "author", "publishedAt", "cover", "description", "summary"].every(key => typeof item[key] === "string") && strings(item.keyPoints));

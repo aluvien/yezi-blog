@@ -13,6 +13,8 @@ export interface Post {
   created_at: string;
   updated_at: string;
   status: "draft" | "published";
+  seo_description: string;
+  seo_noindex: number;
 }
 
 export interface PostShortLink {

@@ -415,6 +415,14 @@ const MIGRATIONS: readonly Migration[] = [
     name: "moment-image-crops",
     up(db) { ensureColumn(db, "moments", "image_crops", "TEXT NOT NULL DEFAULT '{}'"); },
   },
+  {
+    version: 20,
+    name: "post-search-settings",
+    up(db) {
+      ensureColumn(db, "posts", "seo_description", "TEXT NOT NULL DEFAULT ''");
+      ensureColumn(db, "posts", "seo_noindex", "INTEGER NOT NULL DEFAULT 0 CHECK (seo_noindex IN (0, 1))");
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

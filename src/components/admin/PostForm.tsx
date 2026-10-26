@@ -2,7 +2,7 @@
 
 import EditorDraftNotice from "./EditorDraftNotice";
 import { useEditorDraft } from "@/hooks/useEditorDraft";
-import { isPostEditorDraft } from "@/lib/editor-draft";
+import { isPostEditorDraft, type PostEditorDraft } from "@/lib/editor-draft";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createPostAction, generatePostSlugAction, updatePostAction } from "@/lib/actions/posts";
@@ -41,6 +41,8 @@ function isSafeMarkdownUrl(value: string) {
 export default function PostForm({ post, initialAttachments = [], initialReferences = [], availableImageAttachments = [], categories = [], usedTags = [], openReferenceDialog = false }: { post?: Post; initialAttachments?: Attachment[]; initialReferences?: ArticleReferenceSnapshot[]; availableImageAttachments?: Attachment[]; categories?: string[]; usedTags?: Array<{ tag: string; count: number }>; openReferenceDialog?: boolean }) {
   const router = useRouter();
   const [title, setTitle] = useState(post?.title ?? "");
+  const [seoDescription, setSeoDescription] = useState(post?.seo_description ?? "");
+  const [seoNoindex, setSeoNoindex] = useState(post?.seo_noindex === 1);
   const [slug, setSlug] = useState(post?.slug ?? "");
   const [category, setCategory] = useState(post?.category ?? "");
   const [tags, setTags] = useState(parsePostTags(post?.tags).join(", "));
@@ -77,20 +79,20 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
     .filter((attachment) => attachment.id > 0 && attachment.mime_type.startsWith("image/"))
     .filter((attachment, index, all) => all.findIndex((item) => item.id === attachment.id) === index);
 
-  const draftValue = { title, slug, category, tags, content, cover, status, attachments, referenceSnapshots };
-  const draft = useEditorDraft({
+  const draftValue = { title, slug, category, tags, content, cover, status, attachments, referenceSnapshots, seoDescription, seoNoindex };
+  const draft = useEditorDraft<PostEditorDraft>({
     draftKey: `post:${post?.id ?? "new"}`,
     value: draftValue,
-    initial: { title: post?.title ?? "", slug: post?.slug ?? "", category: post?.category ?? "", tags: parsePostTags(post?.tags).join(", "), content: post?.content ?? "", cover: post?.cover ?? null, status: post?.status ?? "draft", attachments: initialAttachments, referenceSnapshots: initialReferences },
+    initial: { title: post?.title ?? "", slug: post?.slug ?? "", category: post?.category ?? "", tags: parsePostTags(post?.tags).join(", "), content: post?.content ?? "", cover: post?.cover ?? null, status: post?.status ?? "draft", attachments: initialAttachments, referenceSnapshots: initialReferences, seoDescription: post?.seo_description ?? "", seoNoindex: post?.seo_noindex === 1 },
     validate: isPostEditorDraft,
-    restore: value => { setTitle(value.title); setSlug(value.slug); setCategory(value.category); setTags(value.tags); setContent(value.content); setCover(value.cover); setStatus(value.status); setAttachments(value.attachments); setReferenceSnapshots(value.referenceSnapshots); },
+    restore: value => { setTitle(value.title); setSlug(value.slug); setCategory(value.category); setTags(value.tags); setContent(value.content); setCover(value.cover); setStatus(value.status); setAttachments(value.attachments); setReferenceSnapshots(value.referenceSnapshots); setSeoDescription(value.seoDescription ?? post?.seo_description ?? ""); setSeoNoindex(value.seoNoindex ?? (post?.seo_noindex === 1)); },
   });
 
   function submit() {
     setError("");
     startTransition(async () => {
       try {
-        const data = { title, slug, content, cover, category, tags, attachmentIds: attachments.map((attachment) => attachment.id), referenceSnapshots, status };
+        const data = { title, slug, content, cover, category, tags, attachmentIds: attachments.map((attachment) => attachment.id), referenceSnapshots, status, seoDescription, seoNoindex };
         const r = post ? await updatePostAction(post.id, data) : await createPostAction(data);
         if (!r.ok) {
           setError(r.error);
@@ -496,6 +498,16 @@ export default function PostForm({ post, initialAttachments = [], initialReferen
           <p className="text-[11px] font-medium tracking-[0.14em] text-accent">文章设置</p>
           <p className="mt-1 text-xs text-neutral-400">附件、状态和索引信息</p>
         </div>
+        <section className="admin-card admin-editor-section space-y-3">
+          <h2 className="text-sm font-semibold text-neutral-800">搜索展示</h2>
+          <div>
+            <label htmlFor="post-search-description" className="mb-1 block text-sm font-medium text-neutral-700">文章搜索摘要</label>
+            <textarea id="post-search-description" value={seoDescription} onChange={event => setSeoDescription(event.target.value)} maxLength={300} rows={3} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm" placeholder="留空时自动从正文提取" />
+            <p className="mt-1 text-xs text-neutral-500">仅用于搜索和分享摘要，不改变正文及列表摘要。搜索引擎可能自行选择展示内容。</p>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-neutral-700"><input type="checkbox" checked={!seoNoindex} onChange={event => setSeoNoindex(!event.target.checked)} />允许搜索引擎收录</label>
+          <p className="text-xs text-neutral-500">关闭后文章仍可公开访问，并会从站点地图中移除；搜索引擎需重新抓取后才会更新结果。</p>
+        </section>
         <section className="admin-card admin-editor-section">
           <div className="flex items-center justify-between gap-2">
             <div>

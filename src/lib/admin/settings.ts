@@ -27,6 +27,7 @@ export const SETTING_KEYS = [
   "site_name",
   "site_url",
   "site_subtitle",
+  "seo_description",
   "site_logo",
   "site_logo_no_border",
   "classic_hero",
@@ -85,7 +86,7 @@ export async function updateSiteSettings(values: Record<string, string>): Promis
       catch (error) { return { ok: false, error: error instanceof Error ? error.message : "网站地址格式无效" }; }
       continue;
     }
-    const limit = key === "about_content" ? 20000 : 2000;
+    const limit = key === "about_content" ? 20000 : key === "seo_description" ? 300 : 2000;
     const value = String(values[key] ?? "").trim().slice(0, limit);
     if (key === "about_content") {
       safeValues[key] = normalizeMediaShortcodes(value);

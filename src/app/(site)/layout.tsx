@@ -3,6 +3,9 @@ import { SiteSidebarData } from "@/components/site/SiteSidebarData";
 import { getCachedCategories, getCachedPublishedTags, getCachedSiteSettings } from "@/lib/server-data";
 import { renderMarkdown } from "@/lib/markdown";
 import { DEFAULT_CLASSIC_SIDEBAR_INTRO } from "@/lib/theme";
+import { getSiteUrl } from "@/lib/site-config";
+import { siteStructuredData } from "@/lib/seo";
+import { StructuredData } from "@/components/site/StructuredData";
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
   const siteSettings = getCachedSiteSettings();
@@ -12,5 +15,5 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
     ? siteSettings.classic_sidebar_intro.trim()
     : DEFAULT_CLASSIC_SIDEBAR_INTRO;
   const classicSidebarIntroHtml = classicSidebarIntro ? renderMarkdown(classicSidebarIntro) : "";
-  return <SiteLayoutInner siteSettings={siteSettings} categories={categories} tags={tags} classicSidebarIntroHtml={classicSidebarIntroHtml} sidebarData={<SiteSidebarData siteSettings={siteSettings} />}>{children}</SiteLayoutInner>;
+  return <><StructuredData data={siteStructuredData(siteSettings, getSiteUrl(siteSettings))} /><SiteLayoutInner siteSettings={siteSettings} categories={categories} tags={tags} classicSidebarIntroHtml={classicSidebarIntroHtml} sidebarData={<SiteSidebarData siteSettings={siteSettings} />}>{children}</SiteLayoutInner></>;
 }

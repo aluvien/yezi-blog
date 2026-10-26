@@ -12,6 +12,8 @@ import type { ArticleReferenceSnapshot } from "@/lib/article-reference";
 import { generateTitleSlug } from "@/lib/slug-translation";
 
 export interface PostInput {
+  seoDescription?: string;
+  seoNoindex?: boolean;
   title: string;
   slug: string;
   content: string;

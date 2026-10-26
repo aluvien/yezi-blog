@@ -14,7 +14,7 @@ type Props = { initialValues: Record<string, string>; section?: SettingsSection 
 
 const SECTION_KEYS: Record<SettingsSection, string[]> = {
   site: [
-    "site_name", "site_url", "site_subtitle", "site_logo", "site_logo_no_border", "footer_text", "social_links",
+    "site_name", "site_url", "site_subtitle", "seo_description", "site_logo", "site_logo_no_border", "footer_text", "social_links",
     "author_name", "author_email",
     "gravatar_enabled", "gravatar_mirror", "author_avatar", "author_avatar_no_border", "qq_music_health_check_enabled",
     "qq_music_health_check_interval_hours", "telegram_comment_notifications_enabled",
@@ -29,6 +29,7 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
     site_name: initialValues.site_name ?? "",
     site_url: initialValues.site_url ?? "",
     site_subtitle: initialValues.site_subtitle ?? "",
+    seo_description: initialValues.seo_description ?? "",
     site_logo: initialValues.site_logo ?? "",
     site_logo_no_border: initialValues.site_logo_no_border ?? "0",
     classic_home_image: initialValues.classic_home_image ?? "",
@@ -121,6 +122,11 @@ export default function SiteSettingsForm({ initialValues, section = "site" }: Pr
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">站点副标题</label>
           <input value={values.site_subtitle} onChange={(event) => update("site_subtitle", event.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="文章 · 絮语 · 作品" />
+        </div>
+        <div>
+          <label htmlFor="site-search-description" className="mb-1 block text-sm font-medium text-neutral-700">网站搜索简介</label>
+          <textarea id="site-search-description" value={values.seo_description} onChange={(event) => update("seo_description", event.target.value)} maxLength={300} rows={3} className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="用一两句话介绍网站的作者与主要内容" />
+          <p className="mt-1 text-xs text-neutral-500">用于搜索和分享摘要，不改变前台文案。留空时使用站点副标题或默认介绍，最多 300 个字符。</p>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-700">页脚文案</label>
