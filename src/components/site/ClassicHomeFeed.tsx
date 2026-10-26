@@ -12,6 +12,7 @@ import { MusicEmbed } from "@/components/site/MusicEmbed";
 import { LightboxOverlay } from "@/components/site/ImageLightbox";
 import { SiteImage } from "@/components/site/SiteImage";
 import { PUBLIC_ROUTES } from "@/lib/site-navigation";
+import { momentImageCropStyle, momentImageFrameStyle, parseMomentImageCrops } from "@/lib/moment-image-crops";
 
 function PostCard({ item }: { item: Extract<FeedItem, { type: "post" }> }) {
   const post = item.value;
@@ -38,6 +39,7 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
   const router = useRouter();
   const images = useMemo(() => parseMomentImages(moment).slice(0, 9), [moment]);
   const imageGroups = useMemo(() => groupMomentImages(images), [images]);
+  const crops = useMemo(() => parseMomentImageCrops(moment.image_crops, images), [moment.image_crops, images]);
   const segments = useMemo(() => splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded), [moment.content]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const destination = PUBLIC_ROUTES.moment(moment.id);
@@ -74,13 +76,13 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
         {images.length > 0 ? (
           <div className={`bit-media ${images.length === 1 ? "bit-media--single" : "bit-media--grid"}`}>
             {images.length === 1 ? (
-              <button type="button" className="bit-media-item bit-media-item--single" onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" width={800} height={600} /></button>
+              <button type="button" className="bit-media-item bit-media-item--single" style={crops[images[0]] ? { position: "relative", aspectRatio: String(crops[images[0]].aspectRatio ?? crops[images[0]].originalAspectRatio ?? 1), overflow: "hidden" } : undefined} onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" {...(crops[images[0]] ? { fill: true, style: { ...momentImageCropStyle(crops[images[0]]), objectFit: "cover" as const } } : { width: 800, height: 600 })} /></button>
             ) : (
               <div className="bit-media-grid bit-media-grid--balanced">{imageGroups.flatMap((row, rowIndex) => {
                 const startIndex = imageGroups.slice(0, rowIndex).reduce((sum, group) => sum + group.length, 0);
                 return row.map((src, columnIndex) => {
                   const imageIndex = startIndex + columnIndex;
-                  return <button key={`${src}-${imageIndex}`} type="button" className={`bit-media-item ${row.length === 3 ? "bit-media-item--third" : "bit-media-item--half"}`} onClick={() => setLightboxIndex(imageIndex)} aria-label={`图片 ${imageIndex + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 33vw, 320px" /></button>;
+                  return <button key={`${src}-${imageIndex}`} type="button" className={`bit-media-item ${row.length === 3 ? "bit-media-item--third" : "bit-media-item--half"}`} style={momentImageFrameStyle(crops[src])} onClick={() => setLightboxIndex(imageIndex)} aria-label={`图片 ${imageIndex + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 33vw, 320px" style={momentImageCropStyle(crops[src])} /></button>;
                 });
               })}</div>
             )}

@@ -2,6 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readEditorDraft, writeEditorDraft, isPostEditorDraft, isMomentEditorDraft } from '../src/lib/editor-draft.ts';
 function storage(){const items=new Map();return {getItem:k=>items.get(k)??null,setItem:(k,v)=>items.set(k,v),removeItem:k=>items.delete(k)};}
+test('moment drafts preserve thumbnail settings and accept legacy drafts',()=>{
+ const value={content:'',tags:'',images:['/uploads/a'],location:''};
+ const imageCrops={'/uploads/a':{x:0.25,y:0.75,zoom:2,aspectRatio:0.75}};
+ assert.equal(isMomentEditorDraft(value),true);
+ assert.equal(isMomentEditorDraft({...value,imageCrops}),true);
+ assert.equal(isMomentEditorDraft({...value,imageCrops:{'/uploads/a':{...imageCrops['/uploads/a'],zoom:8}}}),false);
+ const store=storage();writeEditorDraft(store,'moment:crop',JSON.stringify(value),JSON.stringify({...value,imageCrops}));
+ assert.deepEqual(JSON.parse(readEditorDraft(store,'moment:crop').value).imageCrops,imageCrops);
+});
 test('drafts round-trip with their server baseline, stay separate per editor, and clear when unchanged',()=>{
  const store=storage();const baseline=JSON.stringify({content:'server'}),value=JSON.stringify({content:'unsaved'});
  writeEditorDraft(store,'post:1',baseline,value);assert.equal(readEditorDraft(store,'post:1').value,value);assert.equal(readEditorDraft(store,'post:1').baseline,baseline);assert.equal(readEditorDraft(store,'moment:1'),null);
