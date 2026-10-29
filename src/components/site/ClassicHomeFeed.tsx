@@ -41,7 +41,24 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
   const imageGroups = useMemo(() => groupMomentImages(images), [images]);
   const crops = useMemo(() => parseMomentImageCrops(moment.image_crops, images), [moment.image_crops, images]);
   const segments = useMemo(() => splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded), [moment.content]);
+  const positionedMusic = segments.filter(segment => segment.kind === "music");
+  const contentSegments = moment.music_placement ? segments.filter(segment => segment.kind !== "music") : segments;
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const imageContent = images.length > 0 ? (
+          <div className={`bit-media ${images.length === 1 ? "bit-media--single" : "bit-media--grid"}`}>
+            {images.length === 1 ? (
+              <button type="button" className="bit-media-item bit-media-item--single" style={crops[images[0]] ? { position: "relative", aspectRatio: String(crops[images[0]].aspectRatio ?? crops[images[0]].originalAspectRatio ?? 1), overflow: "hidden" } : undefined} onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" {...(crops[images[0]] ? { fill: true, style: { ...momentImageCropStyle(crops[images[0]]), objectFit: "cover" as const } } : { width: 800, height: 600 })} /></button>
+            ) : (
+              <div className="bit-media-grid bit-media-grid--balanced">{imageGroups.flatMap((row, rowIndex) => {
+                const startIndex = imageGroups.slice(0, rowIndex).reduce((sum, group) => sum + group.length, 0);
+                return row.map((src, columnIndex) => {
+                  const imageIndex = startIndex + columnIndex;
+                  return <button key={`${src}-${imageIndex}`} type="button" className={`bit-media-item ${row.length === 3 ? "bit-media-item--third" : "bit-media-item--half"}`} style={momentImageFrameStyle(crops[src])} onClick={() => setLightboxIndex(imageIndex)} aria-label={`图片 ${imageIndex + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 33vw, 320px" style={momentImageCropStyle(crops[src])} /></button>;
+                });
+              })}</div>
+            )}
+          </div>
+        ) : null;
   const destination = PUBLIC_ROUTES.moment(moment.id);
 
   function openMoment(event: React.MouseEvent<HTMLElement>) {
@@ -70,24 +87,13 @@ function MomentCard({ item, authorName, authorAvatar }: { item: Extract<FeedItem
             <time dateTime={moment.created_at}>{formatDateOnly(moment.created_at)}</time>
           </div>
         </div>
-        <div className="bit-body">
-          {segments.map((segment, index) => segment.kind === "music" ? <MusicEmbed key={index} spec={segment.value} /> : <p key={index}>{segment.value}</p>)}
+        {moment.music_placement === "top" && positionedMusic.map((seg, index) => seg.kind === "music" ? <MusicEmbed key={`top-${index}`} spec={seg.value} /> : null)}
+      {moment.image_placement === "top" && imageContent}
+      <div className="bit-body">
+          {contentSegments.map((segment, index) => segment.kind === "music" ? <MusicEmbed key={index} spec={segment.value} /> : <p key={index}>{segment.value}</p>)}
         </div>
-        {images.length > 0 ? (
-          <div className={`bit-media ${images.length === 1 ? "bit-media--single" : "bit-media--grid"}`}>
-            {images.length === 1 ? (
-              <button type="button" className="bit-media-item bit-media-item--single" style={crops[images[0]] ? { position: "relative", aspectRatio: String(crops[images[0]].aspectRatio ?? crops[images[0]].originalAspectRatio ?? 1), overflow: "hidden" } : undefined} onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" {...(crops[images[0]] ? { fill: true, style: { ...momentImageCropStyle(crops[images[0]]), objectFit: "cover" as const } } : { width: 800, height: 600 })} /></button>
-            ) : (
-              <div className="bit-media-grid bit-media-grid--balanced">{imageGroups.flatMap((row, rowIndex) => {
-                const startIndex = imageGroups.slice(0, rowIndex).reduce((sum, group) => sum + group.length, 0);
-                return row.map((src, columnIndex) => {
-                  const imageIndex = startIndex + columnIndex;
-                  return <button key={`${src}-${imageIndex}`} type="button" className={`bit-media-item ${row.length === 3 ? "bit-media-item--third" : "bit-media-item--half"}`} style={momentImageFrameStyle(crops[src])} onClick={() => setLightboxIndex(imageIndex)} aria-label={`图片 ${imageIndex + 1}`}><SiteImage src={src} alt="" fill sizes="(max-width: 640px) 33vw, 320px" style={momentImageCropStyle(crops[src])} /></button>;
-                });
-              })}</div>
-            )}
-          </div>
-        ) : null}
+        {moment.music_placement === "bottom" && positionedMusic.map((seg, index) => seg.kind === "music" ? <MusicEmbed key={`bottom-${index}`} spec={seg.value} /> : null)}
+      {moment.image_placement !== "top" && imageContent}
       </div>
       {lightboxIndex !== null ? <LightboxOverlay images={images.map((src) => ({ src, alt: "" }))} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} /> : null}
     </article>

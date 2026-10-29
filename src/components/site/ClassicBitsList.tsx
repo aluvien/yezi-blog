@@ -29,25 +29,12 @@ function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentC
     return stored.length > 0 ? stored : parseMomentTags(moment.content);
   }, [moment.content, moment.tags]);
   const segments = useMemo(() => splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded), [moment.content]);
+  const positionedMusic = segments.filter(segment => segment.kind === "music");
+  const contentSegments = moment.music_placement ? segments.filter(segment => segment.kind !== "music") : segments;
   const inlineMusic = useMemo(() => foldedMomentMusic(moment.content), [moment.content]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
-  return (
-    <article className="bit-card classic-bit-card" id={`moment-${moment.id}`} data-bit data-bit-key={moment.id} data-year={moment.created_at.slice(0, 4)}>
-      <div className="bit-author">
-        <div className={`avatar${authorAvatar ? " avatar--image" : " is-fallback"}`} aria-hidden="true">
-          {authorAvatar ? <SiteImage src={authorAvatar} alt="" fill sizes="32px" priority={prioritize} /> : null}
-          <span className="avatar-fallback">{authorName.charAt(0).toUpperCase()}</span>
-        </div>
-        <div className="name">
-          <strong>{authorName}</strong>
-          {inlineMusic.map((spec, index) => <MusicEmbed key={`${spec.id}-${index}`} spec={spec} compact />)}
-        </div>
-      </div>
-      <div className="bit-body">
-        {segments.map((segment, index) => segment.kind === "music" ? <MusicEmbed key={index} spec={segment.value} /> : <p key={index}>{segment.value}</p>)}
-      </div>
-      {images.length > 0 ? (
+  const imageContent = images.length > 0 ? (
         <div className={`bit-media ${images.length === 1 ? "bit-media--single" : "bit-media--grid"}`}>
           {images.length === 1 ? (
             <button type="button" className="bit-media-item bit-media-item--single" style={crops[images[0]] ? { position: "relative", aspectRatio: String(crops[images[0]].aspectRatio ?? crops[images[0]].originalAspectRatio ?? 1), overflow: "hidden" } : undefined} onClick={() => setLightboxIndex(0)} aria-label="查看图片预览"><SiteImage src={images[0]} alt="" {...(crops[images[0]] ? { fill: true, style: { ...momentImageCropStyle(crops[images[0]]), objectFit: "cover" as const } } : { width: 800, height: 600 })} priority={prioritize} /></button>
@@ -61,7 +48,26 @@ function ClassicBitCard({ moment, authorName, authorAvatar, prioritize, commentC
             })}</div>
           )}
         </div>
-      ) : null}
+      ) : null;
+  return (
+    <article className="bit-card classic-bit-card" id={`moment-${moment.id}`} data-bit data-bit-key={moment.id} data-year={moment.created_at.slice(0, 4)}>
+      <div className="bit-author">
+        <div className={`avatar${authorAvatar ? " avatar--image" : " is-fallback"}`} aria-hidden="true">
+          {authorAvatar ? <SiteImage src={authorAvatar} alt="" fill sizes="32px" priority={prioritize} /> : null}
+          <span className="avatar-fallback">{authorName.charAt(0).toUpperCase()}</span>
+        </div>
+        <div className="name">
+          <strong>{authorName}</strong>
+          {inlineMusic.map((spec, index) => <MusicEmbed key={`${spec.id}-${index}`} spec={spec} compact />)}
+        </div>
+      </div>
+      {moment.music_placement === "top" && positionedMusic.map((seg, index) => seg.kind === "music" ? <MusicEmbed key={`top-${index}`} spec={seg.value} /> : null)}
+      {moment.image_placement === "top" && imageContent}
+      <div className="bit-body">
+        {contentSegments.map((segment, index) => segment.kind === "music" ? <MusicEmbed key={index} spec={segment.value} /> : <p key={index}>{segment.value}</p>)}
+      </div>
+      {moment.music_placement === "bottom" && positionedMusic.map((seg, index) => seg.kind === "music" ? <MusicEmbed key={`bottom-${index}`} spec={seg.value} /> : null)}
+      {moment.image_placement !== "top" && imageContent}
       <div className="bit-meta">
         <MomentLocation location={moment.location} />
         {tags.length > 0 ? (
