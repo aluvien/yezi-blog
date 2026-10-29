@@ -119,6 +119,8 @@ export interface ArticleReferenceArchiveJobRecord {
 }
 
 export interface Moment {
+  image_placement?: "top" | "bottom" | null;
+  music_placement?: "top" | "bottom" | null;
   id: number;
   content: string;
   /** JSON 数组字符串，如 '["/uploads/202607/a.jpg"]' */

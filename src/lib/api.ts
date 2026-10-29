@@ -120,6 +120,8 @@ export function publicMoment(moment: Moment, commentsCount: number, comments?: C
     content: moment.content,
     images: parseImages(moment.images),
     imageCrops: parseMomentImageCrops(moment.image_crops, parseImages(moment.images)),
+    image_placement: moment.image_placement ?? null,
+    music_placement: moment.music_placement ?? null,
     tags: parsePostTags(moment.tags),
     location: moment.location,
     created_at: moment.created_at,

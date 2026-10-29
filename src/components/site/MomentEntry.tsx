@@ -50,6 +50,8 @@ export function MomentEntry({
   const [touchActive, setTouchActive] = useState(false);
   const images = parseMomentImages(moment);
   const segments = splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded);
+  const positionedMusic = segments.filter(segment => segment.kind === "music");
+  const contentSegments = moment.music_placement ? segments.filter(segment => segment.kind !== "music") : segments;
   const inlineMusic = foldedMomentMusic(moment.content);
   const displayAuthor = authorName?.trim() || site.author;
   const avatar = authorAvatar?.trim();
@@ -114,7 +116,9 @@ export function MomentEntry({
         )}
       </div>
       <div className="moment-entry-content">
-        {segments.map((seg, index) =>
+        {moment.music_placement === "top" && positionedMusic.map((seg, index) => seg.kind === "music" ? <MusicEmbed key={`top-${index}`} spec={seg.value} /> : null)}
+        {moment.image_placement === "top" && <MomentImages images={images} imageCrops={parseMomentImageCrops(moment.image_crops, images)} />}
+        {contentSegments.map((seg, index) =>
           seg.kind === "text" ? (
             <p key={index} className="whitespace-pre-wrap text-[16px] leading-[1.65] text-foreground">
               {seg.value}
@@ -123,7 +127,8 @@ export function MomentEntry({
             <MusicEmbed key={index} spec={seg.value} />
           ),
         )}
-        <MomentImages images={images} imageCrops={parseMomentImageCrops(moment.image_crops, images)} />
+        {moment.music_placement === "bottom" && positionedMusic.map((seg, index) => seg.kind === "music" ? <MusicEmbed key={`bottom-${index}`} spec={seg.value} /> : null)}
+        {moment.image_placement !== "top" && <MomentImages images={images} imageCrops={parseMomentImageCrops(moment.image_crops, images)} />}
       </div>
       {children ? (
         <MomentCommentToggle targetId={moment.id} count={commentCount} metrics={displayMetrics} initialLiked={initialLiked}>

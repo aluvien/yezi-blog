@@ -29,8 +29,11 @@ function Metric({ type, value, href }: { type: MetricIconType; value: number; hr
 function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, authorAvatarNoBorder, initialLiked, canEdit }: { moment: Moment; commentCount: number; metrics: ContentMetrics; authorName: string; authorAvatar?: string; authorAvatarNoBorder: boolean; initialLiked: boolean; canEdit: boolean }) {
   const images = parseMomentImages(moment);
   const segments = splitMomentContent(moment.content).filter((segment) => segment.kind !== "music" || !segment.value.folded);
+  const positionedMusic = segments.filter(segment => segment.kind === "music");
+  const contentSegments = moment.music_placement ? segments.filter(segment => segment.kind !== "music") : segments;
   const inlineMusic = foldedMomentMusic(moment.content);
   const { views, targetRef } = useMomentView(moment.id, metrics.views);
+  const imageContent = images.length > 0 && <MomentImages images={images} imageCrops={parseMomentImageCrops(moment.image_crops, images)} />;
   return (
     <ArticleEditZone
       href={`/admin/moments/${moment.id}/edit`}
@@ -58,14 +61,17 @@ function MobileMemo({ moment, commentCount, metrics, authorName, authorAvatar, a
         </div>
       </div>
       <div className="mobile-feed-memo-content">
-        {segments.map((seg, index) =>
+        {moment.music_placement === "top" && positionedMusic.map((seg, index) => seg.kind === "music" ? <MusicEmbed key={`top-${index}`} spec={seg.value} /> : null)}
+        {moment.image_placement === "top" && imageContent}
+        {contentSegments.map((seg, index) =>
           seg.kind === "text" ? (
             <p key={index}>{seg.value}</p>
           ) : (
             <MusicEmbed key={index} spec={seg.value} />
           ),
         )}
-        {images.length > 0 && <MomentImages images={images} imageCrops={parseMomentImageCrops(moment.image_crops, images)} />}
+        {moment.music_placement === "bottom" && positionedMusic.map((seg, index) => seg.kind === "music" ? <MusicEmbed key={`bottom-${index}`} spec={seg.value} /> : null)}
+        {moment.image_placement !== "top" && imageContent}
       </div>
       <div className="mobile-feed-meta">
         <LikeButton targetType="moment" targetId={moment.id} initialLikes={metrics.likes} initialLiked={initialLiked} />

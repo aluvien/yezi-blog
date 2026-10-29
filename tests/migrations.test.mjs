@@ -199,7 +199,7 @@ test("thumbnail migration preserves existing images and is safe to run twice", (
     temporary.db.exec("CREATE TABLE posts (id INTEGER PRIMARY KEY)");
     temporary.db.exec(`CREATE TABLE moments (id INTEGER PRIMARY KEY, content TEXT, images TEXT); INSERT INTO moments VALUES (1, 'original', '["/uploads/a.jpg"]'); CREATE TABLE push_health_state (name TEXT PRIMARY KEY, invalid INTEGER NOT NULL, session_version TEXT); INSERT INTO push_health_state VALUES ('qq', 0, 'existing'); PRAGMA user_version = 18;`);
     assert.equal(runMigrations(temporary.db), LATEST_DB_SCHEMA_VERSION);
-    assert.deepEqual(temporary.db.prepare("SELECT * FROM moments").get(), { id: 1, content: "original", images: '["/uploads/a.jpg"]', image_crops: "{}" });
+    assert.deepEqual(temporary.db.prepare("SELECT * FROM moments").get(), { id: 1, content: "original", images: '["/uploads/a.jpg"]', image_crops: "{}", image_placement: null, music_placement: null });
     assert.deepEqual(temporary.db.prepare("SELECT * FROM push_health_state").get(), { name: "qq", invalid: 0, session_version: "existing" });
     assert.equal(runMigrations(temporary.db), LATEST_DB_SCHEMA_VERSION);
   } finally { closeTemporaryDatabase(temporary); }

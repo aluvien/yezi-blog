@@ -423,6 +423,14 @@ const MIGRATIONS: readonly Migration[] = [
       ensureColumn(db, "posts", "seo_noindex", "INTEGER NOT NULL DEFAULT 0 CHECK (seo_noindex IN (0, 1))");
     },
   },
+  {
+    version: 21,
+    name: "moment-attachment-placement",
+    up(db) {
+      ensureColumn(db, "moments", "image_placement", "TEXT");
+      ensureColumn(db, "moments", "music_placement", "TEXT");
+    },
+  },
 ];
 
 export const LATEST_DB_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

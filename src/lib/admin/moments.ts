@@ -6,6 +6,7 @@ import { normalizeMediaShortcodes } from "@/lib/media-shortcodes";
 import { normalizeMomentLocation } from "@/lib/moment-location";
 import { normalizePostTags } from "@/lib/post-tags";
 import { normalizeMomentImageCrops } from "@/lib/moment-image-crops";
+import { validMomentPlacement } from "@/lib/moment-placement";
 
 /**
  * 絮语（Moment）的业务核心。鉴权由调用方（Server Action 或已鉴权 Route Handler）负责。
@@ -29,8 +30,9 @@ function normalizeMomentImages(value: unknown): string[] | null {
   return valid ? [...new Set(images)] : null;
 }
 
-export async function createMomentEntry(data: { content: string; images: string[]; tags?: string[]; location?: string; imageCrops?: unknown }): Promise<ActionResult> {
+export async function createMomentEntry(data: { content: string; images: string[]; tags?: string[]; location?: string; imageCrops?: unknown; imagePlacement?: unknown; musicPlacement?: unknown }): Promise<ActionResult> {
   if (!data || typeof data.content !== "string") return { ok: false, error: "絮语数据格式无效" };
+  if (!validMomentPlacement(data.imagePlacement) || !validMomentPlacement(data.musicPlacement)) return { ok: false, error: "附件位置无效" };
   const content = normalizeMediaShortcodes(data.content.trim());
   if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "絮语内容不能超过 2 万个字符" };
   const images = normalizeMomentImages(data.images);
@@ -40,7 +42,7 @@ export async function createMomentEntry(data: { content: string; images: string[
   if (!content && images.length === 0) return { ok: false, error: "写点什么或至少传一张图" };
   const imageCrops = normalizeMomentImageCrops(data.imageCrops ?? {}, images);
   if (!imageCrops) return { ok: false, error: "缩略图参数无效" };
-  const moment = createMoment({ content, images, tags: normalizePostTags(data.tags), location, imageCrops });
+  const moment = createMoment({ content, images, tags: normalizePostTags(data.tags), location, imageCrops, imagePlacement: data.imagePlacement, musicPlacement: data.musicPlacement });
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
@@ -50,10 +52,11 @@ export async function createMomentEntry(data: { content: string; images: string[
 
 export async function updateMomentEntry(
   id: number,
-  data: { content: string; images: string[]; tags?: string[]; location?: string; imageCrops?: unknown },
+  data: { content: string; images: string[]; tags?: string[]; location?: string; imageCrops?: unknown; imagePlacement?: unknown; musicPlacement?: unknown },
 ): Promise<ActionResult> {
   if (!Number.isInteger(id) || id < 1 || !data || typeof data.content !== "string") return { ok: false, error: "絮语数据格式无效" };
   if (!getMoment(id)) return { ok: false, error: "絮语不存在" };
+  if (!validMomentPlacement(data.imagePlacement) || !validMomentPlacement(data.musicPlacement)) return { ok: false, error: "附件位置无效" };
   const content = normalizeMediaShortcodes(data.content.trim());
   if (content.length > MAX_MOMENT_CONTENT_LENGTH) return { ok: false, error: "絮语内容不能超过 2 万个字符" };
   const images = normalizeMomentImages(data.images);
@@ -64,7 +67,7 @@ export async function updateMomentEntry(
   const tags = data.tags === undefined ? undefined : normalizePostTags(data.tags);
   const imageCrops = data.imageCrops === undefined ? undefined : normalizeMomentImageCrops(data.imageCrops, images);
   if (imageCrops === null) return { ok: false, error: "缩略图参数无效" };
-  const moment = updateMoment(id, { content, images, ...(imageCrops === undefined ? {} : { imageCrops }), ...(tags === undefined ? {} : { tags }), ...(location === undefined ? {} : { location }) });
+  const moment = updateMoment(id, { content, images, imagePlacement: data.imagePlacement, musicPlacement: data.musicPlacement, ...(imageCrops === undefined ? {} : { imageCrops }), ...(tags === undefined ? {} : { tags }), ...(location === undefined ? {} : { location }) });
   revalidatePath("/admin/moments");
   revalidatePath("/moments");
   revalidatePath("/");
