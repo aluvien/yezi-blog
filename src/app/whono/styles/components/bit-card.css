@@ -93,6 +93,11 @@
   font-size: 14px;
 }
 
+.bit-body > p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .bit-media {
   margin: 12px 0;
   border-radius: 8px;
