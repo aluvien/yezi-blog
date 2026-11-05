@@ -1128,14 +1128,7 @@ body.admin-page .sidebar-actions .icon-button[data-tooltip]::after {
 /* 主题切换按钮 */
 .theme-toggle {
   align-self: center;
-}
-
-.theme-toggle:hover .icon {
-  transform: rotate(20deg);
-}
-
-.theme-toggle:active .icon {
-  transform: rotate(90deg);
+  position: relative;
 }
 
 .icon-button:focus-visible {
@@ -1150,27 +1143,50 @@ body.admin-page .sidebar-actions .icon-button[data-tooltip]::after {
   transition: transform 0.25s ease;
 }
 
-.theme-toggle .icon-moon {
-  display: none;
+.theme-toggle .icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+
+.theme-toggle .icon-moon,
+:root[data-theme="dark"] .theme-toggle .icon-sun {
+  opacity: 0;
 }
 
 :root[data-theme="dark"] .theme-toggle .icon-moon {
-  display: block;
-}
-
-:root[data-theme="dark"] .theme-toggle .icon-sun {
-  display: none;
+  opacity: 1;
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .theme-toggle:hover .icon {
+    transform: rotate(20deg);
+  }
+
+  .theme-toggle:active .icon {
+    transform: rotate(90deg);
+  }
+
   :root:not([data-theme="dark"]) .theme-toggle:hover .icon-moon,
   :root[data-theme="dark"] .theme-toggle:hover .icon-sun {
-    display: block;
+    opacity: 1;
   }
 
   :root:not([data-theme="dark"]) .theme-toggle:hover .icon-sun,
   :root[data-theme="dark"] .theme-toggle:hover .icon-moon {
-    display: none;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle .icon {
+    transition: none;
+  }
+
+  .theme-toggle:is(:hover, :active) .icon {
+    transform: none;
   }
 }
 
